@@ -1,4 +1,5 @@
-import { Input as $Input, type InputProps as $InputProps } from "@saleor/macaw-ui/next";
+import { Input as $Input } from "@saleor/macaw-ui";
+import type { InputProps as $InputProps } from "@saleor/macaw-ui";
 import {
   type UseControllerProps,
   type FieldPath,
@@ -22,14 +23,14 @@ export function FormInput<
       error={!!fieldState.error?.message}
       {...props}
       {...field}
-      onChange={(e) => {
+      onChange={(e: any) => {
         field.onChange(e);
         props.onChange?.(e);
       }}
-      onFocus={(e) => {
+      onFocus={(e: any) => {
         props.onFocus?.(e);
       }}
-      onBlur={(e) => {
+      onBlur={(e: any) => {
         field.onBlur();
         props.onBlur?.(e);
       }}

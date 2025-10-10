@@ -4,7 +4,7 @@ import { REQUIRED_SALEOR_PERMISSIONS } from "../jwt/consts";
 import { middleware, procedure } from "./trpc-server";
 import { checkTokenExpiration } from "@/modules/jwt/check-token-expiration";
 import { saleorApp } from "@/saleor-app";
-import { createClient } from "@/lib/create-graphq-client";
+import { createClientWithAsyncToken } from "@/lib/create-graphq-client";
 import {
   JwtInvalidError,
   JwtTokenExpiredError,
@@ -103,7 +103,7 @@ export const protectedClientProcedure = procedure
   .use(attachAppToken)
   .use(validateClientToken)
   .use(async ({ ctx, next }) => {
-    const client = createClient(ctx.saleorApiUrl, async () =>
+    const client = createClientWithAsyncToken(ctx.saleorApiUrl, async () =>
       Promise.resolve({ token: ctx.appToken }),
     );
 

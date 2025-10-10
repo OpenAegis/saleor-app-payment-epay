@@ -1,4 +1,4 @@
-import { sprinkles } from "@saleor/macaw-ui/next";
+import { sprinkles } from "@saleor/macaw-ui";
 import { recipe } from "@vanilla-extract/recipes";
 
 export const appLayoutBoxRecipe = recipe({
@@ -32,7 +32,7 @@ export const appLayoutTextRecipe = recipe({
         error: false,
       },
       style: sprinkles({
-        color: "textNeutralDefault",
+        color: "default1",
       }),
     },
     {
@@ -41,7 +41,7 @@ export const appLayoutTextRecipe = recipe({
         error: false,
       },
       style: sprinkles({
-        color: "textNeutralDisabled",
+        color: "defaultDisabled",
       }),
     },
     {
@@ -50,7 +50,7 @@ export const appLayoutTextRecipe = recipe({
         error: true,
       },
       style: sprinkles({
-        color: "textCriticalSubdued",
+        color: "critical1",
       }),
     },
     {
@@ -59,7 +59,7 @@ export const appLayoutTextRecipe = recipe({
         error: true,
       },
       style: sprinkles({
-        color: "textCriticalDisabled",
+        color: "critical1",
       }),
     },
   ],

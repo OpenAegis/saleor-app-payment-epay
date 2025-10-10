@@ -1,4 +1,4 @@
-import { sprinkles } from "@saleor/macaw-ui/next";
+import { sprinkles } from "@saleor/macaw-ui";
 import { recipe } from "@vanilla-extract/recipes";
 
 export const roundedActionBoxRecipe = recipe({
@@ -16,7 +16,7 @@ export const roundedActionBoxRecipe = recipe({
         error: false,
       },
       style: sprinkles({
-        borderColor: "neutralPlain",
+        borderColor: "default1",
       }),
     },
     {
@@ -25,7 +25,7 @@ export const roundedActionBoxRecipe = recipe({
         error: false,
       },
       style: sprinkles({
-        borderColor: "neutralHighlight",
+        borderColor: "default2",
       }),
     },
     {
@@ -34,8 +34,8 @@ export const roundedActionBoxRecipe = recipe({
         error: true,
       },
       style: sprinkles({
-        backgroundColor: "surfaceCriticalHighlight",
-        borderColor: "criticalDefault",
+        backgroundColor: "critical2",
+        borderColor: "critical1",
       }),
     },
     {
@@ -44,8 +44,8 @@ export const roundedActionBoxRecipe = recipe({
         error: true,
       },
       style: sprinkles({
-        backgroundColor: "surfaceCriticalSubdued",
-        borderColor: "criticalHighlight",
+        backgroundColor: "critical2",
+        borderColor: "critical1",
       }),
     },
   ],

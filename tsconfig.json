@@ -10,14 +10,15 @@
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@saleor/macaw-ui/theme/sprinkles.css": ["./node_modules/@saleor/macaw-ui/dist/theme/sprinkles.css.d.ts"]
     },
     "typeRoots": ["node_modules/@types", "typings"]
   },

@@ -27,5 +27,5 @@ const isSentryEnabled = process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY
 const vanillaExtractConfig = withVanillaExtract(config);
 
 export default isSentryEnabled
-  ? withSentryConfig(vanillaExtractConfig, { silent: true }, { hideSourceMaps: true })
+  ? withSentryConfig(vanillaExtractConfig, { silent: true })
   : vanillaExtractConfig;

@@ -1,14 +1,14 @@
-import { sprinkles } from "@saleor/macaw-ui/next";
+import { sprinkles } from "@saleor/macaw-ui";
 import { style } from "@vanilla-extract/css";
 
 export const modal = style(
   [
     sprinkles({
-      backgroundColor: "surfaceNeutralPlain",
+      backgroundColor: "default1",
       borderRadius: 4,
       position: "fixed",
       padding: 5,
-      boxShadow: "modal",
+      boxShadow: "defaultModal",
     }),
     {
       top: "50%",
@@ -23,7 +23,7 @@ export const modal = style(
 export const modalOverlay = style(
   [
     sprinkles({
-      backgroundColor: "surfaceNeutralSubdued",
+      backgroundColor: "default2",
       position: "fixed",
       inset: 0,
     }),

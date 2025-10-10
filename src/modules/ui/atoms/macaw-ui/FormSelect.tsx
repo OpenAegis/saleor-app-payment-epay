@@ -1,4 +1,4 @@
-import { Select as $Select } from "@saleor/macaw-ui/next";
+import { Select as $Select } from "@saleor/macaw-ui";
 import { type ComponentProps } from "react";
 import {
   type UseControllerProps,
@@ -25,14 +25,14 @@ export function FormSelect<
       error={!!fieldState.error?.message}
       {...props}
       {...field}
-      onChange={(e) => {
+      onChange={(e: any) => {
         field.onChange(e);
         props.onChange?.(e);
       }}
-      onFocus={(e) => {
+      onFocus={(e: any) => {
         props.onFocus?.(e);
       }}
-      onBlur={(e) => {
+      onBlur={(e: any) => {
         field.onBlur();
         props.onBlur?.(e);
       }}

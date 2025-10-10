@@ -1,39 +1,43 @@
 import { createManifestHandler } from "@saleor/app-sdk/handlers/next";
-import { type AppManifest } from "@saleor/app-sdk/types";
+import { AppManifest } from "@saleor/app-sdk/types";
 
 import packageJson from "../../../package.json";
 
 export default createManifestHandler({
-  async manifestFactory(context) {
+  async manifestFactory(context: any) {
     const manifest: AppManifest = {
       name: packageJson.name,
       tokenTargetUrl: `${context.appBaseUrl}/api/register`,
       appUrl: `${context.appBaseUrl}/config`,
-      permissions: [
-        /**
-         * Set permissions for app if needed
-         * https://docs.saleor.io/docs/3.x/developer/permissions
-         */
-      ],
-      id: "saleor.app",
+      permissions: ["HANDLE_PAYMENTS"],
+      id: "saleor.app.epay",
       version: packageJson.version,
       requiredSaleorVersion: ">=3.13",
       webhooks: [
-        /**
-         * Configure webhooks here. They will be created in Saleor during installation
-         * Read more
-         * https://docs.saleor.io/docs/3.x/developer/api-reference/objects/webhook
-         *
-         * Easiest way to create webhook is to use app-sdk
-         * https://github.com/saleor/saleor-app-sdk/blob/main/docs/saleor-async-webhook.md
-         */
+        {
+          name: "Transaction Action Request",
+          asyncEvents: ["TRANSACTION_ACTION_REQUEST"],
+          query: `
+            subscription {
+              event {
+                ... on TransactionActionRequest {
+                  action {
+                    amount
+                    currency
+                    actionType
+                  }
+                  transaction {
+                    id
+                  }
+                }
+              }
+            }
+          `,
+          targetUrl: `${context.appBaseUrl}/api/webhooks/transaction-action`,
+          isActive: true,
+        },
       ],
-      extensions: [
-        /**
-         * Optionally, extend Dashboard with custom UIs
-         * https://docs.saleor.io/docs/3.x/developer/extending/apps/extending-dashboard-with-apps
-         */
-      ],
+      extensions: [],
     };
 
     return manifest;

@@ -1,52 +1,52 @@
-import { type AuthConfig, authExchange } from "@urql/exchange-auth";
-import {
-  cacheExchange,
-  createClient as urqlCreateClient,
-  dedupExchange,
-  fetchExchange,
-} from "urql";
+import { authExchange } from "@urql/exchange-auth";
+import { cacheExchange, createClient as urqlCreateClient, fetchExchange, Operation } from "@urql/core";
+import { debugExchange } from "@urql/core";
 
 interface IAuthState {
   token: string;
 }
 
-export const createClient = (url: string, getAuth: AuthConfig<IAuthState>["getAuth"]) =>
+export const createClient = (url: string, token: string) =>
   urqlCreateClient({
     url,
     exchanges: [
-      dedupExchange,
+      debugExchange,
       cacheExchange,
-      authExchange<IAuthState>({
-        addAuthToOperation: ({ authState, operation }) => {
-          if (!authState || !authState?.token) {
-            return operation;
-          }
+      fetchExchange,
+    ],
+    fetchOptions: {
+      headers: {
+        "Authorization-Bearer": token,
+      },
+    },
+  });
 
-          const fetchOptions =
-            typeof operation.context.fetchOptions === "function"
-              ? operation.context.fetchOptions()
-              : operation.context.fetchOptions || {};
+export function createServerClient(saleorApiUrl: string, token: string) {
+  return createClient(saleorApiUrl, token);
+}
 
-          return {
-            ...operation,
-            context: {
-              ...operation.context,
-              fetchOptions: {
-                ...fetchOptions,
-                headers: {
-                  ...fetchOptions.headers,
-                  "Authorization-Bearer": authState.token,
-                },
-              },
-            },
-          };
-        },
-        getAuth,
+// 添加支持异步token获取的版本
+export const createClientWithAsyncToken = (url: string, getToken: () => Promise<{ token: string }>) =>
+  urqlCreateClient({
+    url,
+    exchanges: [
+      debugExchange,
+      cacheExchange,
+      authExchange(async (utils) => {
+        const { token } = await getToken();
+        return {
+          addAuthToOperation: (operation: Operation) => {
+            return utils.appendHeaders(operation, {
+              "Authorization-Bearer": token,
+            });
+          },
+          didAuthError: () => false,
+          willAuthError: () => false,
+          refreshAuth: async () => {
+            // Token refresh logic if needed
+          },
+        };
       }),
       fetchExchange,
     ],
   });
-
-export function createServerClient(saleorApiUrl: string, token: string) {
-  return createClient(saleorApiUrl, async () => Promise.resolve({ token }));
-}

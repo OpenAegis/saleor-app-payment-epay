@@ -1,135 +1,63 @@
 import { useAppBridge, withAuthorization } from "@saleor/app-sdk/app-bridge";
 import { useState } from "react";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Box, Button, Text } from "@saleor/macaw-ui/next";
+import { Box, Button } from "@saleor/macaw-ui";
 import { type NextPage } from "next";
-import { FormProvider, useForm } from "react-hook-form";
-import { z } from "zod";
-import { checkTokenPermissions } from "../modules/jwt/check-token-offline";
-import {
-  type PaymentAppFormConfigEntry,
-  paymentAppCombinedFormSchema,
-  paymentAppConfigEntrySchema,
-} from "../modules/payment-app-configuration/config-entry";
-import { FetchError, useFetch, usePost } from "../lib/use-fetch";
 import { AppLayout } from "@/modules/ui/templates/AppLayout";
-import { FormInput } from "@/modules/ui/atoms/macaw-ui/FormInput";
-
-const actionId = "payment-form";
+import { EpayConfigurationForm } from "@/modules/ui/organisms/EpayConfigurationForm";
+import { type EpayFormConfig } from "@/modules/payment-app-configuration/epay-config";
 
 const ConfigPage: NextPage = () => {
   const { appBridgeState, appBridge } = useAppBridge();
   const { token } = appBridgeState ?? {};
 
-  const hasPermissions = checkTokenPermissions(token, ["MANAGE_APPS", "MANAGE_SETTINGS"]);
+  const [epayConfig, setEpayConfig] = useState<EpayFormConfig | null>(null);
 
-  const [isLoading, setIsLoading] = useState(true);
+  const saveEpayConfig = async (config: EpayFormConfig) => {
+    try {
+      const response = await fetch("/api/epay-config", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(config),
+      });
 
-  const formMethods = useForm<PaymentAppFormConfigEntry>({
-    resolver: zodResolver(paymentAppCombinedFormSchema),
-    defaultValues: {
-      apiKey: "",
-      configurationName: "",
-    },
-  });
-
-  const {
-    handleSubmit,
-    control,
-    reset,
-    setError,
-    formState: { isSubmitting },
-    resetField,
-  } = formMethods;
-
-  useFetch("/api/config", {
-    schema: paymentAppConfigEntrySchema,
-    onFinished: () => setIsLoading(false),
-    onSuccess: (data) => {
-      reset(data);
-    },
-    onError: async (err) => {
-      const message = err instanceof FetchError ? err.body : err.message;
+      if (response.ok) {
+        await appBridge?.dispatch({
+          type: "notification",
+          payload: {
+            title: "配置已保存",
+            text: "彩虹易支付配置已成功保存",
+            status: "success",
+            actionId: "epay-config",
+          },
+        });
+        setEpayConfig(config);
+      } else {
+        throw new Error("Failed to save epay config");
+      }
+    } catch (error) {
       await appBridge?.dispatch({
         type: "notification",
         payload: {
-          title: "Form error",
-          text: "Error while fetching initial form data",
+          title: "保存失败",
+          text: "保存彩虹易支付配置时出错",
           status: "error",
-          actionId,
-          apiMessage: message,
+          actionId: "epay-config",
         },
       });
-    },
-  });
-
-  const postForm = usePost("/api/config", {
-    schema: z.unknown(),
-    onSuccess: async () => {
-      await appBridge?.dispatch({
-        type: "notification",
-        payload: {
-          title: "Form saved",
-          text: "App configuration was saved successfully",
-          status: "success",
-          actionId: "payment-form",
-        },
-      });
-    },
-    onError: async (err) => {
-      const apiMessage = err instanceof FetchError ? err.body : err.name;
-      await appBridge?.dispatch({
-        type: "notification",
-        payload: {
-          title: "Form error",
-          text: err.message,
-          status: "error",
-          actionId,
-          apiMessage,
-        },
-      });
-      setError("root", { message: err.message });
-    },
-  });
-
-  if (!hasPermissions) {
-    return (
-      <AppLayout title="">
-        <Text variant="hero">{"You don't have permissions to configure this app"}</Text>
-      </AppLayout>
-    );
-  }
+    }
+  };
 
   return (
     <AppLayout title="">
-      <Box display="flex" flexDirection="column" gap={8}>
-        <FormProvider {...formMethods}>
-          <form
-            method="POST"
-            // eslint-disable-next-line @typescript-eslint/no-misused-promises
-            onSubmit={handleSubmit((data) => postForm(data))}
-          >
-            <Text variant="heading">Payment Provider settings</Text>
-
-            <Box display="flex" gap={6} alignItems="flex-end">
-              <FormInput control={control} label="API_KEY" name="apiKey" disabled={isLoading} />
-              <Button
-                variant="secondary"
-                size="small"
-                type="button"
-                onClick={() => resetField("apiKey")}
-              >
-                Reset
-              </Button>
-            </Box>
-
-            <div>
-              <Button type="submit" disabled={isLoading || isSubmitting}>
-                {isLoading ? "Loading" : isSubmitting ? "Saving..." : "Save"}
-              </Button>
-            </div>
-          </form>
-        </FormProvider>
+      <Box display="flex" flexDirection="column" gap={4}>
+        <h2>彩虹易支付配置</h2>
+        <EpayConfigurationForm 
+          initialConfig={epayConfig || undefined}
+          onSave={saveEpayConfig}
+          onCancel={() => {}}
+        />
       </Box>
     </AppLayout>
   );

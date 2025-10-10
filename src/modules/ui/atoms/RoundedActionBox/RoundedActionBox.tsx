@@ -1,4 +1,4 @@
-import { Box, type BoxProps } from "@saleor/macaw-ui/next";
+import { Box } from "@saleor/macaw-ui";
 import { type ReactNode } from "react";
 import { roundedActionBoxRecipe } from "./roundedActionBox.css";
 
@@ -7,10 +7,7 @@ export const RoundedBox = ({
   disabled = false,
   error = false,
   ...boxProps
-}: BoxProps & {
-  disabled?: boolean;
-  error?: boolean;
-}) => {
+}: any) => {
   return (
     <Box
       {...boxProps}
@@ -33,11 +30,7 @@ export const RoundedBoxWithFooter = ({
   error = false,
   disabled = false,
   ...boxProps
-}: BoxProps & {
-  footer: ReactNode;
-  error?: boolean;
-  disabled?: boolean;
-}) => {
+}: any) => {
   return (
     <RoundedBox {...boxProps} error={error} disabled={disabled}>
       <Box paddingX={6} paddingTop={4} display="flex">
@@ -48,7 +41,7 @@ export const RoundedBoxWithFooter = ({
         paddingY={4}
         display="flex"
         justifyContent="flex-end"
-        borderColor="neutralPlain"
+        borderColor="default1"
         borderTopWidth={1}
         borderTopStyle="solid"
       >

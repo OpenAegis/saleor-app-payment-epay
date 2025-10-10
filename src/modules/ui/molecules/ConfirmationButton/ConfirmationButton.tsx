@@ -1,5 +1,5 @@
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
-import { Box, Button, TrashBinIcon, type ButtonProps, Text, Input } from "@saleor/macaw-ui/next";
+import { Box, Button, Text, Input, type ButtonProps } from "@saleor/macaw-ui";
 import { type MouseEventHandler, useCallback, useState } from "react";
 import { modalOverlay, modal } from "../../atoms/modal.css";
 
@@ -50,7 +50,7 @@ export const ConfirmationButton = ({
           <AlertDialog.Overlay className={modalOverlay} />
           <AlertDialog.Content className={modal}>
             <AlertDialog.Title asChild>
-              <Text variant="title" size="medium">
+              <Text size={5}>
                 Delete {configurationName}
               </Text>
             </AlertDialog.Title>
@@ -58,27 +58,24 @@ export const ConfirmationButton = ({
               <Box display="flex" flexDirection="column" rowGap={4}>
                 <Box>
                   <Text
-                    color={state === "inProgress" ? "textNeutralDisabled" : "textNeutralDefault"}
+                    color={state === "inProgress" ? "defaultDisabled" : "default1"}
                     as="p"
-                    variant="body"
-                    size="medium"
+                    size={5}
                   >
                     Are you sure you want to delete the configuration?
                   </Text>
                   <Text
                     as="p"
-                    variant="body"
-                    size="medium"
-                    color={state === "inProgress" ? "textNeutralDisabled" : "textNeutralDefault"}
+                    size={5}
+                    color={state === "inProgress" ? "defaultDisabled" : "default1"}
                   >
                     Type the configuration name to confirm:{" "}
                     <Text
                       as="strong"
-                      variant="bodyStrong"
                       display="inline-block"
                       wordBreak="break-word"
-                      size="medium"
-                      color={state === "inProgress" ? "textNeutralDisabled" : "textNeutralDefault"}
+                      size={5}
+                      color={state === "inProgress" ? "defaultDisabled" : "default1"}
                     >
                       {configurationName}
                     </Text>
@@ -87,13 +84,13 @@ export const ConfirmationButton = ({
                 <Input
                   label="Configuration name"
                   value={inputConfiguratioName}
-                  onChange={(e) => setInputConfiguratioName(e.currentTarget.value)}
+                  onChange={(e: any) => setInputConfiguratioName(e.currentTarget.value)}
                   disabled={state === "inProgress"}
                 />
               </Box>
             </AlertDialog.Description>
 
-            <Box display="flex" justifyContent="flex-end" gap={1.5} marginTop={5}>
+            <Box display="flex" justifyContent="flex-end" gap={2} marginTop={5}>
               <AlertDialog.Cancel asChild>
                 <Button type="button" size="medium" disabled={state === "inProgress"}>
                   Cancel
@@ -102,10 +99,9 @@ export const ConfirmationButton = ({
               <Button
                 type="button"
                 size="medium"
-                variant="error"
+                variant="primary"
                 disabled={inputConfiguratioName !== configurationName || state === "inProgress"}
                 onClick={handleConfirmationClick}
-                icon={<TrashBinIcon />}
               >
                 {state === "inProgress" ? "Deleting..." : "Delete"}
               </Button>

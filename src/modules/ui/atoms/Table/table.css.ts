@@ -1,4 +1,4 @@
-import { sprinkles } from "@saleor/macaw-ui/next";
+import { sprinkles } from "@saleor/macaw-ui";
 import { style } from "@vanilla-extract/css";
 
 export const table = style(
@@ -32,9 +32,9 @@ export const tr = style([sprinkles({})], "tr");
 export const th = style(
   [
     sprinkles({
-      color: "textNeutralSubdued",
-      fontSize: "captionMedium",
-      fontWeight: "captionMedium",
+      color: "default1",
+      fontSize: 2,
+      fontWeight: "medium",
       paddingTop: 0.5,
       paddingBottom: 3,
       paddingLeft: 8,
@@ -58,7 +58,7 @@ export const td = style(
       paddingBottom: 3,
       borderTopWidth: 1,
       borderTopStyle: "solid",
-      borderColor: "neutralPlain",
+      borderColor: "default1",
       paddingLeft: 8,
     }),
     {

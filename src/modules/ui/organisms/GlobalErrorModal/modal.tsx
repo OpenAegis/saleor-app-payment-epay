@@ -1,5 +1,5 @@
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
-import { Box, Button, Text } from "@saleor/macaw-ui/next";
+import { Box, Button, Text } from "@saleor/macaw-ui";
 import { modalOverlay, modal } from "../../atoms/modal.css";
 import {
   useErrorModalActions,
@@ -21,14 +21,14 @@ export const ErrorModal = () => {
         <AlertDialog.Content className={modal}>
           {title && (
             <AlertDialog.Title asChild>
-              <Text variant="title">Confirm delete</Text>
+              <Text size={7}>{title}</Text>
             </AlertDialog.Title>
           )}
           <AlertDialog.Description>
-            <Text variant="bodyEmp">{message}</Text>
+            <Text size={5}>{message}</Text>
           </AlertDialog.Description>
 
-          <Box display="flex" justifyContent="flex-end" gap={1.5} marginTop={5}>
+          <Box display="flex" justifyContent="flex-end" gap={2} marginTop={5}>
             <AlertDialog.Cancel asChild>
               <Button type="button" size="large" onClick={() => closeModal()}>
                 Close

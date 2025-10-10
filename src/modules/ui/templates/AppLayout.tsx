@@ -1,4 +1,4 @@
-import { Box, Text } from "@saleor/macaw-ui/next";
+import { Box, Text } from "@saleor/macaw-ui";
 import { type ReactNode, isValidElement } from "react";
 import { appLayoutBoxRecipe, appLayoutTextRecipe } from "./appLayout.css";
 
@@ -22,13 +22,13 @@ export const AppLayout = ({
       __paddingBottom="20rem"
     >
       <Box display="flex" flexDirection="column" rowGap={2}>
-        <Text as="h1" variant="hero" size="medium">
+        <Text as="h1" size={7}>
           {title}
         </Text>
         {isValidElement(description) ? (
           description
         ) : (
-          <Text as="p" variant="body" size="medium">
+          <Text as="p" size={5}>
             {description}
           </Text>
         )}
@@ -57,8 +57,7 @@ export const AppLayoutRow = ({
         <Text
           as="h2"
           className={appLayoutTextRecipe({ error, disabled })}
-          size="large"
-          variant="heading"
+          size={7}
         >
           {title}
         </Text>
@@ -70,8 +69,7 @@ export const AppLayoutRow = ({
           <Text
             as="p"
             className={appLayoutTextRecipe({ error, disabled })}
-            variant="body"
-            size="medium"
+            size={5}
           >
             {description}
           </Text>

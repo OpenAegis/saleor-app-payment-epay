@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, Box, Button, Text } from "@saleor/macaw-ui/next";
+import { Box, Button, Text } from "@saleor/macaw-ui";
 import { forwardRef } from "react";
 import { fileUploadInput } from "./fileUploadInput.css";
 
@@ -12,7 +12,7 @@ export const FileUploadInput = forwardRef<HTMLInputElement, FileUploadInputProps
     return (
       <Box display="flex" alignItems="stretch" flexDirection="row" columnGap={4}>
         <Box as="label" className={fileUploadInput}>
-          <Text variant="body" size="medium" color="textNeutralSubdued">
+          <Text size={3} color="default1">
             {label}
           </Text>
           <input
@@ -40,12 +40,13 @@ export const FileUploadInput = forwardRef<HTMLInputElement, FileUploadInputProps
             paddingX={0.5}
             __transform="rotate(90deg) scale(0.75)"
             __borderWidth={0.5}
-            borderColor="neutralPlain"
+            borderColor="default1"
             borderRadius={2}
             borderStyle="solid"
             outlineStyle="none"
           >
-            <ArrowLeftIcon size="small" />
+            {/* 替换 ArrowLeftIcon，使用文本表示箭头 */}
+            <Text size={2}>←</Text>
           </Box>
           Upload certificate
         </Button>

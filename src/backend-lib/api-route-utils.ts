@@ -113,20 +113,20 @@ const errorToResponse = (err: unknown) => {
     normalizedError,
     {
       extra: {
-        errors: normalizedError.errors,
+        errors: (normalizedError as any).errors || [],
       },
     },
   ] as const;
 
-  const message = normalizedError.message;
+  const message = (normalizedError as any).message;
 
   const errors = [
     {
-      code: normalizedError.name,
-      message: normalizedError.message,
+      code: (normalizedError as any).name,
+      message: (normalizedError as any).message,
       details: {},
     },
-    ...(normalizedError.errors?.map((inner) => {
+    ...((normalizedError as any).errors?.map((inner: any) => {
       return {
         code: inner.name,
         message: inner.message,
