@@ -21,7 +21,7 @@ export function ChannelManager({ onChannelSelect }: ChannelManagerProps) {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/channels");
-      const data = await res.json();
+      const data = await res.json() as { channels?: Channel[] };
       setChannels(data.channels || []);
     } catch (error) {
       console.error("Failed to fetch channels:", error);
