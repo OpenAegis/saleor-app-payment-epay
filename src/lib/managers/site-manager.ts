@@ -2,6 +2,10 @@ import { eq, and, desc } from "drizzle-orm";
 import { db } from "../db/turso-client";
 import { sites, type Site, type NewSite } from "../db/schema";
 import { randomId } from "../random-id";
+import { saleorValidator, type SaleorValidationResult } from "../saleor-validator";
+import { createLogger } from "../logger";
+
+const logger = createLogger({ component: "SiteManager" });
 
 /**
  * 站点管理器
@@ -12,6 +16,42 @@ export class SiteManager {
    * 注册新站点（当站点安装插件时自动调用）
    */
   async register(input: Omit<NewSite, "id" | "createdAt" | "updatedAt" | "requestedAt">): Promise<Site> {
+    logger.info({ domain: input.domain, saleorApiUrl: input.saleorApiUrl }, "开始注册新站点");
+
+    // 验证 Saleor URL
+    const validation = await saleorValidator.validateSaleorUrl(input.saleorApiUrl);
+    if (!validation.isValid) {
+      logger.error({ 
+        domain: input.domain, 
+        saleorApiUrl: input.saleorApiUrl,
+        error: validation.error 
+      }, "Saleor URL 验证失败");
+      throw new Error(`无效的 Saleor URL: ${validation.error}`);
+    }
+
+    // 验证域名匹配
+    const domainMatch = await saleorValidator.validateDomainMatch(input.domain, input.saleorApiUrl);
+    if (!domainMatch) {
+      logger.error({ 
+        domain: input.domain, 
+        saleorApiUrl: input.saleorApiUrl 
+      }, "域名与 Saleor API URL 不匹配");
+      throw new Error("提供的域名与 Saleor API URL 不匹配");
+    }
+
+    logger.info({ 
+      domain: input.domain, 
+      saleorApiUrl: input.saleorApiUrl,
+      shopName: validation.shopName 
+    }, "Saleor URL 验证通过");
+
+    // 检查是否已经存在相同的域名或API URL
+    const existingSite = await this.getByDomain(input.domain);
+    if (existingSite) {
+      logger.warn({ domain: input.domain, existingId: existingSite.id }, "站点域名已存在");
+      throw new Error("该域名已经注册过了");
+    }
+
     const now = new Date().toISOString();
     const site: NewSite = {
       id: randomId(),
@@ -23,6 +63,8 @@ export class SiteManager {
     };
 
     await db.insert(sites).values(site);
+    logger.info({ id: site.id, domain: input.domain }, "站点注册成功");
+    
     return site as Site;
   }
 

@@ -75,6 +75,24 @@ export async function verifySessionToken(token: string): Promise<boolean> {
 }
 
 /**
+ * 验证并返回插件管理员会话信息
+ */
+export async function verifyPluginAdminSession(req: NextApiRequest): Promise<{ username: string } | null> {
+  const token = getSessionTokenFromRequest(req);
+  if (!token) {
+    return null;
+  }
+
+  const isValid = await verifySessionToken(token);
+  if (!isValid) {
+    return null;
+  }
+
+  // 返回会话信息（这里简化为固定的用户名）
+  return { username: PLUGIN_ADMIN_USERNAME };
+}
+
+/**
  * 从请求中获取会话令牌
  */
 export function getSessionTokenFromRequest(req: NextApiRequest): string | null {

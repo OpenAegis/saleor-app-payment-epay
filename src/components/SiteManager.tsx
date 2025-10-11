@@ -66,6 +66,56 @@ export function SiteManager() {
     }
   };
 
+  const handleValidateSite = async (siteId: string) => {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/admin/validate-site", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ siteId }),
+      });
+
+      if (res.ok) {
+        const result = await res.json() as {
+          domain: string;
+          saleorApiUrl: string;
+          validation: {
+            isValid: boolean;
+            error?: string;
+            shopName?: string;
+            version?: string;
+          };
+          domainMatch: boolean;
+          overall: boolean;
+        };
+
+        const { validation, domainMatch, overall } = result;
+        let message = `验证结果:\n`;
+        message += `域名: ${result.domain}\n`;
+        message += `Saleor URL: ${result.saleorApiUrl}\n\n`;
+        message += `URL验证: ${validation.isValid ? "✅ 通过" : "❌ 失败"}\n`;
+        if (validation.error) {
+          message += `错误: ${validation.error}\n`;
+        }
+        if (validation.shopName) {
+          message += `店铺名称: ${validation.shopName}\n`;
+        }
+        message += `域名匹配: ${domainMatch ? "✅ 通过" : "❌ 失败"}\n`;
+        message += `\n整体结果: ${overall ? "✅ 验证通过" : "❌ 验证失败"}`;
+        
+        alert(message);
+      } else {
+        const errorResult = await res.json() as { message?: string };
+        alert(`验证失败: ${errorResult.message || "未知错误"}`);
+      }
+    } catch (error) {
+      console.error("Failed to validate site:", error);
+      alert("验证请求失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "approved": return "#22c55e";
@@ -205,6 +255,14 @@ export function SiteManager() {
               </Box>
 
               <Box display="flex" gap={2} flexWrap="wrap">
+                <Button 
+                  type="button" 
+                  size="medium"
+                  onClick={() => handleValidateSite(site.id)}
+                >
+                  🔍 验证URL
+                </Button>
+
                 {site.status === "pending" && (
                   <>
                     <Button 
