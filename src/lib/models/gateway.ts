@@ -34,6 +34,11 @@ export const CreateGatewaySchema = GatewaySchema.omit({
 
 export type CreateGatewayInput = z.infer<typeof CreateGatewaySchema>;
 
+// 用于API的创建接口类型，allowedUsers是字符串数组
+export type CreateGatewayAPIInput = Omit<CreateGatewayInput, 'allowedUsers'> & {
+  allowedUsers: string[];
+};
+
 export const UpdateGatewaySchema = GatewaySchema.partial().omit({
   id: true,
   createdAt: true,
@@ -41,6 +46,11 @@ export const UpdateGatewaySchema = GatewaySchema.partial().omit({
 });
 
 export type UpdateGatewayInput = z.infer<typeof UpdateGatewaySchema>;
+
+// 用于API的更新接口类型，allowedUsers是字符串数组
+export type UpdateGatewayAPIInput = Omit<UpdateGatewayInput, 'allowedUsers'> & {
+  allowedUsers?: string[];
+};
 
 // 用户只能修改的字段（仅启用/禁用）
 export const UserUpdateGatewaySchema = z.object({

@@ -2,6 +2,7 @@ import { eq, and, desc, asc } from "drizzle-orm";
 import { db } from "../db/turso-client";
 import { gateways, type Gateway, type NewGateway } from "../db/schema";
 import { randomId } from "../random-id";
+import type { CreateGatewayAPIInput, UpdateGatewayAPIInput } from "../models/gateway";
 
 /**
  * 网关管理器
@@ -11,7 +12,7 @@ export class GatewayManager {
   /**
    * 创建新通道
    */
-  async create(input: Omit<NewGateway, "id" | "createdAt" | "updatedAt">): Promise<Gateway> {
+  async create(input: CreateGatewayAPIInput): Promise<Gateway> {
     const now = new Date().toISOString();
     const gateway: NewGateway = {
       id: randomId(),
@@ -132,17 +133,15 @@ export class GatewayManager {
   /**
    * 更新通道
    */
-  async update(id: string, input: Partial<Omit<Gateway, "id" | "createdAt" | "updatedAt">>): Promise<Gateway | null> {
-    const updateData = {
+  async update(id: string, input: UpdateGatewayAPIInput): Promise<Gateway | null> {
+    const updateData: any = {
       ...input,
       updatedAt: new Date().toISOString(),
     };
 
     // 如果更新allowedUsers，确保是JSON字符串
-    if (input.allowedUsers) {
-      updateData.allowedUsers = Array.isArray(input.allowedUsers)
-        ? JSON.stringify(input.allowedUsers)
-        : input.allowedUsers;
+    if (input.allowedUsers !== undefined) {
+      updateData.allowedUsers = JSON.stringify(input.allowedUsers);
     }
 
     const result = await db

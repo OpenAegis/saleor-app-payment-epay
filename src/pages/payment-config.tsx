@@ -23,7 +23,8 @@ const PaymentConfigPage: NextPage = () => {
       const res = await fetch("/api/plugin-admin/verify");
       if (res.ok) {
         const data = await res.json();
-        setIsPluginAdmin(data.authenticated);
+        const response = data as { authenticated: boolean };
+        setIsPluginAdmin(response.authenticated);
       } else {
         setIsPluginAdmin(false);
       }
@@ -87,7 +88,7 @@ const PaymentConfigPage: NextPage = () => {
         <Box padding={6}>
           <PluginAdminLogin onLoginSuccess={handleAdminLoginSuccess} />
           <Box display="flex" justifyContent="center" marginTop={4}>
-            <Button type="button" size={3} onClick={() => setShowAdminLogin(false)}>
+            <Button type="button" size="medium" onClick={() => setShowAdminLogin(false)}>
               返回用户界面
             </Button>
           </Box>
@@ -129,7 +130,7 @@ const PaymentConfigPage: NextPage = () => {
             <Button
               type="button"
               variant="tertiary"
-              size={3}
+              size="medium"
               onClick={handleAdminLogout}
             >
               🚪 登出管理员
@@ -180,5 +181,4 @@ const PaymentConfigPage: NextPage = () => {
 
 export default withAuthorization({
   notIframe: true,
-  redirectTo: "/",
 })(PaymentConfigPage);

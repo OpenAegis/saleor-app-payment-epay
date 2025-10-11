@@ -111,11 +111,11 @@ export function SiteManager() {
           <Text size={6} fontWeight="bold">{stats.total}</Text>
           <Text size={2} color="default2">总站点</Text>
         </Box>
-        <Box padding={3} borderRadius={4} backgroundColor="warning2" textAlign="center">
+        <Box padding={3} borderRadius={4} backgroundColor="warning1" textAlign="center">
           <Text size={6} fontWeight="bold">{stats.pending}</Text>
           <Text size={2} color="warning1">待审批</Text>
         </Box>
-        <Box padding={3} borderRadius={4} backgroundColor="success2" textAlign="center">
+        <Box padding={3} borderRadius={4} backgroundColor="success1" textAlign="center">
           <Text size={6} fontWeight="bold">{stats.approved}</Text>
           <Text size={2} color="success1">已批准</Text>
         </Box>
@@ -209,7 +209,7 @@ export function SiteManager() {
                   <>
                     <Button 
                       type="button" 
-                      size={3}
+                      size="medium"
                       onClick={() => {
                         const notes = prompt("审批备注（可选）:");
                         handleSiteAction("approve", site.id, notes || undefined);
@@ -219,7 +219,7 @@ export function SiteManager() {
                     </Button>
                     <Button 
                       type="button" 
-                      size={3}
+                      size="medium"
                       variant="primary"
                       onClick={() => {
                         const notes = prompt("拒绝原因:");
@@ -234,7 +234,7 @@ export function SiteManager() {
                 {site.status === "approved" && (
                   <Button 
                     type="button" 
-                    size={3}
+                    size="medium"
                     variant="primary"
                     onClick={() => {
                       const notes = prompt("暂停原因:");
@@ -248,7 +248,7 @@ export function SiteManager() {
                 {site.status === "suspended" && (
                   <Button 
                     type="button" 
-                    size={3}
+                    size="medium"
                     onClick={() => {
                       const notes = prompt("恢复备注（可选）:");
                       handleSiteAction("restore", site.id, notes || undefined);
@@ -261,7 +261,7 @@ export function SiteManager() {
                 {(site.status === "rejected" || site.status === "suspended") && (
                   <Button 
                     type="button" 
-                    size={3}
+                    size="medium"
                     onClick={() => {
                       const notes = prompt("重新批准备注（可选）:");
                       handleSiteAction("approve", site.id, notes || undefined);
