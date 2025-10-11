@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
+    "@libsql/client": "0.15.15",
     "@material-ui/core": "4.12.4",
     "@material-ui/icons": "4.11.3",
     "@radix-ui/react-alert-dialog": "1.1.15",
@@ -32,6 +33,7 @@
     "@vanilla-extract/recipes": "0.5.7",
     "ajv": "8.17.1",
     "classnames": "2.5.1",
+    "drizzle-orm": "0.44.6",
     "graphql": "16.11.0",
     "graphql-tag": "2.12.6",
     "jose": "6.1.0",
