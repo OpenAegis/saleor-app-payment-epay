@@ -64,6 +64,25 @@ export async function initializeDatabase() {
       )
     `);
 
+    // 创建sites表
+    await tursoClient.execute(`
+      CREATE TABLE IF NOT EXISTS sites (
+        id TEXT PRIMARY KEY,
+        domain TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        saleor_api_url TEXT NOT NULL,
+        app_id TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        requested_at TEXT NOT NULL DEFAULT (datetime('now')),
+        approved_at TEXT,
+        approved_by TEXT,
+        notes TEXT,
+        last_active_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+
     // 创建索引
     await tursoClient.execute(`
       CREATE INDEX IF NOT EXISTS gateway_channel_idx ON gateways(channel_id)
@@ -71,6 +90,14 @@ export async function initializeDatabase() {
     
     await tursoClient.execute(`
       CREATE INDEX IF NOT EXISTS gateway_type_idx ON gateways(type)
+    `);
+
+    await tursoClient.execute(`
+      CREATE INDEX IF NOT EXISTS sites_domain_idx ON sites(domain)
+    `);
+
+    await tursoClient.execute(`
+      CREATE INDEX IF NOT EXISTS sites_status_idx ON sites(status)
     `);
 
     console.log("✅ 数据库表初始化成功");

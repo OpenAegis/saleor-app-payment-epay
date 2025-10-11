@@ -7,13 +7,14 @@ import { ChannelManager } from "../components/ChannelManager";
 import { AdminGatewayManager } from "../components/AdminGatewayManager";
 import { UserGatewayConfig } from "../components/UserGatewayConfig";
 import { PluginAdminLogin } from "../components/PluginAdminLogin";
+import { SiteManager } from "../components/SiteManager";
 import type { Channel } from "../lib/models/channel";
 
 const PaymentConfigPage: NextPage = () => {
   const { appBridgeState } = useAppBridge();
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [isPluginAdmin, setIsPluginAdmin] = useState<boolean | null>(null);
-  const [currentView, setCurrentView] = useState<"user" | "admin">("user");
+  const [currentView, setCurrentView] = useState<"user" | "admin" | "sites">("user");
   const [showAdminLogin, setShowAdminLogin] = useState(false);
 
   // 检查插件管理员会话
@@ -108,14 +109,21 @@ const PaymentConfigPage: NextPage = () => {
                 variant={currentView === "admin" ? "primary" : "secondary"}
                 onClick={() => setCurrentView("admin")}
               >
-                🔧 管理员模式
+                🔧 支付管理
+              </Button>
+              <Button
+                type="button"
+                variant={currentView === "sites" ? "primary" : "secondary"}
+                onClick={() => setCurrentView("sites")}
+              >
+                🏢 站点授权
               </Button>
               <Button
                 type="button"
                 variant={currentView === "user" ? "primary" : "secondary"}
                 onClick={() => setCurrentView("user")}
               >
-                👁️ 用户模式预览
+                👁️ 用户预览
               </Button>
             </Box>
             <Button
@@ -139,6 +147,8 @@ const PaymentConfigPage: NextPage = () => {
                 <ChannelManager onChannelSelect={setSelectedChannel} />
               )}
             </>
+          ) : currentView === "sites" ? (
+            <SiteManager />
           ) : (
             <UserGatewayConfig />
           )}
