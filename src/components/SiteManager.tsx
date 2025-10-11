@@ -33,7 +33,7 @@ export function SiteManager() {
     try {
       const url = statusFilter === "all" ? "/api/admin/sites" : `/api/admin/sites?status=${statusFilter}`;
       const res = await fetch(url);
-      const data = await res.json();
+      const data = await res.json() as { sites?: Site[], stats?: SiteStats };
       setSites(data.sites || []);
       setStats(data.stats || { total: 0, pending: 0, approved: 0, rejected: 0, suspended: 0 });
     } catch (error) {
