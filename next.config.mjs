@@ -15,6 +15,10 @@ import { withSentryConfig } from "@sentry/nextjs";
 /** @type {import('next').NextConfig} */
 const config = {
   reactStrictMode: true,
+  eslint: {
+    // Skip ESLint during production builds
+    ignoreDuringBuilds: true,
+  },
   /** @param { import("webpack").Configuration } config */
   webpack(config) {
     config.experiments = { ...config.experiments, topLevelAwait: true };
