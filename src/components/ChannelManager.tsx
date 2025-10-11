@@ -206,12 +206,12 @@ export function ChannelManager({ onChannelSelect }: ChannelManagerProps) {
                 </Box>
               </Box>
               <Box display="flex" gap={2}>
-                <Button type="button" size={3} onClick={() => onChannelSelect(channel)}>
+                <Button type="button" size="medium" onClick={() => onChannelSelect(channel)}>
                   管理通道
                 </Button>
                 <Button
                   type="button"
-                  size={3}
+                  size="medium"
                   variant="primary"
                   onClick={() => handleDelete(channel.id)}
                 >
