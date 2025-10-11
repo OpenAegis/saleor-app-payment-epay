@@ -3,7 +3,7 @@ import { type MappingUpdate } from "./input-schemas";
 import { type PaymentAppConfigurator } from "./payment-app-configuration";
 import { createLogger } from "@/lib/logger";
 import { BaseError, FieldError } from "@/errors";
-import { FetchChannelsDocument, type FetchChannelsQuery } from "generated/graphql";
+import { FetchChannelsDocument, type FetchChannelsQuery } from "../../../generated/graphql";
 
 export const EntryDoesntExistError = FieldError.subclass("EntryDoesntExistError", {
   props: { fieldName: "configurationId" },

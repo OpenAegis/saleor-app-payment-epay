@@ -8,7 +8,7 @@ import {
   EntryDoesntExistError,
 } from "./mapping-manager";
 import { type PaymentAppConfigurator } from "./payment-app-configuration";
-import { FetchChannelsDocument } from "generated/graphql";
+import { FetchChannelsDocument } from "../../../generated/graphql";
 
 describe("fetchChannels", () => {
   it("should make a query to Saleor GraphQL endpoint and return channels", async () => {

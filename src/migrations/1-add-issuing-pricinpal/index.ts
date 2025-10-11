@@ -5,7 +5,7 @@ import {
   Migration_01_UpdateWebhookDocument,
   UntypedTransactionInitializeSessionDocument,
   WebhookEventTypeSyncEnum,
-} from "generated/graphql";
+} from "../../../generated/graphql";
 import { gqlAstToString } from "@/lib/gql-ast-to-string";
 import { type PaymentAppConfigurator } from "@/modules/payment-app-configuration/payment-app-configuration";
 
