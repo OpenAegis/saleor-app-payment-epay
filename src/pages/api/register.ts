@@ -329,38 +329,37 @@ const baseHandler = createAppRegisterHandler({
       }
     }
 
-    // 测试与Saleor实例的连接（现在使用可能已更新的URL）
-    const connectionResult = await testSaleorConnection(authData.saleorApiUrl, authData.token);
-    
-    if (!connectionResult.success) {
-      logger.warn(
-        { 
-          domain: authData.domain, 
-          saleorApiUrl: authData.saleorApiUrl,
-          error: connectionResult.error,
-          details: connectionResult.details 
-        }, 
-        "Saleor连接测试失败，但继续注册流程"
-      );
+    // 记录最终使用的URL
+    logger.info(
+      { 
+        finalSaleorApiUrl: authData.saleorApiUrl,
+        finalDomain: authData.domain,
+      },
+      "准备使用的最终URL信息"
+    );
+
+    // 如果不是localhost，测试连接；否则跳过测试直接注册
+    if (!isLocalhost(authData.saleorApiUrl)) {
+      const connectionResult = await testSaleorConnection(authData.saleorApiUrl, authData.token);
       
-      // 对于localhost，记录警告但继续注册
-      if (connectionResult.error === "LOCALHOST_NOT_ACCESSIBLE") {
-        logger.info("检测到localhost URL，跳过连接测试，继续注册流程");
+      if (connectionResult.success) {
+        logger.info(
+          { connectionDetails: connectionResult.details },
+          "Saleor连接测试成功"
+        );
       } else {
-        // 对于其他连接错误，记录详细信息但仍然尝试注册
-        logger.error(
+        logger.warn(
           { 
-            connectionError: connectionResult.error,
-            errorDetails: connectionResult.details 
-          },
-          "Saleor连接失败，但尝试继续注册流程"
+            domain: authData.domain, 
+            saleorApiUrl: authData.saleorApiUrl,
+            error: connectionResult.error,
+            details: connectionResult.details 
+          }, 
+          "Saleor连接测试失败，但继续注册流程"
         );
       }
     } else {
-      logger.info(
-        { connectionDetails: connectionResult.details },
-        "Saleor连接测试成功"
-      );
+      logger.info("仍然是localhost URL，跳过连接测试，直接进行注册");
     }
 
     // 尝试保存认证数据到APL
