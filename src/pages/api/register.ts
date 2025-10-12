@@ -364,17 +364,56 @@ const baseHandler = createAppRegisterHandler({
 
     // 尝试保存认证数据到APL
     try {
-      await saleorApp.apl.set(authData);
       logger.info(
-        { domain: authData.domain, appId: authData.appId },
+        {
+          beforeSave: {
+            saleorApiUrl: authData.saleorApiUrl,
+            domain: authData.domain,
+            appId: authData.appId,
+            tokenPresent: !!authData.token,
+            tokenLength: authData.token?.length,
+          }
+        },
+        "准备保存认证数据到APL"
+      );
+
+      await saleorApp.apl.set(authData);
+      
+      logger.info(
+        { domain: authData.domain, appId: authData.appId, saleorApiUrl: authData.saleorApiUrl },
         "认证数据已成功保存到APL",
       );
+
+      // 验证保存是否成功
+      try {
+        const savedData = await saleorApp.apl.get(authData.saleorApiUrl);
+        if (savedData) {
+          logger.info(
+            {
+              retrievedDomain: savedData.domain,
+              retrievedAppId: savedData.appId,
+              retrievedApiUrl: savedData.saleorApiUrl,
+              tokenPresent: !!savedData.token,
+            },
+            "APL保存验证成功"
+          );
+        } else {
+          logger.warn("APL保存验证失败：无法检索已保存的数据");
+        }
+      } catch (verifyError) {
+        logger.warn(
+          { error: verifyError instanceof Error ? verifyError.message : "未知错误" },
+          "APL保存验证时出错"
+        );
+      }
+
     } catch (aplError) {
       logger.error(
         { 
           error: aplError instanceof Error ? aplError.message : "未知错误",
           stack: aplError instanceof Error ? aplError.stack : undefined,
-          domain: authData.domain 
+          domain: authData.domain,
+          saleorApiUrl: authData.saleorApiUrl
         },
         "保存认证数据到APL失败",
       );
