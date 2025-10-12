@@ -1,8 +1,8 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { db } from "../db/turso-client";
 import { sites, type Site, type NewSite } from "../db/schema";
 import { randomId } from "../random-id";
-import { saleorValidator, type SaleorValidationResult } from "../saleor-validator";
+import { saleorValidator } from "../saleor-validator";
 import { createLogger } from "../logger";
 
 const logger = createLogger({ component: "SiteManager" });
@@ -106,6 +106,18 @@ export class SiteManager {
   async getByDomain(domain: string): Promise<Site | null> {
     const result = await db.select().from(sites).where(eq(sites.domain, domain)).limit(1);
     return result[0] || null;
+  }
+
+  /**
+   * 通过IP地址获取站点
+   */
+  async getByIP(ip: string): Promise<Site | null> {
+    // 获取所有站点，然后手动过滤备注中包含IP的记录
+    const result = await db.select().from(sites);
+    
+    // 手动过滤结果以查找包含IP的记录
+    const filtered = result.filter(site => site.notes && site.notes.includes(ip));
+    return filtered[0] || null;
   }
 
   /**
@@ -244,11 +256,24 @@ export class SiteManager {
   }
 
   /**
-   * 检查站点是否被授权访问
+   * 检查站点是否被授权访问（支持域名和IP两种方式）
    */
-  async isAuthorized(domain: string): Promise<boolean> {
+  async isAuthorized(domain: string, clientIP?: string): Promise<boolean> {
+    // 首先检查域名授权
     const site = await this.getByDomain(domain);
-    return site?.status === "approved";
+    if (site?.status === "approved") {
+      return true;
+    }
+    
+    // 如果域名未授权且提供了客户端IP，检查IP授权
+    if (clientIP) {
+      const ipSite = await this.getByIP(clientIP);
+      if (ipSite?.status === "approved") {
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   /**
