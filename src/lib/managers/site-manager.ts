@@ -97,12 +97,11 @@ export class SiteManager {
     const siteData = {
       id: randomId(),
       domain: input.domain,
-      name: shopName, // 使用从验证中获取的商店名称
+      name: shopName,
       saleorApiUrl: input.saleorApiUrl,
-      ...(input.clientIP && { clientIP: input.clientIP }),
-      ...(input.appId && { appId: input.appId }),
-      status: "pending" as const, // 默认待审批
-      ...(validationNotes && { notes: validationNotes }),
+      clientIP: input.clientIP || null,
+      status: "pending" as const,
+      notes: validationNotes || null,
     };
 
     await db.insert(sites).values(siteData);
