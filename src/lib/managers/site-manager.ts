@@ -15,7 +15,9 @@ export class SiteManager {
   /**
    * 注册新站点（当站点安装插件时自动调用）
    */
-  async register(input: Omit<NewSite, "id" | "createdAt" | "updatedAt" | "requestedAt">): Promise<Site> {
+  async register(
+    input: Omit<NewSite, "id" | "createdAt" | "updatedAt" | "requestedAt">,
+  ): Promise<Site> {
     logger.info({ domain: input.domain, saleorApiUrl: input.saleorApiUrl }, "开始注册新站点");
 
     let shopName = `Saleor Store (${input.domain})`;
@@ -25,45 +27,63 @@ export class SiteManager {
     try {
       const validation = await saleorValidator.validateSaleorUrl(input.saleorApiUrl);
       if (validation.isValid) {
-        logger.info({ 
-          domain: input.domain, 
-          saleorApiUrl: input.saleorApiUrl,
-          shopName: validation.shopName 
-        }, "Saleor URL 验证通过");
+        logger.info(
+          {
+            domain: input.domain,
+            saleorApiUrl: input.saleorApiUrl,
+            shopName: validation.shopName,
+          },
+          "Saleor URL 验证通过",
+        );
         shopName = validation.shopName || shopName;
       } else {
-        logger.warn({ 
-          domain: input.domain, 
-          saleorApiUrl: input.saleorApiUrl,
-          error: validation.error 
-        }, "Saleor URL 验证失败，但允许注册");
+        logger.warn(
+          {
+            domain: input.domain,
+            saleorApiUrl: input.saleorApiUrl,
+            error: validation.error,
+          },
+          "Saleor URL 验证失败，但允许注册",
+        );
         validationNotes = `验证失败: ${validation.error}`;
       }
     } catch (error) {
-      logger.warn({ 
-        domain: input.domain, 
-        saleorApiUrl: input.saleorApiUrl,
-        error: error instanceof Error ? error.message : "未知错误"
-      }, "Saleor URL 验证异常，但允许注册");
+      logger.warn(
+        {
+          domain: input.domain,
+          saleorApiUrl: input.saleorApiUrl,
+          error: error instanceof Error ? error.message : "未知错误",
+        },
+        "Saleor URL 验证异常，但允许注册",
+      );
       validationNotes = `验证异常: ${error instanceof Error ? error.message : "未知错误"}`;
     }
 
     // 尝试验证域名匹配，但不阻止注册
     try {
-      const domainMatch = await saleorValidator.validateDomainMatch(input.domain, input.saleorApiUrl);
+      const domainMatch = await saleorValidator.validateDomainMatch(
+        input.domain,
+        input.saleorApiUrl,
+      );
       if (!domainMatch) {
-        logger.warn({ 
-          domain: input.domain, 
-          saleorApiUrl: input.saleorApiUrl 
-        }, "域名与 Saleor API URL 不匹配，但允许注册");
+        logger.warn(
+          {
+            domain: input.domain,
+            saleorApiUrl: input.saleorApiUrl,
+          },
+          "域名与 Saleor API URL 不匹配，但允许注册",
+        );
         validationNotes += validationNotes ? " | 域名不匹配" : "域名不匹配";
       }
     } catch (error) {
-      logger.warn({ 
-        domain: input.domain, 
-        saleorApiUrl: input.saleorApiUrl,
-        error: error instanceof Error ? error.message : "未知错误"
-      }, "域名验证异常，但允许注册");
+      logger.warn(
+        {
+          domain: input.domain,
+          saleorApiUrl: input.saleorApiUrl,
+          error: error instanceof Error ? error.message : "未知错误",
+        },
+        "域名验证异常，但允许注册",
+      );
       validationNotes += validationNotes ? " | 域名验证异常" : "域名验证异常";
     }
 
@@ -88,7 +108,7 @@ export class SiteManager {
 
     await db.insert(sites).values(site);
     logger.info({ id: site.id, domain: input.domain }, "站点注册成功");
-    
+
     return site as Site;
   }
 
@@ -114,9 +134,9 @@ export class SiteManager {
   async getByIP(ip: string): Promise<Site | null> {
     // 获取所有站点，然后手动过滤备注中包含IP的记录
     const result = await db.select().from(sites);
-    
+
     // 手动过滤结果以查找包含IP的记录
-    const filtered = result.filter(site => site.notes && site.notes.includes(ip));
+    const filtered = result.filter((site) => site.notes && site.notes.includes(ip));
     return filtered[0] || null;
   }
 
@@ -124,11 +144,8 @@ export class SiteManager {
    * 获取所有站点
    */
   async getAll(): Promise<Site[]> {
-    const result = await db
-      .select()
-      .from(sites)
-      .orderBy(desc(sites.requestedAt));
-    
+    const result = await db.select().from(sites).orderBy(desc(sites.requestedAt));
+
     return result;
   }
 
@@ -141,7 +158,7 @@ export class SiteManager {
       .from(sites)
       .where(eq(sites.status, status))
       .orderBy(desc(sites.requestedAt));
-    
+
     return result;
   }
 
@@ -164,7 +181,7 @@ export class SiteManager {
    */
   async approve(id: string, approvedBy: string, notes?: string): Promise<Site | null> {
     const now = new Date().toISOString();
-    
+
     const result = await db
       .update(sites)
       .set({
@@ -185,7 +202,7 @@ export class SiteManager {
    */
   async reject(id: string, rejectedBy: string, notes?: string): Promise<Site | null> {
     const now = new Date().toISOString();
-    
+
     const result = await db
       .update(sites)
       .set({
@@ -205,7 +222,7 @@ export class SiteManager {
    */
   async suspend(id: string, suspendedBy: string, notes?: string): Promise<Site | null> {
     const now = new Date().toISOString();
-    
+
     const result = await db
       .update(sites)
       .set({
@@ -225,7 +242,7 @@ export class SiteManager {
    */
   async restore(id: string, restoredBy: string, notes?: string): Promise<Site | null> {
     const now = new Date().toISOString();
-    
+
     const result = await db
       .update(sites)
       .set({
@@ -245,7 +262,7 @@ export class SiteManager {
    */
   async updateLastActive(domain: string): Promise<void> {
     const now = new Date().toISOString();
-    
+
     await db
       .update(sites)
       .set({
@@ -264,7 +281,7 @@ export class SiteManager {
     if (site?.status === "approved") {
       return true;
     }
-    
+
     // 如果域名未授权且提供了客户端IP，检查IP授权
     if (clientIP) {
       const ipSite = await this.getByIP(clientIP);
@@ -272,7 +289,7 @@ export class SiteManager {
         return true;
       }
     }
-    
+
     return false;
   }
 
@@ -287,17 +304,16 @@ export class SiteManager {
   /**
    * 更新站点信息
    */
-  async update(id: string, input: Partial<Omit<Site, "id" | "createdAt" | "requestedAt">>): Promise<Site | null> {
+  async update(
+    id: string,
+    input: Partial<Omit<Site, "id" | "createdAt" | "requestedAt">>,
+  ): Promise<Site | null> {
     const updatedData = {
       ...input,
       updatedAt: new Date().toISOString(),
     };
 
-    const result = await db
-      .update(sites)
-      .set(updatedData)
-      .where(eq(sites.id, id))
-      .returning();
+    const result = await db.update(sites).set(updatedData).where(eq(sites.id, id)).returning();
 
     return result[0] || null;
   }
