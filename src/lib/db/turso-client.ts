@@ -1,14 +1,11 @@
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
+import { env } from "../env.mjs";
 import * as schema from "./schema";
 
 // 从环境变量读取Turso配置
-const tursoUrl = process.env.TURSO_DATABASE_URL;
-const tursoAuthToken = process.env.TURSO_AUTH_TOKEN;
-
-if (!tursoUrl) {
-  throw new Error("TURSO_DATABASE_URL environment variable is required");
-}
+const tursoUrl = env.TURSO_DATABASE_URL;
+const tursoAuthToken = env.TURSO_AUTH_TOKEN;
 
 // 创建Turso客户端
 export const tursoClient = createClient({
@@ -84,11 +81,23 @@ export async function initializeDatabase() {
       )
     `);
 
+    // 创建domain_whitelist表 (域名白名单)
+    await tursoClient.execute(`
+      CREATE TABLE IF NOT EXISTS domain_whitelist (
+        id TEXT PRIMARY KEY,
+        domain_pattern TEXT NOT NULL UNIQUE,
+        description TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+
     // 创建索引
     await tursoClient.execute(`
       CREATE INDEX IF NOT EXISTS channel_gateway_idx ON channels(gateway_id)
     `);
-    
+
     await tursoClient.execute(`
       CREATE INDEX IF NOT EXISTS channel_type_idx ON channels(type)
     `);
@@ -99,6 +108,10 @@ export async function initializeDatabase() {
 
     await tursoClient.execute(`
       CREATE INDEX IF NOT EXISTS sites_status_idx ON sites(status)
+    `);
+
+    await tursoClient.execute(`
+      CREATE INDEX IF NOT EXISTS domain_whitelist_pattern_idx ON domain_whitelist(domain_pattern)
     `);
 
     console.log("✅ 数据库表初始化成功");

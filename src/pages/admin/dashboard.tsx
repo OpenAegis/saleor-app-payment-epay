@@ -4,17 +4,16 @@ import { Button, Box, Text } from "@saleor/macaw-ui";
 import SiteManager from "../../components/SiteManager";
 import ChannelManager from "../../components/ChannelManager";
 import GatewayManager from "../../components/GatewayManager";
-import type { Gateway } from "../../lib/models/gateway";
+import { DomainWhitelistManager } from "@/modules/ui/organisms/DomainWhitelistManager";
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState("sites");
-  const [selectedGateway, setSelectedGateway] = useState<Gateway | null>(null);
 
   useEffect(() => {
-    checkAuth();
+    void checkAuth();
   }, []);
 
   const checkAuth = async () => {
@@ -22,14 +21,14 @@ export default function AdminDashboard() {
       const response = await fetch("/api/plugin-admin/verify", {
         credentials: "include",
       });
-      
+
       if (response.ok) {
         setIsAuthenticated(true);
       } else {
-        router.push("/admin/login");
+        void router.push("/admin/login");
       }
-    } catch (error) {
-      router.push("/admin/login");
+    } catch (_error) {
+      void router.push("/admin/login");
     } finally {
       setLoading(false);
     }
@@ -41,19 +40,18 @@ export default function AdminDashboard() {
         method: "POST",
         credentials: "include",
       });
-      router.push("/admin/login");
-    } catch (error) {
-      console.error("Logout error:", error);
-      router.push("/admin/login");
+      void router.push("/admin/login");
+    } catch (_error) {
+      void router.push("/admin/login");
     }
   };
 
   if (loading) {
     return (
-      <Box 
-        display="flex" 
-        justifyContent="center" 
-        alignItems="center" 
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
         style={{ minHeight: "100vh" }}
       >
         <Text>加载中...</Text>
@@ -67,23 +65,21 @@ export default function AdminDashboard() {
 
   return (
     <Box style={{ minHeight: "100vh", backgroundColor: "#f5f5f5" }}>
-      <Box 
-        padding={4} 
-        backgroundColor="default1" 
-        style={{ borderBottom: "1px solid #e5e5e5" }}
-      >
-        <Box 
-          display="flex" 
-          justifyContent="space-between" 
+      <Box padding={4} backgroundColor="default1" style={{ borderBottom: "1px solid #e5e5e5" }}>
+        <Box
+          display="flex"
+          justifyContent="space-between"
           alignItems="center"
           style={{ maxWidth: "1200px", margin: "0 auto" }}
         >
           <Text size={6} fontWeight="bold">
             多渠道支付管理后台
           </Text>
-          <Button 
-            variant="secondary" 
-            onClick={handleLogout}
+          <Button
+            variant="secondary"
+            onClick={() => {
+              void handleLogout();
+            }}
             size="medium"
           >
             退出登录
@@ -112,13 +108,21 @@ export default function AdminDashboard() {
             >
               通道管理
             </Button>
+            <Button
+              variant={activeTab === "domain-whitelist" ? "primary" : "secondary"}
+              onClick={() => setActiveTab("domain-whitelist")}
+            >
+              域名白名单
+            </Button>
           </Box>
         </Box>
 
         {activeTab === "sites" && (
           <Box>
             <Box marginBottom={4}>
-              <Text size={5} fontWeight="bold" marginBottom={2}>站点管理</Text>
+              <Text size={5} fontWeight="bold" marginBottom={2}>
+                站点管理
+              </Text>
               <Text size={3} color="default1">
                 管理 Saleor 站点的安装申请和授权状态
               </Text>
@@ -130,7 +134,9 @@ export default function AdminDashboard() {
         {activeTab === "gateways" && (
           <Box>
             <Box marginBottom={4}>
-              <Text size={5} fontWeight="bold" marginBottom={2}>渠道管理</Text>
+              <Text size={5} fontWeight="bold" marginBottom={2}>
+                渠道管理
+              </Text>
               <Text size={3} color="default1">
                 管理易支付渠道配置（API地址、商户ID、密钥等）
               </Text>
@@ -142,12 +148,28 @@ export default function AdminDashboard() {
         {activeTab === "channels" && (
           <Box>
             <Box marginBottom={4}>
-              <Text size={5} fontWeight="bold" marginBottom={2}>通道管理</Text>
+              <Text size={5} fontWeight="bold" marginBottom={2}>
+                通道管理
+              </Text>
               <Text size={3} color="default1">
                 管理支付通道配置（选择渠道和支付类型）
               </Text>
             </Box>
             <ChannelManager />
+          </Box>
+        )}
+
+        {activeTab === "domain-whitelist" && (
+          <Box>
+            <Box marginBottom={4}>
+              <Text size={5} fontWeight="bold" marginBottom={2}>
+                域名白名单管理
+              </Text>
+              <Text size={3} color="default1">
+                管理允许安装此支付插件的域名。只有在白名单中的域名才能成功安装插件。
+              </Text>
+            </Box>
+            <DomainWhitelistManager />
           </Box>
         )}
       </Box>

@@ -1,71 +1,44 @@
-// @ts-check
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
 
 export const env = createEnv({
-  isServer: typeof window === "undefined" || process.env.NODE_ENV === "test",
-  /*
-   * Serverside Environment variables, not available on the client.
-   * Will throw if you access these variables on the client.
+  /**
+   * Specify your server-side environment variables here.
    */
   server: {
-    ENV: z.enum(["development", "test", "staging", "production"]).default("development"),
-    SECRET_KEY: z.string().min(8, { message: "Cannot be too short" }),
-    SENTRY_DSN: z.string().min(1).optional(),
-    APL: z.enum(["saleor-cloud", "upstash", "file"]).optional().default("file"),
-    CI: z.coerce.boolean().optional().default(false),
-    APP_DEBUG: z
-      .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
-      .optional()
-      .default("error"),
-    VERCEL_URL: z.string().optional(),
-    PORT: z.coerce.number().optional(),
-    UPSTASH_URL: z.string().optional(),
-    UPSTASH_TOKEN: z.string().optional(),
-    REST_APL_ENDPOINT: z.string().optional(),
-    REST_APL_TOKEN: z.string().optional(),
-    // 彩虹易支付相关环境变量
-    EPAY_PID: z.string().optional(),
-    EPAY_KEY: z.string().optional(),
-    EPAY_API_URL: z.string().url().optional(),
-    APP_URL: z.string().url().optional(),
-    STOREFRONT_URL: z.string().url().optional(),
+    APP_URL: z.string().url(),
+    TURSO_DATABASE_URL: z.string().url(),
+    TURSO_AUTH_TOKEN: z.string(),
+    PLUGIN_ADMIN_USERNAME: z.string(),
+    PLUGIN_ADMIN_PASSWORD: z.string(),
+    PLUGIN_SESSION_SECRET: z.string(),
+    APP_DEBUG: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
+    SECRET_KEY: z.string(),
   },
 
-  /*
-   * Environment variables available on the client (and server).
-   *
-   * 💡 You'll get type errors if these are not prefixed with NEXT_PUBLIC_.
+  /**
+   * Specify your client-side environment variables here.
    */
   client: {
-    NEXT_PUBLIC_SENTRY_DSN: z.optional(z.string().min(1)),
+    NEXT_PUBLIC_APP_NAME: z.string().default("E支付插件"),
+    NEXT_PUBLIC_APP_VERSION: z.string().default("1.0.0"),
   },
 
-  /*
-   * Due to how Next.js bundles environment variables on Edge and Client,
-   * we need to manually destructure them to make sure all are included in bundle.
-   *
-   * 💡 You'll get type errors if not all variables from `server` & `client` are included here.
+  /**
+   * Destructure all variables from `process.env` to make sure they aren't tree-shaken away.
    */
   runtimeEnv: {
-    ENV: process.env.ENV,
-    NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
-
-    SECRET_KEY: process.env.SECRET_KEY,
-    SENTRY_DSN: process.env.SENTRY_DSN,
-    APL: process.env.APL,
-    CI: process.env.CI,
-    APP_DEBUG: process.env.APP_DEBUG,
-    VERCEL_URL: process.env.VERCEL_URL,
-    PORT: process.env.PORT,
-    UPSTASH_URL: process.env.UPSTASH_URL,
-    UPSTASH_TOKEN: process.env.UPSTASH_TOKEN,
-    REST_APL_ENDPOINT: process.env.REST_APL_ENDPOINT,
-    REST_APL_TOKEN: process.env.REST_APL_TOKEN,
-    EPAY_PID: process.env.EPAY_PID,
-    EPAY_KEY: process.env.EPAY_KEY,
-    EPAY_API_URL: process.env.EPAY_API_URL,
     APP_URL: process.env.APP_URL,
-    STOREFRONT_URL: process.env.STOREFRONT_URL,
+    TURSO_DATABASE_URL: process.env.TURSO_DATABASE_URL,
+    TURSO_AUTH_TOKEN: process.env.TURSO_AUTH_TOKEN,
+    PLUGIN_ADMIN_USERNAME: process.env.PLUGIN_ADMIN_USERNAME,
+    PLUGIN_ADMIN_PASSWORD: process.env.PLUGIN_ADMIN_PASSWORD,
+    PLUGIN_SESSION_SECRET: process.env.PLUGIN_SESSION_SECRET,
+    APP_DEBUG: process.env.APP_DEBUG,
+    SECRET_KEY: process.env.SECRET_KEY,
+    NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
+    NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION,
   },
+
+  skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });

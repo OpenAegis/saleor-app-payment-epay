@@ -15,14 +15,18 @@ export const gateways = sqliteTable("gateways", {
   icon: text("icon"),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   priority: integer("priority").notNull().default(0),
-  
+
   // 访问控制字段
   isMandatory: integer("is_mandatory", { mode: "boolean" }).notNull().default(false), // 是否为强制渠道
   allowedUsers: text("allowed_users").notNull().default("[]"), // JSON数组，白名单用户列表
   isGlobal: integer("is_global", { mode: "boolean" }).notNull().default(true), // 是否为全局渠道
-  
-  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
-  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
 });
 
 /**
@@ -31,15 +35,21 @@ export const gateways = sqliteTable("gateways", {
  */
 export const channels = sqliteTable("channels", {
   id: text("id").primaryKey(),
-  gatewayId: text("gateway_id").notNull().references(() => gateways.id, { onDelete: "cascade" }),
+  gatewayId: text("gateway_id")
+    .notNull()
+    .references(() => gateways.id, { onDelete: "cascade" }),
   name: text("name").notNull(), // 通道名称，如"支付宝通道"
   description: text("description"),
   type: text("type").notNull(), // 支付类型：alipay, wxpay, qqpay, bank, jdpay, paypal 或自定义类型
   icon: text("icon"),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   priority: integer("priority").notNull().default(0),
-  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
-  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
 });
 
 /**
@@ -53,13 +63,36 @@ export const sites = sqliteTable("sites", {
   saleorApiUrl: text("saleor_api_url").notNull(), // Saleor API地址
   appId: text("app_id"), // Saleor App ID
   status: text("status").notNull().default("pending"), // pending, approved, rejected, suspended
-  requestedAt: text("requested_at").notNull().default(sql`(datetime('now'))`), // 请求安装时间
+  requestedAt: text("requested_at")
+    .notNull()
+    .default(sql`(datetime('now'))`), // 请求安装时间
   approvedAt: text("approved_at"), // 审批时间
   approvedBy: text("approved_by"), // 审批人（插件管理员）
   notes: text("notes"), // 备注
   lastActiveAt: text("last_active_at"), // 最后活跃时间
-  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
-  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
+/**
+ * 域名白名单表
+ * 管理允许安装此支付插件的域名
+ */
+export const domainWhitelist = sqliteTable("domain_whitelist", {
+  id: text("id").primaryKey(),
+  domainPattern: text("domain_pattern").notNull().unique(), // 域名模式，支持正则表达式
+  description: text("description"), // 描述
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true), // 是否激活
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
 });
 
 // 类型定义
@@ -69,6 +102,8 @@ export type Gateway = typeof gateways.$inferSelect;
 export type NewGateway = typeof gateways.$inferInsert;
 export type Site = typeof sites.$inferSelect;
 export type NewSite = typeof sites.$inferInsert;
+export type DomainWhitelist = typeof domainWhitelist.$inferSelect;
+export type NewDomainWhitelist = typeof domainWhitelist.$inferInsert;
 
 // 索引定义
 export const channelIndexes = {

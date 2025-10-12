@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
-import { NextApiRequest, NextApiResponse } from "next";
+import { type NextApiRequest, type NextApiResponse } from "next";
+import { env } from "../env.mjs";
 
 /**
  * 插件管理员认证系统
@@ -9,9 +10,9 @@ import { NextApiRequest, NextApiResponse } from "next";
  */
 
 // 从环境变量读取管理员凭证
-const PLUGIN_ADMIN_USERNAME = process.env.PLUGIN_ADMIN_USERNAME || "";
-const PLUGIN_ADMIN_PASSWORD = process.env.PLUGIN_ADMIN_PASSWORD || "";
-const SESSION_SECRET = process.env.PLUGIN_SESSION_SECRET || process.env.SECRET_KEY || "";
+const PLUGIN_ADMIN_USERNAME = env.PLUGIN_ADMIN_USERNAME;
+const PLUGIN_ADMIN_PASSWORD = env.PLUGIN_ADMIN_PASSWORD;
+const SESSION_SECRET = env.PLUGIN_SESSION_SECRET;
 
 // Session 配置
 const SESSION_COOKIE_NAME = "plugin_admin_session";
@@ -20,13 +21,13 @@ const SESSION_MAX_AGE = 7 * 24 * 60 * 60; // 7天
 // 检查是否配置了管理员凭证
 if (!PLUGIN_ADMIN_USERNAME || !PLUGIN_ADMIN_PASSWORD) {
   console.warn(
-    "⚠️ [插件管理员] 未配置管理员账号！请在 .env 中设置 PLUGIN_ADMIN_USERNAME 和 PLUGIN_ADMIN_PASSWORD"
+    "⚠️ [插件管理员] 未配置管理员账号！请在 .env 中设置 PLUGIN_ADMIN_USERNAME 和 PLUGIN_ADMIN_PASSWORD",
   );
 }
 
 if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
   console.error(
-    "❌ [插件管理员] SESSION_SECRET 未配置或长度不足！请在 .env 中设置至少32位的随机字符串"
+    "❌ [插件管理员] SESSION_SECRET 未配置或长度不足！请在 .env 中设置至少32位的随机字符串",
   );
 }
 
@@ -77,7 +78,9 @@ export async function verifySessionToken(token: string): Promise<boolean> {
 /**
  * 验证并返回插件管理员会话信息
  */
-export async function verifyPluginAdminSession(req: NextApiRequest): Promise<{ username: string } | null> {
+export async function verifyPluginAdminSession(
+  req: NextApiRequest,
+): Promise<{ username: string } | null> {
   const token = getSessionTokenFromRequest(req);
   if (!token) {
     return null;
@@ -120,7 +123,7 @@ export async function isPluginAdminRequest(req: NextApiRequest): Promise<boolean
     return false;
   }
 
-  return await verifySessionToken(token);
+  return verifySessionToken(token);
 }
 
 /**
@@ -129,7 +132,7 @@ export async function isPluginAdminRequest(req: NextApiRequest): Promise<boolean
 export function setSessionCookie(res: NextApiResponse, token: string): void {
   res.setHeader(
     "Set-Cookie",
-    `${SESSION_COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}`
+    `${SESSION_COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}`,
   );
 }
 
@@ -137,10 +140,7 @@ export function setSessionCookie(res: NextApiResponse, token: string): void {
  * 清除会话 Cookie
  */
 export function clearSessionCookie(res: NextApiResponse): void {
-  res.setHeader(
-    "Set-Cookie",
-    `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`
-  );
+  res.setHeader("Set-Cookie", `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
 }
 
 /**
@@ -148,7 +148,7 @@ export function clearSessionCookie(res: NextApiResponse): void {
  */
 export async function requirePluginAdmin(
   req: NextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse,
 ): Promise<boolean> {
   const isAdmin = await isPluginAdminRequest(req);
 
