@@ -1,9 +1,6 @@
 import React, { useState } from "react";
 import { useRouter } from "next/router";
-import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
+import { Button, Box, Text, Input } from "@saleor/macaw-ui";
 
 interface LoginForm {
   username: string;
@@ -30,7 +27,7 @@ export default function AdminLogin() {
         body: JSON.stringify(form),
       });
 
-      const data = await response.json();
+      const data = await response.json() as { message?: string };
 
       if (response.ok) {
         // 登录成功，跳转到管理后台
@@ -50,18 +47,31 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">插件管理后台</CardTitle>
-          <CardDescription>请输入管理员账户信息登录</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">用户名</Label>
+    <Box 
+      display="flex" 
+      justifyContent="center" 
+      alignItems="center" 
+      style={{ minHeight: "100vh", backgroundColor: "#f5f5f5" }}
+    >
+      <Box 
+        padding={8} 
+        borderWidth={1} 
+        borderStyle="solid" 
+        borderColor="default1" 
+        borderRadius={4} 
+        backgroundColor="default1"
+        style={{ width: "100%", maxWidth: "400px" }}
+      >
+        <Box marginBottom={6} textAlign="center">
+          <Text size={7} fontWeight="bold" marginBottom={2}>插件管理后台</Text>
+          <Text size={3} color="default1">请输入管理员账户信息登录</Text>
+        </Box>
+        
+        <form onSubmit={handleSubmit}>
+          <Box display="flex" flexDirection="column" gap={4}>
+            <Box>
+              <Text size={3} marginBottom={2}>用户名</Text>
               <Input
-                id="username"
                 type="text"
                 value={form.username}
                 onChange={handleChange("username")}
@@ -69,12 +79,11 @@ export default function AdminLogin() {
                 required
                 disabled={loading}
               />
-            </div>
+            </Box>
             
-            <div className="space-y-2">
-              <Label htmlFor="password">密码</Label>
+            <Box>
+              <Text size={3} marginBottom={2}>密码</Text>
               <Input
-                id="password"
                 type="password"
                 value={form.password}
                 onChange={handleChange("password")}
@@ -82,22 +91,25 @@ export default function AdminLogin() {
                 required
                 disabled={loading}
               />
-            </div>
+            </Box>
 
             {error && (
-              <div className="text-red-600 text-sm text-center">{error}</div>
+              <Box textAlign="center">
+                <Text size={3} color="critical1">{error}</Text>
+              </Box>
             )}
 
             <Button
               type="submit"
-              className="w-full"
+              variant="primary"
               disabled={loading}
+              size="large"
             >
               {loading ? "登录中..." : "登录"}
             </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+          </Box>
+        </form>
+      </Box>
+    </Box>
   );
 }

@@ -1,5 +1,10 @@
 import type { JSONValue } from "../types";
 import { BaseError, UnknownError } from "@/errors";
+import classNames from "classnames";
+
+export function cn(...inputs: Parameters<typeof classNames>) {
+  return classNames(inputs);
+}
 
 export const tryJsonParse = (text: string | undefined) => {
   if (!text) {

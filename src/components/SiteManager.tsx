@@ -357,3 +357,5 @@ export function SiteManager() {
     </Box>
   );
 }
+
+export default SiteManager;

@@ -225,3 +225,5 @@ export function ChannelManager({ onChannelSelect }: ChannelManagerProps) {
     </Box>
   );
 }
+
+export default ChannelManager;

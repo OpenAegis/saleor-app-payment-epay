@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { Button } from "../../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import { Button, Box, Text } from "@saleor/macaw-ui";
 import SiteManager from "../../components/SiteManager";
 import ChannelManager from "../../components/ChannelManager";
 
@@ -10,6 +8,7 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [activeTab, setActiveTab] = useState("sites");
 
   useEffect(() => {
     checkAuth();
@@ -48,9 +47,14 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div>加载中...</div>
-      </div>
+      <Box 
+        display="flex" 
+        justifyContent="center" 
+        alignItems="center" 
+        style={{ minHeight: "100vh" }}
+      >
+        <Text>加载中...</Text>
+      </Box>
     );
   }
 
@@ -59,60 +63,73 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <h1 className="text-xl font-semibold text-gray-900">
-              多渠道支付管理后台
-            </h1>
-            <Button 
-              variant="outline" 
-              onClick={handleLogout}
-              size="sm"
+    <Box style={{ minHeight: "100vh", backgroundColor: "#f5f5f5" }}>
+      <Box 
+        padding={4} 
+        backgroundColor="default1" 
+        style={{ borderBottom: "1px solid #e5e5e5" }}
+      >
+        <Box 
+          display="flex" 
+          justifyContent="space-between" 
+          alignItems="center"
+          style={{ maxWidth: "1200px", margin: "0 auto" }}
+        >
+          <Text size={6} fontWeight="bold">
+            多渠道支付管理后台
+          </Text>
+          <Button 
+            variant="secondary" 
+            onClick={handleLogout}
+            size="medium"
+          >
+            退出登录
+          </Button>
+        </Box>
+      </Box>
+
+      <Box style={{ maxWidth: "1200px", margin: "0 auto" }} padding={6}>
+        <Box marginBottom={6}>
+          <Box display="flex" gap={2}>
+            <Button
+              variant={activeTab === "sites" ? "primary" : "secondary"}
+              onClick={() => setActiveTab("sites")}
             >
-              退出登录
+              站点管理
             </Button>
-          </div>
-        </div>
-      </header>
+            <Button
+              variant={activeTab === "channels" ? "primary" : "secondary"}
+              onClick={() => setActiveTab("channels")}
+            >
+              渠道管理
+            </Button>
+          </Box>
+        </Box>
 
-      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <Tabs defaultValue="sites" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="sites">站点管理</TabsTrigger>
-            <TabsTrigger value="channels">渠道管理</TabsTrigger>
-          </TabsList>
+        {activeTab === "sites" && (
+          <Box>
+            <Box marginBottom={4}>
+              <Text size={5} fontWeight="bold" marginBottom={2}>站点管理</Text>
+              <Text size={3} color="default1">
+                管理 Saleor 站点的安装申请和授权状态
+              </Text>
+            </Box>
+            <SiteManager />
+          </Box>
+        )}
 
-          <TabsContent value="sites" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>站点管理</CardTitle>
-                <CardDescription>
-                  管理 Saleor 站点的安装申请和授权状态
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <SiteManager />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="channels" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>渠道管理</CardTitle>
-                <CardDescription>
-                  管理支付渠道和网关配置
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ChannelManager />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </main>
-    </div>
+        {activeTab === "channels" && (
+          <Box>
+            <Box marginBottom={4}>
+              <Text size={5} fontWeight="bold" marginBottom={2}>渠道管理</Text>
+              <Text size={3} color="default1">
+                管理支付渠道和网关配置
+              </Text>
+            </Box>
+            <ChannelManager onChannelSelect={() => {}} />
+          </Box>
+        )}
+      </Box>
+    </Box>
   );
 }
