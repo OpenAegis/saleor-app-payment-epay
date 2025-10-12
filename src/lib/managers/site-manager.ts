@@ -104,12 +104,7 @@ export class SiteManager {
       appId: input.appId || null,
       status: "pending", // 默认待审批
       requestedAt: now,
-      approvedAt: null,
-      approvedBy: null,
       notes: validationNotes || null, // 包含验证注释
-      lastActiveAt: null,
-      createdAt: now,
-      updatedAt: now,
     };
 
     await db.insert(sites).values(site);
