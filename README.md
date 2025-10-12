@@ -120,20 +120,25 @@ pnpm start
 ## 使用流程
 
 ### 管理员操作
-1. 访问管理后台 `/admin/login` 登录
+1. 访问独立管理后台 `/admin/login` 登录
 2. 在站点管理中审批安装请求
 3. 配置支付渠道和网关
 4. 管理支付参数
 
 ### 商户安装
 1. 在 Saleor Dashboard 中安装应用
-2. 等待管理员审批
-3. 审批通过后配置支付设置
+2. 等待插件管理员审批
+3. 审批通过后即可使用配置的支付方式
 4. 测试支付流程
 
 ## API 端点
 
-- `POST /api/admin/login` - 管理员登录
+### 插件管理员认证
+- `POST /api/plugin-admin/login` - 管理员登录
+- `POST /api/plugin-admin/logout` - 管理员登出
+- `GET /api/plugin-admin/verify` - 验证会话
+
+### 管理功能
 - `GET /api/admin/sites` - 获取站点列表
 - `POST /api/admin/sites/approve` - 审批站点
 - `GET /api/admin/channels` - 获取渠道列表
