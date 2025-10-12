@@ -32,14 +32,26 @@ function getRealAppBaseUrl(headers: { [key: string]: string | string[] | undefin
 }
 
 export default createManifestHandler({
-  async manifestFactory(context) {
-    // 获取真实的应用基础URL
-    const realAppBaseUrl = getRealAppBaseUrl(context.request?.headers || {});
+  async manifestFactory({ appBaseUrl, request }) {
+    // 记录manifest请求信息用于调试
+    console.log('Manifest请求信息:', {
+      appBaseUrl,
+      headers: request?.headers,
+      query: request?.query,
+      url: request?.url,
+    });
+
+    // 优先使用环境变量，然后是从请求头推断的URL，最后使用默认的appBaseUrl
+    const apiBaseURL = process.env.APP_API_BASE_URL ?? 
+                      getRealAppBaseUrl(request?.headers || {}) ?? 
+                      appBaseUrl;
+
+    console.log('使用的API基础URL:', apiBaseURL);
 
     const manifest: AppManifest = {
       name: packageJson.name,
-      tokenTargetUrl: `${realAppBaseUrl}/api/register`,
-      appUrl: `${realAppBaseUrl}/config`,
+      tokenTargetUrl: `${apiBaseURL}/api/register`,
+      appUrl: `${apiBaseURL}/config`,
       permissions: ["HANDLE_PAYMENTS"],
       id: "saleor.app.epay",
       version: packageJson.version,
@@ -50,7 +62,7 @@ export default createManifestHandler({
           syncEvents: ["TRANSACTION_INITIALIZE_SESSION"],
           query:
             "subscription { event { ... on TransactionInitializeSession { action { amount, currency, actionType }, transaction { id, pspReference }, sourceObject { ... on Checkout { id, email, totalPrice { gross { amount, currency } } }, ... on Order { id, userEmail, total { gross { amount, currency } } } } } } }",
-          targetUrl: `${realAppBaseUrl}/api/webhooks/transaction-initialize`,
+          targetUrl: `${apiBaseURL}/api/webhooks/transaction-initialize`,
           isActive: true,
         },
         {
@@ -58,7 +70,7 @@ export default createManifestHandler({
           syncEvents: ["TRANSACTION_PROCESS_SESSION"],
           query:
             "subscription { event { ... on TransactionProcessSession { action { amount, currency, actionType }, transaction { id, pspReference }, sourceObject { ... on Checkout { id }, ... on Order { id } } } } }",
-          targetUrl: `${realAppBaseUrl}/api/webhooks/transaction-process`,
+          targetUrl: `${apiBaseURL}/api/webhooks/transaction-process`,
           isActive: true,
         },
       ],

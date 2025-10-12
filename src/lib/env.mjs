@@ -7,6 +7,7 @@ export const env = createEnv({
    */
   server: {
     APP_URL: z.string().url().default("http://localhost:3000"),
+    APP_API_BASE_URL: z.string().url().optional(),
     TURSO_DATABASE_URL: z.string().url().default("libsql://localhost"),
     TURSO_AUTH_TOKEN: z.string().default(""),
     PLUGIN_ADMIN_USERNAME: z.string().default("admin"),

@@ -199,15 +199,22 @@ const baseHandler = createAppRegisterHandler({
     () => true,
   ],
   async onRequestVerified(req, { authData }) {
-    // 记录完整的请求信息用于调试
+    // 记录完整的authData调试信息
     logger.info(
       {
-        // authData信息
+        // 完整的authData结构
+        authData: {
+          ...authData,
+          token: authData.token ? "[REDACTED]" : undefined,
+        },
+        // authData的每个字段
         saleorApiUrl: authData.saleorApiUrl,
         domain: authData.domain,
         appId: authData.appId,
         token: authData.token ? "[REDACTED]" : undefined,
         tokenLength: authData.token?.length,
+        // 检查authData是否有其他可能的URL字段
+        authDataKeys: Object.keys(authData),
         
         // 请求头信息
         requestHeaders: {
@@ -541,6 +548,8 @@ const baseHandler = createAppRegisterHandler({
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
+    logger.info("=== 开始处理注册请求 ===");
+    
     // 确保数据库已初始化
     try {
       await initializeDatabase();
@@ -577,8 +586,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       "接收到Saleor注册请求",
     );
 
+    logger.info("准备调用baseHandler...");
+    
     // 继续执行原始的Saleor注册流程
-    return baseHandler(req, res);
+    const result = await baseHandler(req, res);
+    
+    logger.info("baseHandler执行完成");
+    return result;
   } catch (error) {
     logger.error({ 
       error: error instanceof Error ? error.message : "未知错误",
