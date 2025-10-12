@@ -18,43 +18,43 @@ export default createManifestHandler({
           name: "Transaction Initialize",
           syncEvents: ["TRANSACTION_INITIALIZE_SESSION"],
           query: `
-            subscription {
-              event {
-                ... on TransactionInitializeSession {
-                  action {
-                    amount
-                    currency
-                    actionType
-                  }
-                  transaction {
-                    id
-                    reference
-                  }
-                  sourceObject {
-                    ... on Checkout {
-                      id
-                      email
-                      totalPrice {
-                        gross {
-                          amount
-                          currency
-                        }
-                      }
-                    }
-                    ... on Order {
-                      id
-                      email
-                      total {
-                        gross {
-                          amount
-                          currency
-                        }
-                      }
-                    }
-                  }
-                }
-              }
+subscription {
+  event {
+    ... on TransactionInitializeSession {
+      action {
+        amount
+        currency
+        actionType
+      }
+      transaction {
+        id
+        reference
+      }
+      sourceObject {
+        ... on Checkout {
+          id
+          email
+          totalPrice {
+            gross {
+              amount
+              currency
             }
+          }
+        }
+        ... on Order {
+          id
+          email
+          total {
+            gross {
+              amount
+              currency
+            }
+          }
+        }
+      }
+    }
+  }
+}
           `,
           targetUrl: `${context.appBaseUrl}/api/webhooks/transaction-initialize`,
           isActive: true,
@@ -63,29 +63,29 @@ export default createManifestHandler({
           name: "Transaction Process",
           syncEvents: ["TRANSACTION_PROCESS_SESSION"],
           query: `
-            subscription {
-              event {
-                ... on TransactionProcessSession {
-                  action {
-                    amount
-                    currency
-                    actionType
-                  }
-                  transaction {
-                    id
-                    reference
-                  }
-                  sourceObject {
-                    ... on Checkout {
-                      id
-                    }
-                    ... on Order {
-                      id
-                    }
-                  }
-                }
-              }
-            }
+subscription {
+  event {
+    ... on TransactionProcessSession {
+      action {
+        amount
+        currency
+        actionType
+      }
+      transaction {
+        id
+        reference
+      }
+      sourceObject {
+        ... on Checkout {
+          id
+        }
+        ... on Order {
+          id
+        }
+      }
+    }
+  }
+}
           `,
           targetUrl: `${context.appBaseUrl}/api/webhooks/transaction-process`,
           isActive: true,
