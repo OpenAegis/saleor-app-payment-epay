@@ -1,24 +1,23 @@
 import { z } from "zod";
 
 /**
- * 通道（Gateway）- 具体的支付方式，如支付宝1、支付宝2、微信等
+ * 渠道（Gateway）- 具体的易支付配置
  */
 export const GatewaySchema = z.object({
   id: z.string(),
-  channelId: z.string(), // 所属渠道ID
-  name: z.string().min(1, "通道名称不能为空"),
+  channelId: z.string().min(1, "通道ID不能为空"), // 所属通道ID
+  name: z.string().min(1, "渠道名称不能为空"),
   description: z.string().optional(),
-  type: z.string().min(1, "支付类型不能为空"), // 支付类型，支持预设值和自定义值
+  epayName: z.string().min(1, "易支付站点名称不能为空"), // 易支付站点名称
+  epayKey: z.string().min(1, "易支付密钥不能为空"), // 易支付密钥
   icon: z.string().optional(), // 图标URL
-  pid: z.string().min(1, "商户ID不能为空"), // 商户ID
-  key: z.string().min(1, "商户密钥不能为空"), // 商户密钥
   enabled: z.boolean().default(true),
   priority: z.number().int().min(0).default(0), // 优先级，数字越大优先级越高
 
   // 访问控制字段
-  isMandatory: z.boolean().default(false), // 是否为强制通道（用户不能禁用）
+  isMandatory: z.boolean().default(false), // 是否为强制渠道（用户不能禁用）
   allowedUsers: z.array(z.string()).default([]), // 白名单用户列表（空数组表示所有用户都可用）
-  isGlobal: z.boolean().default(true), // 是否为全局通道（所有用户可见）
+  isGlobal: z.boolean().default(true), // 是否为全局渠道（所有用户可见）
 
   createdAt: z.string(),
   updatedAt: z.string(),

@@ -101,7 +101,7 @@ export default function AdminDashboard() {
               variant={activeTab === "channels" ? "primary" : "secondary"}
               onClick={() => setActiveTab("channels")}
             >
-              渠道管理
+              通道管理
             </Button>
           </Box>
         </Box>
@@ -121,9 +121,9 @@ export default function AdminDashboard() {
         {activeTab === "channels" && (
           <Box>
             <Box marginBottom={4}>
-              <Text size={5} fontWeight="bold" marginBottom={2}>渠道管理</Text>
+              <Text size={5} fontWeight="bold" marginBottom={2}>通道管理</Text>
               <Text size={3} color="default1">
-                管理支付渠道和网关配置
+                管理易支付通道配置
               </Text>
             </Box>
             <ChannelManager onChannelSelect={() => {}} />

@@ -13,6 +13,7 @@ export function ChannelManager({ onChannelSelect }: ChannelManagerProps) {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
+    type: "alipay",
     icon: "",
     priority: 0,
   });
@@ -45,6 +46,7 @@ export function ChannelManager({ onChannelSelect }: ChannelManagerProps) {
         setFormData({
           name: "",
           description: "",
+          type: "alipay",
           icon: "",
           priority: 0,
         });
@@ -104,17 +106,47 @@ export function ChannelManager({ onChannelSelect }: ChannelManagerProps) {
           borderRadius={4}
           backgroundColor="default2"
         >
-          <Text size={5}>添加新渠道</Text>
+          <Text size={5}>添加新通道</Text>
           
           <Box display="grid" __gridTemplateColumns="1fr 1fr" gap={3}>
             <Box>
-              <Text size={3}>渠道名称 *</Text>
+              <Text size={3}>通道名称 *</Text>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
-                placeholder="例如：支付宝渠道"
+                placeholder="例如：支付宝通道"
+                style={{ width: "100%", padding: "8px", marginTop: "4px" }}
+              />
+            </Box>
+
+            <Box>
+              <Text size={3}>支付类型 *</Text>
+              <select
+                value={formData.type}
+                onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                required
+                style={{ width: "100%", padding: "8px", marginTop: "4px" }}
+              >
+                <option value="alipay">支付宝</option>
+                <option value="wxpay">微信支付</option>
+                <option value="qqpay">QQ钱包</option>
+                <option value="bank">云闪付</option>
+                <option value="jdpay">京东支付</option>
+                <option value="paypal">PayPal</option>
+              </select>
+            </Box>
+          </Box>
+
+          <Box display="grid" __gridTemplateColumns="1fr 1fr" gap={3}>
+            <Box>
+              <Text size={3}>图标URL</Text>
+              <input
+                type="url"
+                value={formData.icon}
+                onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
+                placeholder="https://example.com/icon.png"
                 style={{ width: "100%", padding: "8px", marginTop: "4px" }}
               />
             </Box>
@@ -126,20 +158,10 @@ export function ChannelManager({ onChannelSelect }: ChannelManagerProps) {
                 value={formData.priority}
                 onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) })}
                 min="0"
+                placeholder="0"
                 style={{ width: "100%", padding: "8px", marginTop: "4px" }}
               />
             </Box>
-          </Box>
-
-          <Box>
-            <Text size={3}>图标URL</Text>
-            <input
-              type="url"
-              value={formData.icon}
-              onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-              placeholder="https://example.com/icon.png"
-              style={{ width: "100%", padding: "8px", marginTop: "4px" }}
-            />
           </Box>
 
           <Box>
@@ -148,13 +170,14 @@ export function ChannelManager({ onChannelSelect }: ChannelManagerProps) {
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={2}
+              placeholder="通道描述信息"
               style={{ width: "100%", padding: "8px", marginTop: "4px" }}
             />
           </Box>
 
           <Box display="flex" gap={2}>
             <Button type="submit" disabled={loading}>
-              {loading ? "创建中..." : "创建渠道"}
+              {loading ? "创建中..." : "创建通道"}
             </Button>
             <Button type="button" onClick={() => setShowForm(false)}>
               取消

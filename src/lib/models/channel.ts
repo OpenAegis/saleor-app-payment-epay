@@ -1,12 +1,25 @@
 import { z } from "zod";
 
 /**
- * 渠道（Channel）- 支付方式的分组，如支付宝渠道、微信渠道等
+ * 支付类型枚举
+ */
+export const PaymentTypeSchema = z.enum([
+  "alipay",   // 支付宝
+  "wxpay",    // 微信支付
+  "qqpay",    // QQ钱包
+  "bank",     // 云闪付
+  "jdpay",    // 京东支付
+  "paypal",   // PayPal
+]);
+
+/**
+ * 通道（Channel）- 支付方式的分类
  */
 export const ChannelSchema = z.object({
   id: z.string(),
-  name: z.string().min(1, "渠道名称不能为空"),
+  name: z.string().min(1, "通道名称不能为空"),
   description: z.string().optional(),
+  type: PaymentTypeSchema,
   icon: z.string().optional(), // 图标URL
   enabled: z.boolean().default(true),
   priority: z.number().int().min(0).default(0), // 优先级，数字越大优先级越高

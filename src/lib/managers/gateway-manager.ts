@@ -1,6 +1,6 @@
 import { eq, and, desc, asc } from "drizzle-orm";
 import { db } from "../db/turso-client";
-import { gateways, type Gateway, type NewGateway } from "../db/schema";
+import { gateways, channels, type Gateway, type NewGateway } from "../db/schema";
 import { randomId } from "../random-id";
 import type { CreateGatewayAPIInput, UpdateGatewayAPIInput } from "../models/gateway";
 
@@ -201,13 +201,29 @@ export class GatewayManager {
   }
 
   /**
-   * 按类型获取通道
+   * 按支付类型获取渠道（通过通道类型）
    */
   async getByType(type: string): Promise<Gateway[]> {
     const result = await db
-      .select()
+      .select({
+        id: gateways.id,
+        channelId: gateways.channelId,
+        name: gateways.name,
+        description: gateways.description,
+        epayName: gateways.epayName,
+        epayKey: gateways.epayKey,
+        icon: gateways.icon,
+        enabled: gateways.enabled,
+        priority: gateways.priority,
+        isMandatory: gateways.isMandatory,
+        allowedUsers: gateways.allowedUsers,
+        isGlobal: gateways.isGlobal,
+        createdAt: gateways.createdAt,
+        updatedAt: gateways.updatedAt,
+      })
       .from(gateways)
-      .where(eq(gateways.type, type))
+      .innerJoin(channels, eq(gateways.channelId, channels.id))
+      .where(eq(channels.type, type))
       .orderBy(desc(gateways.priority), asc(gateways.createdAt));
     
     // 解析allowedUsers JSON

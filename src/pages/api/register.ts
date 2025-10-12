@@ -1,6 +1,7 @@
 import { createAppRegisterHandler } from "@saleor/app-sdk/handlers/next";
 import { saleorApp } from "../../saleor-app";
 import { siteManager } from "../../lib/managers/site-manager";
+import { initializeDatabase } from "../../lib/db/turso-client";
 import { createLogger } from "../../lib/logger";
 import { NextApiRequest, NextApiResponse } from "next";
 
@@ -20,6 +21,15 @@ const baseHandler = createAppRegisterHandler({
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
+    // 确保数据库已初始化
+    try {
+      await initializeDatabase();
+      logger.info("数据库初始化完成");
+    } catch (dbError) {
+      logger.error({ error: dbError }, "数据库初始化失败");
+      // 继续执行，可能数据库已经存在
+    }
+
     // 从请求中提取Saleor信息
     const saleorApiUrl = req.headers["saleor-api-url"] as string;
     const saleorDomain = req.headers["saleor-domain"] as string;

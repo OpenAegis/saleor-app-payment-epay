@@ -28,12 +28,13 @@ export { schema };
  */
 export async function initializeDatabase() {
   try {
-    // 创建channels表
+    // 创建channels表 (支付通道)
     await tursoClient.execute(`
       CREATE TABLE IF NOT EXISTS channels (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT,
+        type TEXT NOT NULL,
         icon TEXT,
         enabled INTEGER NOT NULL DEFAULT 1,
         priority INTEGER NOT NULL DEFAULT 0,
@@ -42,17 +43,16 @@ export async function initializeDatabase() {
       )
     `);
 
-    // 创建gateways表
+    // 创建gateways表 (支付渠道)
     await tursoClient.execute(`
       CREATE TABLE IF NOT EXISTS gateways (
         id TEXT PRIMARY KEY,
         channel_id TEXT NOT NULL,
         name TEXT NOT NULL,
         description TEXT,
-        type TEXT NOT NULL,
+        epay_name TEXT NOT NULL,
+        epay_key TEXT NOT NULL,
         icon TEXT,
-        pid TEXT NOT NULL,
-        key TEXT NOT NULL,
         enabled INTEGER NOT NULL DEFAULT 1,
         priority INTEGER NOT NULL DEFAULT 0,
         is_mandatory INTEGER NOT NULL DEFAULT 0,
@@ -89,7 +89,7 @@ export async function initializeDatabase() {
     `);
     
     await tursoClient.execute(`
-      CREATE INDEX IF NOT EXISTS gateway_type_idx ON gateways(type)
+      CREATE INDEX IF NOT EXISTS channel_type_idx ON channels(type)
     `);
 
     await tursoClient.execute(`
