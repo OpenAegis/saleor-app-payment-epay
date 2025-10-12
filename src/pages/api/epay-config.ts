@@ -5,16 +5,14 @@ import { createPrivateSettingsManager } from "../../modules/app-configuration/me
 import { EpayConfigManager } from "../../modules/payment-app-configuration/epay-config-manager";
 import { type EpayConfigEntry } from "../../modules/payment-app-configuration/epay-config";
 import { createServerClient } from "@/lib/create-graphq-client";
+import { createEpayClient } from "@/lib/epay/client";
 
 export default createProtectedHandler(
   async (req: NextApiRequest, res: NextApiResponse, { authData }) => {
     const { saleorApiUrl, token } = authData;
     const client = createServerClient(saleorApiUrl, token);
     const settingsManager = createPrivateSettingsManager(client);
-    const configManager = new EpayConfigManager(
-      settingsManager,
-      saleorApiUrl
-    );
+    const configManager = new EpayConfigManager(settingsManager, saleorApiUrl);
 
     switch (req.method) {
       case "GET":
@@ -34,6 +32,40 @@ export default createProtectedHandler(
         }
 
       case "POST":
+        // 检查是否是测试请求
+        if (req.query.test === "true") {
+          try {
+            const configData = req.body as EpayConfigEntry;
+            const epayClient = createEpayClient({
+              pid: configData.pid,
+              key: configData.key,
+              apiUrl: configData.apiUrl,
+            });
+
+            // 测试连接并获取商户信息
+            const merchantInfo = await epayClient.queryMerchantInfo();
+
+            if (merchantInfo.pid) {
+              return res.status(200).json({
+                success: true,
+                message: `连接成功，商户: ${merchantInfo.name}`,
+              });
+            } else {
+              return res.status(200).json({
+                success: false,
+                message: "连接失败，无法获取商户信息",
+              });
+            }
+          } catch (error) {
+            console.error("Error testing epay config:", error);
+            return res.status(200).json({
+              success: false,
+              message: error instanceof Error ? error.message : "测试连接时发生错误",
+            });
+          }
+        }
+
+        // 保存配置
         try {
           const configData = req.body as EpayConfigEntry;
           await configManager.setEpayConfigEntry(configData);

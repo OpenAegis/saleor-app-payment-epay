@@ -24,6 +24,12 @@ export const env = createEnv({
     UPSTASH_TOKEN: z.string().optional(),
     REST_APL_ENDPOINT: z.string().optional(),
     REST_APL_TOKEN: z.string().optional(),
+    // 彩虹易支付相关环境变量
+    EPAY_PID: z.string().optional(),
+    EPAY_KEY: z.string().optional(),
+    EPAY_API_URL: z.string().url().optional(),
+    APP_URL: z.string().url().optional(),
+    STOREFRONT_URL: z.string().url().optional(),
   },
 
   /*
@@ -56,5 +62,10 @@ export const env = createEnv({
     UPSTASH_TOKEN: process.env.UPSTASH_TOKEN,
     REST_APL_ENDPOINT: process.env.REST_APL_ENDPOINT,
     REST_APL_TOKEN: process.env.REST_APL_TOKEN,
+    EPAY_PID: process.env.EPAY_PID,
+    EPAY_KEY: process.env.EPAY_KEY,
+    EPAY_API_URL: process.env.EPAY_API_URL,
+    APP_URL: process.env.APP_URL,
+    STOREFRONT_URL: process.env.STOREFRONT_URL,
   },
 });

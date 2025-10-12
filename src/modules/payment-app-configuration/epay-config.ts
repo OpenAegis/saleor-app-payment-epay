@@ -5,6 +5,7 @@ export const epayConfigSchema = z.object({
   pid: z.string().min(1, "商户ID不能为空"),
   key: z.string().min(1, "商户密钥不能为空"),
   apiUrl: z.string().url("API地址必须是有效的URL"),
+  returnUrl: z.string().url("返回地址必须是有效的URL").optional(), // 添加返回地址字段
   enabled: z.boolean().default(true),
 });
 
@@ -21,6 +22,7 @@ export const epayConfigEntrySchema = z.object({
   pid: z.string().min(1, "商户ID不能为空"),
   key: z.string().min(1, "商户密钥不能为空"),
   apiUrl: z.string().url("API地址必须是有效的URL"),
+  returnUrl: z.string().url("返回地址必须是有效的URL").optional(), // 添加返回地址字段
   enabled: z.boolean().default(true),
 });
 
@@ -36,6 +38,7 @@ export const epayFormConfigSchema = epayConfigSchema
     pid: "",
     key: "",
     apiUrl: "",
+    returnUrl: "", // 添加默认值
     configurationName: "",
     enabled: true,
   });
