@@ -1,225 +1,245 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { createAppRegisterHandler } from "@saleor/app-sdk/handlers/next";
 import { saleorApp } from "../../saleor-app";
-import { siteManager } from "../../lib/managers/site-manager";
 import { initializeDatabase } from "../../lib/db/turso-client";
 import { createLogger } from "../../lib/logger";
-import { domainWhitelistManager } from "../../lib/managers/domain-whitelist-manager";
-import { createClient } from "../../lib/create-graphq-client";
+import {
+  extractSaleorUrlFromHeaders,
+  extractRealClientIP,
+  testSaleorConnection,
+  discoverRealDomain,
+  registerSiteWithAuthorization,
+  isLocalhost,
+  type RegistrationRequest,
+  type RegistrationAuthData
+} from "../../lib/registration";
 
 const logger = createLogger({ component: "RegisterAPI" });
 
 /**
- * 检查URL是否为localhost
+ * 处理Saleor认证数据验证后的回调
+ * 包含站点注册、授权检查和连接测试
  */
-function isLocalhost(url: string): boolean {
-  try {
-    const parsedUrl = new URL(url);
-    const hostname = parsedUrl.hostname.toLowerCase();
-    return hostname === 'localhost' || 
-           hostname === '127.0.0.1' || 
-           hostname === '::1' ||
-           hostname.endsWith('.localhost');
-  } catch {
-    return false;
+async function handleAuthDataVerified(
+  req: any, 
+  authData: any
+): Promise<void> {
+  logger.info(
+    {
+      saleorApiUrl: authData.saleorApiUrl,
+      domain: authData.domain,
+      appId: authData.appId,
+      tokenPresent: !!authData.token,
+      tokenLength: authData.token?.length,
+      authDataKeys: Object.keys(authData),
+      requestHeaders: {
+        host: req.headers.host,
+        origin: req.headers.origin,
+        referer: req.headers.referer,
+        'saleor-api-url': req.headers['saleor-api-url'],
+        'saleor-domain': req.headers['saleor-domain'],
+      },
+    },
+    "Saleor回调验证通过 - 开始处理认证数据"
+  );
+
+  // 尝试修正URL信息
+  const correctedUrlInfo = await correctSaleorUrl(req, authData);
+  if (correctedUrlInfo) {
+    authData.saleorApiUrl = correctedUrlInfo.saleorApiUrl;
+    authData.domain = correctedUrlInfo.domain;
+  }
+
+  // 提取客户端IP
+  const clientIPResult = extractRealClientIP(req);
+  const realClientIP = clientIPResult.ip;
+
+  logger.info(
+    {
+      finalSaleorApiUrl: authData.saleorApiUrl,
+      finalDomain: authData.domain,
+      clientIP: realClientIP,
+      clientIPSource: clientIPResult.source,
+    },
+    "准备使用的最终认证信息"
+  );
+
+  // 测试连接（非localhost）
+  if (!isLocalhost(authData.saleorApiUrl)) {
+    const connectionResult = await testSaleorConnection(authData.saleorApiUrl, authData.token);
+    
+    if (connectionResult.success) {
+      logger.info(
+        { connectionDetails: connectionResult.details },
+        "Saleor连接测试成功"
+      );
+    } else {
+      logger.warn(
+        { 
+          domain: authData.domain, 
+          saleorApiUrl: authData.saleorApiUrl,
+          error: connectionResult.error,
+          details: connectionResult.details 
+        }, 
+        "Saleor连接测试失败，但继续注册流程"
+      );
+    }
+  } else {
+    logger.info("检测到localhost URL，跳过连接测试");
+  }
+
+  // 保存认证数据到APL
+  await saveAuthDataToAPL(authData);
+
+  // 注册站点并检查授权
+  const registrationResult = await registerSiteWithAuthorization(
+    authData.domain,
+    authData.saleorApiUrl,
+    realClientIP || undefined
+  );
+  
+  if (!registrationResult.success) {
+    throw new Error(registrationResult.message || "站点注册失败");
   }
 }
 
 /**
- * 测试与Saleor实例的连接
+ * 修正Saleor URL信息
+ * 尝试从请求头获取更准确的URL，并处理localhost域名发现
  */
-async function testSaleorConnection(saleorApiUrl: string, token: string): Promise<{
-  success: boolean;
-  error?: string;
-  details?: any;
-}> {
-  try {
-    logger.info(`测试连接到Saleor实例: ${saleorApiUrl}`);
-    
-    // 检查是否为localhost URL
-    if (isLocalhost(saleorApiUrl)) {
-      const warningMsg = `检测到localhost URL: ${saleorApiUrl}。部署的应用无法访问localhost，建议使用公网可访问的URL。`;
-      logger.warn(warningMsg);
-      return {
-        success: false,
-        error: "LOCALHOST_NOT_ACCESSIBLE",
-        details: { 
-          message: warningMsg,
-          suggestion: "请使用ngrok、局域网IP或公网域名替代localhost"
-        }
-      };
-    }
-
-    const client = createClient(saleorApiUrl, token);
-
-    // 尝试执行一个简单的查询来测试连接
-    const query = `
-      query TestConnection {
-        shop {
-          name
-          domain {
-            host
-            sslEnabled
-          }
-        }
-      }
-    `;
-
-    logger.info("开始执行GraphQL查询测试连接...");
-    const result = await client.query(query, {}).toPromise();
-    
-    if (result.error) {
-      const errorDetails = {
-        message: result.error.message,
-        graphQLErrors: result.error.graphQLErrors?.map(e => e.message),
-        networkError: result.error.networkError?.message,
-        networkErrorCode: (result.error.networkError as any)?.code,
-        networkErrorErrno: (result.error.networkError as any)?.errno,
-      };
-      
-      logger.error(errorDetails, "Saleor连接测试失败 - GraphQL错误");
-      
-      return {
-        success: false,
-        error: "GRAPHQL_ERROR",
-        details: errorDetails
-      };
-    }
-
-    if (result.data?.shop) {
-      const shopDetails = {
-        shopName: result.data.shop.name,
-        domain: result.data.shop.domain?.host,
-        sslEnabled: result.data.shop.domain?.sslEnabled,
-      };
-      
-      logger.info(shopDetails, "Saleor连接测试成功");
-      
-      return {
-        success: true,
-        details: shopDetails
-      };
-    }
-
-    logger.warn("Saleor连接测试返回空数据");
-    return {
-      success: false,
-      error: "EMPTY_RESPONSE",
-      details: { message: "GraphQL查询返回了空的shop数据" }
-    };
-    
-  } catch (error) {
-    const errorDetails = {
-      message: error instanceof Error ? error.message : "未知错误",
-      stack: error instanceof Error ? error.stack : undefined,
-      name: error instanceof Error ? error.name : undefined,
-      code: (error as any)?.code,
-      errno: (error as any)?.errno,
-      syscall: (error as any)?.syscall,
-      saleorApiUrl,
-    };
-    
-    logger.error(errorDetails, "Saleor连接测试异常");
-    
-    return {
-      success: false,
-      error: "CONNECTION_EXCEPTION",
-      details: errorDetails
-    };
-  }
-}
-
-/**
- * 从请求中提取真实客户端IP
- * 考虑CDN和反向代理的情况
- */
-function getRealClientIP(req: {
-  headers: { [key: string]: string | string[] | undefined };
-}): string | null {
-  try {
-    // 常见的代理IP头字段列表，按优先级排序
-    const ipHeaders = [
-      "cf-connecting-ip", // Cloudflare
-      "x-client-ip", // 通用客户端IP
-      "x-forwarded-for", // 最常见的代理头
-      "x-real-ip", // Nginx等常用
-      "true-client-ip", // Akamai等CDN
-      "x-originating-ip", // 某些代理
-      "forwarded", // RFC 7239标准
-    ];
-
-    for (const header of ipHeaders) {
-      const value = req.headers[header];
-      if (value) {
-        let ip: string | null = null;
-        
-        if (header === "forwarded") {
-          // forwarded 格式: "for=192.0.2.60;proto=http;by=203.0.113.43"
-          const forwardedStr = Array.isArray(value) ? value[0] : value;
-          if (typeof forwardedStr === "string") {
-            const match = forwardedStr.match(/for=([^;,\s]+)/);
-            if (match && match[1]) {
-              ip = match[1].replace(/['"]/g, ""); // 移除可能的引号
-            }
-          }
-        } else {
-          // 其他头字段格式
-          const ipStr = Array.isArray(value) ? value[0] : value;
-          if (typeof ipStr === "string") {
-            // 取第一个IP（如果有多个）
-            ip = ipStr.split(",")[0].trim();
-          }
-        }
-
-        if (ip && isValidIP(ip)) {
-          logger.info(`从 ${header} 获取到客户端IP: ${ip}`);
-          return ip;
-        }
-      }
-    }
-
-    logger.warn("未能从请求头中提取有效的客户端IP");
-  } catch (error) {
-    logger.warn(
-      { error: error instanceof Error ? error.message : "未知错误" },
-      "提取客户端IP时出错",
+async function correctSaleorUrl(
+  req: any, 
+  authData: any
+): Promise<{ saleorApiUrl: string; domain: string } | null> {
+  // 首先尝试从请求头获取更准确的URL
+  const headerUrlInfo = extractSaleorUrlFromHeaders(req);
+  
+  if (headerUrlInfo && headerUrlInfo.saleorApiUrl !== authData.saleorApiUrl) {
+    logger.info(
+      {
+        originalUrl: authData.saleorApiUrl,
+        correctedUrl: headerUrlInfo.saleorApiUrl,
+        source: headerUrlInfo.source,
+      },
+      "从请求头获取到更准确的URL信息"
     );
+    
+    return {
+      saleorApiUrl: headerUrlInfo.saleorApiUrl,
+      domain: headerUrlInfo.saleorDomain
+    };
   }
 
-  // 如果都没有找到，返回null
+  // 如果是localhost，尝试发现真实域名
+  if (isLocalhost(authData.saleorApiUrl)) {
+    const realDomainInfo = await discoverRealDomain(authData.saleorApiUrl, authData.token);
+    if (realDomainInfo) {
+      return realDomainInfo;
+    }
+  }
+  
   return null;
 }
 
 /**
- * 验证IP地址格式是否有效
+ * 保存认证数据到APL
  */
-function isValidIP(ip: string): boolean {
-  // 移除可能的端口号
-  const cleanIP = ip.split(":")[0];
-  
-  // IPv4正则表达式
-  const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-  
-  // IPv6正则表达式（简化版）
-  const ipv6Regex = /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::1$|^::$/;
-  
-  // 排除内网IP和保留IP
-  if (ipv4Regex.test(cleanIP)) {
-    const parts = cleanIP.split(".").map(Number);
-    // 排除私有IP范围
-    if (
-      parts[0] === 10 || // 10.0.0.0/8
-      (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) || // 172.16.0.0/12
-      (parts[0] === 192 && parts[1] === 168) || // 192.168.0.0/16
-      parts[0] === 127 || // 127.0.0.0/8 (localhost)
-      parts[0] === 169 && parts[1] === 254 // 169.254.0.0/16 (link-local)
-    ) {
-      return false;
+async function saveAuthDataToAPL(authData: any): Promise<void> {
+  try {
+    logger.info(
+      {
+        saleorApiUrl: authData.saleorApiUrl,
+        domain: authData.domain,
+        appId: authData.appId,
+        tokenPresent: !!authData.token,
+        tokenLength: authData.token?.length,
+      },
+      "准备保存认证数据到APL"
+    );
+
+    await saleorApp.apl.set(authData);
+    
+    logger.info(
+      { domain: authData.domain, appId: authData.appId, saleorApiUrl: authData.saleorApiUrl },
+      "认证数据已成功保存到APL",
+    );
+
+    // 验证保存是否成功
+    const savedData = await saleorApp.apl.get(authData.saleorApiUrl);
+    if (savedData) {
+      logger.info(
+        {
+          retrievedDomain: savedData.domain,
+          retrievedAppId: savedData.appId,
+          retrievedApiUrl: savedData.saleorApiUrl,
+          tokenPresent: !!savedData.token,
+        },
+        "APL保存验证成功"
+      );
+    } else {
+      logger.warn("APL保存验证失败：无法检索已保存的数据");
     }
-    return true;
+  } catch (aplError) {
+    logger.error(
+      { 
+        error: aplError instanceof Error ? aplError.message : "未知错误",
+        stack: aplError instanceof Error ? aplError.stack : undefined,
+        domain: authData.domain,
+        saleorApiUrl: authData.saleorApiUrl
+      },
+      "保存认证数据到APL失败",
+    );
+    throw aplError;
+  }
+}
+
+/**
+ * 处理手动认证令牌注册
+ * 当检测到auth_token时的处理逻辑
+ */
+async function handleManualTokenRegistration(req: any): Promise<boolean> {
+  if (!req.body?.auth_token) {
+    return false;
   }
   
-  return ipv6Regex.test(cleanIP);
+  logger.info("检测到auth_token，尝试手动处理注册...");
+  
+  try {
+    const urlInfo = extractSaleorUrlFromHeaders(req);
+    
+    if (!urlInfo) {
+      logger.error("无法从请求头中提取Saleor域名信息");
+      throw new Error("无法确定Saleor实例的域名信息");
+    }
+    
+    logger.info({
+      saleorDomain: urlInfo.saleorDomain,
+      saleorApiUrl: urlInfo.saleorApiUrl,
+      extractedFrom: urlInfo.source
+    }, "从请求头提取的域名信息");
+    
+    const clientIPResult = extractRealClientIP(req);
+    
+    // 注册站点并检查授权
+    const registrationResult = await registerSiteWithAuthorization(
+      urlInfo.saleorDomain,
+      urlInfo.saleorApiUrl,
+      clientIPResult.ip || undefined
+    );
+    
+    if (!registrationResult.success) {
+      throw new Error(registrationResult.message || "站点注册失败");
+    }
+    
+    logger.info("手动注册流程完成");
+    return true;
+  } catch (error) {
+    logger.error({
+      error: error instanceof Error ? error.message : "未知错误",
+      stack: error instanceof Error ? error.stack : undefined,
+    }, "手动处理注册失败");
+    throw error;
+  }
 }
 
 /**
@@ -236,350 +256,7 @@ const baseHandler = createAppRegisterHandler({
     () => true,
   ],
   async onRequestVerified(req, { authData }) {
-    // 记录完整的authData调试信息
-    logger.info(
-      {
-        // 完整的authData结构
-        authData: {
-          ...authData,
-          token: authData.token ? "[REDACTED]" : undefined,
-        },
-        // authData的每个字段
-        saleorApiUrl: authData.saleorApiUrl,
-        domain: authData.domain,
-        appId: authData.appId,
-        token: authData.token ? "[REDACTED]" : undefined,
-        tokenLength: authData.token?.length,
-        // 检查authData是否有其他可能的URL字段
-        authDataKeys: Object.keys(authData),
-        
-        // 请求头信息
-        requestHeaders: {
-          host: req.headers.host,
-          origin: req.headers.origin,
-          referer: req.headers.referer,
-          'saleor-api-url': req.headers['saleor-api-url'],
-          'saleor-domain': req.headers['saleor-domain'],
-          'x-forwarded-host': req.headers['x-forwarded-host'],
-          'x-forwarded-proto': req.headers['x-forwarded-proto'],
-        },
-        
-        // 请求体信息
-        requestBody: req.body,
-      },
-      "Saleor回调验证通过 - 开始保存认证数据",
-    );
-
-    // 尝试从请求头或其他源获取真实的Saleor URL
-    let realSaleorApiUrl = authData.saleorApiUrl;
-    
-    // 检查请求头中是否有更准确的URL信息
-    const saleorApiUrlHeader = req.headers['saleor-api-url'];
-    const saleorDomainHeader = req.headers['saleor-domain'];
-    const originHeader = req.headers['origin'];
-    const refererHeader = req.headers['referer'];
-    
-    if (saleorApiUrlHeader && typeof saleorApiUrlHeader === 'string') {
-      logger.info(`发现saleor-api-url请求头: ${saleorApiUrlHeader}`);
-      realSaleorApiUrl = saleorApiUrlHeader;
-    } else if (saleorDomainHeader && typeof saleorDomainHeader === 'string') {
-      logger.info(`发现saleor-domain请求头: ${saleorDomainHeader}`);
-      // 构建完整的GraphQL URL
-      const protocol = saleorDomainHeader.includes('localhost') ? 'http' : 'https';
-      realSaleorApiUrl = `${protocol}://${saleorDomainHeader}/graphql/`;
-    } else if (originHeader && typeof originHeader === 'string' && !isLocalhost(originHeader)) {
-      logger.info(`尝试从Origin请求头构建URL: ${originHeader}`);
-      realSaleorApiUrl = `${originHeader}/graphql/`;
-    } else if (refererHeader && typeof refererHeader === 'string' && !isLocalhost(refererHeader)) {
-      logger.info(`尝试从Referer请求头构建URL: ${refererHeader}`);
-      try {
-        const refererUrl = new URL(refererHeader);
-        realSaleorApiUrl = `${refererUrl.protocol}//${refererUrl.host}/graphql/`;
-      } catch (error) {
-        logger.warn(`无法解析Referer URL: ${refererHeader}`);
-      }
-    }
-    
-    if (realSaleorApiUrl !== authData.saleorApiUrl) {
-      logger.info(
-        {
-          originalUrl: authData.saleorApiUrl,
-          correctedUrl: realSaleorApiUrl,
-        },
-        "检测到URL差异，使用修正后的URL"
-      );
-      
-      // 更新authData中的URL
-      authData.saleorApiUrl = realSaleorApiUrl;
-    }
-
-    // 如果是localhost，尝试获取真实的域名
-    if (isLocalhost(authData.saleorApiUrl)) {
-      logger.info("检测到localhost URL，尝试获取真实域名信息");
-      
-      try {
-        // 使用当前token查询shop信息来获取真实域名
-        const client = createClient(authData.saleorApiUrl, authData.token);
-        const domainQuery = `
-          query GetShopDomain {
-            shop {
-              domain {
-                url
-                host
-              }
-            }
-          }
-        `;
-        
-        const domainResult = await client.query(domainQuery, {}).toPromise();
-        
-        if (domainResult.data?.shop?.domain?.url) {
-          const realDomainUrl = domainResult.data.shop.domain.url;
-          const realApiUrl = realDomainUrl.endsWith('/') 
-            ? `${realDomainUrl}graphql/`
-            : `${realDomainUrl}/graphql/`;
-            
-          logger.info(
-            {
-              localhost: authData.saleorApiUrl,
-              realDomain: realDomainUrl,
-              realApiUrl: realApiUrl,
-            },
-            "获取到真实域名，更新API URL"
-          );
-          
-          // 更新为真实的API URL
-          authData.saleorApiUrl = realApiUrl;
-          
-          // 同时更新domain字段
-          try {
-            const realDomainHost = new URL(realDomainUrl).hostname;
-            authData.domain = realDomainHost;
-            logger.info(`更新domain字段: ${realDomainHost}`);
-          } catch (error) {
-            logger.warn(`无法解析域名: ${realDomainUrl}`);
-          }
-        } else {
-          logger.warn("无法从shop查询中获取域名信息");
-        }
-      } catch (error) {
-        logger.error(
-          { 
-            error: error instanceof Error ? error.message : "未知错误",
-            stack: error instanceof Error ? error.stack : undefined,
-          },
-          "查询真实域名失败，继续使用localhost"
-        );
-      }
-    }
-
-    // 记录最终使用的URL
-    logger.info(
-      { 
-        finalSaleorApiUrl: authData.saleorApiUrl,
-        finalDomain: authData.domain,
-      },
-      "准备使用的最终URL信息"
-    );
-
-    // 如果不是localhost，测试连接；否则跳过测试直接注册
-    if (!isLocalhost(authData.saleorApiUrl)) {
-      const connectionResult = await testSaleorConnection(authData.saleorApiUrl, authData.token);
-      
-      if (connectionResult.success) {
-        logger.info(
-          { connectionDetails: connectionResult.details },
-          "Saleor连接测试成功"
-        );
-      } else {
-        logger.warn(
-          { 
-            domain: authData.domain, 
-            saleorApiUrl: authData.saleorApiUrl,
-            error: connectionResult.error,
-            details: connectionResult.details 
-          }, 
-          "Saleor连接测试失败，但继续注册流程"
-        );
-      }
-    } else {
-      logger.info("仍然是localhost URL，跳过连接测试，直接进行注册");
-    }
-
-    // 尝试保存认证数据到APL
-    try {
-      logger.info(
-        {
-          beforeSave: {
-            saleorApiUrl: authData.saleorApiUrl,
-            domain: authData.domain,
-            appId: authData.appId,
-            tokenPresent: !!authData.token,
-            tokenLength: authData.token?.length,
-          }
-        },
-        "准备保存认证数据到APL"
-      );
-
-      await saleorApp.apl.set(authData);
-      
-      logger.info(
-        { domain: authData.domain, appId: authData.appId, saleorApiUrl: authData.saleorApiUrl },
-        "认证数据已成功保存到APL",
-      );
-
-      // 验证保存是否成功
-      try {
-        const savedData = await saleorApp.apl.get(authData.saleorApiUrl);
-        if (savedData) {
-          logger.info(
-            {
-              retrievedDomain: savedData.domain,
-              retrievedAppId: savedData.appId,
-              retrievedApiUrl: savedData.saleorApiUrl,
-              tokenPresent: !!savedData.token,
-            },
-            "APL保存验证成功"
-          );
-        } else {
-          logger.warn("APL保存验证失败：无法检索已保存的数据");
-        }
-      } catch (verifyError) {
-        logger.warn(
-          { error: verifyError instanceof Error ? verifyError.message : "未知错误" },
-          "APL保存验证时出错"
-        );
-      }
-
-    } catch (aplError) {
-      logger.error(
-        { 
-          error: aplError instanceof Error ? aplError.message : "未知错误",
-          stack: aplError instanceof Error ? aplError.stack : undefined,
-          domain: authData.domain,
-          saleorApiUrl: authData.saleorApiUrl
-        },
-        "保存认证数据到APL失败",
-      );
-      throw aplError; // 重新抛出错误，这样Saleor会知道注册失败
-    }
-
-    try {
-      // 从authData中提取Saleor信息
-      const saleorApiUrl = authData.saleorApiUrl; // e.g. "https://api.lzsm.shop/graphql/"
-      const saleorDomain = new URL(saleorApiUrl).hostname; // e.g. "api.lzsm.shop"
-
-      // 尝试获取真实客户端IP
-      const realClientIP = getRealClientIP(req);
-
-      logger.info(
-        {
-          saleorApiUrl,
-          saleorDomain,
-          realClientIP,
-        },
-        "从Saleor回调中提取的信息",
-      );
-
-      // 先保存域名和IP到数据库（作为待审核记录），再检查授权
-
-      // 检查域名站点是否已经注册
-      const existingSite = await siteManager.getByDomain(saleorDomain);
-      if (!existingSite) {
-        // 域名站点尚未注册，先注册域名（默认为待审核状态）
-        logger.info(`域名站点尚未注册，开始注册: ${saleorDomain}`);
-
-        // 注册域名站点（包含URL验证）
-        const registeredSite = await siteManager.register({
-          domain: saleorDomain,
-          name: `Saleor Store (${saleorDomain})`,
-          saleorApiUrl,
-        });
-
-        logger.info(`域名站点注册成功: ${saleorDomain} from ${saleorApiUrl}`);
-      } else {
-        // 域名站点已注册，更新信息
-        logger.info(`域名站点已注册: ${saleorDomain}, 状态: ${existingSite.status}`);
-      }
-
-      // 如果获取到了真实IP，同时注册IP站点
-      if (realClientIP && realClientIP !== saleorDomain) {
-        const existingIPSite = await siteManager.getByDomain(realClientIP);
-        if (!existingIPSite) {
-          logger.info(`IP站点尚未注册，开始注册: ${realClientIP}`);
-
-          try {
-            // 注册IP站点（默认为待审核状态）
-            const registeredIPSite = await siteManager.register({
-              domain: realClientIP,
-              name: `Saleor Store IP (${realClientIP})`,
-              saleorApiUrl,
-            });
-
-            logger.info(`IP站点注册成功: ${realClientIP} from ${saleorApiUrl}`);
-          } catch (error) {
-            logger.warn(
-              { 
-                ip: realClientIP, 
-                error: error instanceof Error ? error.message : "未知错误" 
-              },
-              "IP站点注册失败，但继续流程"
-            );
-          }
-        } else {
-          logger.info(`IP站点已注册: ${realClientIP}, 状态: ${existingIPSite.status}`);
-        }
-      } else {
-        logger.info("未获取到有效的真实客户端IP，跳过IP站点注册");
-      }
-
-      // 现在检查站点是否已经授权（支持域名和IP两种方式）
-      const isSiteAuthorized = await siteManager.isAuthorized(
-        saleorDomain,
-        realClientIP || undefined,
-      );
-      if (!isSiteAuthorized) {
-        const errorMsg = `站点未被授权，拒绝安装: 域名=${saleorDomain}, IP=${realClientIP || "未知"}`;
-        logger.error({
-          domain: saleorDomain,
-          ip: realClientIP,
-          saleorApiUrl,
-        }, errorMsg);
-        
-        // 抛出错误以阻止安装，但域名和IP已经保存到数据库中待管理员审核
-        throw new Error(`未授权访问: 域名 '${saleorDomain}' 和 IP '${realClientIP || "未知"}' 都未在授权列表中。记录已保存，请联系管理员审核授权。`);
-      }
-
-      // 检查数据库中是否有白名单配置（作为额外的安全层）
-      const whitelist = await domainWhitelistManager.getActive();
-      if (whitelist.length > 0) {
-        // 如果有白名单配置，检查域名或IP是否在白名单中
-        const isDomainAllowed = await domainWhitelistManager.isAllowed(saleorDomain);
-
-        // 如果域名不在白名单中，检查真实IP是否在白名单中
-        let isAllowed = isDomainAllowed;
-        if (!isDomainAllowed && realClientIP) {
-          const isIPAllowed = await domainWhitelistManager.isAllowed(realClientIP);
-          logger.info(`域名白名单检查: ${isDomainAllowed}, IP白名单检查: ${isIPAllowed}`);
-          isAllowed = isIPAllowed;
-        } else {
-          logger.info(`域名白名单检查: ${isDomainAllowed}`);
-        }
-
-        if (!isAllowed) {
-          logger.warn(
-            `域名和IP都不在白名单中，需要审核: 域名=${saleorDomain}, IP=${realClientIP || "未知"}`,
-          );
-          // 注意：这里我们不直接返回错误响应，因为这是Saleor的回调处理
-          // 白名单检查应该在注册流程的其他部分进行
-        }
-      }
-    } catch (error) {
-      logger.error(
-        { error: error instanceof Error ? error.message : "未知错误" },
-        "处理Saleor回调时出错",
-      );
-    }
+    await handleAuthDataVerified(req, authData);
   },
 });
 
@@ -588,186 +265,106 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     logger.info("=== 开始处理注册请求 ===");
     
     // 确保数据库已初始化
-    try {
-      await initializeDatabase();
-      logger.info("数据库初始化完成");
-    } catch (error) {
-      logger.error(
-        { error: error instanceof Error ? error.message : "未知错误" },
-        "数据库初始化失败",
-      );
-      // 继续执行，可能数据库已经存在
-    }
+    await initializeDatabaseSafely();
 
-    // 添加详细的请求头日志
-    logger.info(
-      {
-        method: req.method,
-        url: req.url,
-        body: req.body,
-        headers: {
-          host: req.headers["host"],
-          origin: req.headers["origin"],
-          referer: req.headers["referer"],
-          "user-agent": req.headers["user-agent"],
-          "x-forwarded-for": req.headers["x-forwarded-for"],
-          "x-real-ip": req.headers["x-real-ip"],
-          forwarded: req.headers["forwarded"],
-          "x-forwarded-proto": req.headers["x-forwarded-proto"],
-          "x-forwarded-host": req.headers["x-forwarded-host"],
-          domain: req.headers["domain"], // Saleor传递的域名
-          "content-type": req.headers["content-type"],
-          authorization: req.headers["authorization"] ? "[REDACTED]" : undefined,
-        },
-      },
-      "接收到Saleor注册请求",
-    );
+    // 记录请求信息
+    logRequestInfo(req);
 
-    // 检查是否有auth_token，如果有就手动处理
-    logger.info({ body: req.body, hasAuthToken: !!(req.body && req.body.auth_token) }, "检查请求体");
-    
-    if (req.body && req.body.auth_token) {
-      logger.info("检测到auth_token，尝试手动处理注册...");
-      
-      try {
-        // 尝试从请求头中获取真实域名信息
-        const saleorDomainHeader = req.headers['saleor-domain'] as string;
-        const originHeader = req.headers['origin'] as string;
-        const refererHeader = req.headers['referer'] as string;
-        
-        let saleorDomain: string | null = null;
-        let saleorApiUrl: string | null = null;
-        
-        if (saleorDomainHeader) {
-          saleorDomain = saleorDomainHeader;
-          const protocol = saleorDomain.includes('localhost') ? 'http' : 'https';
-          saleorApiUrl = `${protocol}://${saleorDomain}/graphql/`;
-        } else if (originHeader && !isLocalhost(originHeader)) {
-          try {
-            const originUrl = new URL(originHeader);
-            saleorDomain = originUrl.hostname;
-            saleorApiUrl = `${originHeader}/graphql/`;
-          } catch (error) {
-            logger.warn(`无法解析Origin URL: ${originHeader}`);
-          }
-        } else if (refererHeader && !isLocalhost(refererHeader)) {
-          try {
-            const refererUrl = new URL(refererHeader);
-            saleorDomain = refererUrl.hostname;
-            saleorApiUrl = `${refererUrl.protocol}//${refererUrl.host}/graphql/`;
-          } catch (error) {
-            logger.warn(`无法解析Referer URL: ${refererHeader}`);
-          }
-        }
-        
-        if (!saleorDomain || !saleorApiUrl) {
-          logger.error("无法从请求头中提取Saleor域名信息");
-          return res.status(400).json({
-            error: "Invalid Request",
-            message: "无法确定Saleor实例的域名信息"
-          });
-        }
-        
-        logger.info({
-          saleorDomain,
-          saleorApiUrl,
-          extractedFrom: saleorDomainHeader ? 'saleor-domain' : (originHeader ? 'origin' : 'referer')
-        }, "从请求头提取的域名信息");
-        
-        const realClientIP = getRealClientIP(req);
-        
-        logger.info({
-          saleorDomain,
-          realClientIP,
-        }, "提取的域名和IP信息");
-
-        // 保存域名和IP到同一条记录
-        const existingSite = await siteManager.getByDomain(saleorDomain);
-        if (!existingSite) {
-          logger.info(`站点尚未注册，开始注册: ${saleorDomain}`);
-          
-          const registeredSite = await siteManager.register({
-            domain: saleorDomain,
-            name: `Saleor Store (${saleorDomain})`,
-            saleorApiUrl: saleorApiUrl,
-            clientIP: realClientIP || undefined,
-          });
-          
-          logger.info(`站点注册成功: ${saleorDomain}, IP: ${realClientIP || "未知"}`);
-        } else {
-          // 如果站点已存在但没有IP信息，更新IP
-          if (realClientIP && !existingSite.clientIP) {
-            logger.info(`更新现有站点的IP信息: ${realClientIP}`);
-            await siteManager.update(existingSite.id, {
-              clientIP: realClientIP,
-            });
-          }
-        }
-        
-        // 检查授权
-        const isSiteAuthorized = await siteManager.isAuthorized(
-          saleorDomain,
-          realClientIP || undefined,
-        );
-        
-        if (!isSiteAuthorized) {
-          logger.error({
-            domain: saleorDomain,
-            ip: realClientIP,
-          }, "站点未被授权，拒绝安装");
-          
-          return res.status(401).json({
-            error: "Unauthorized",
-            message: `未授权访问: 域名 '${saleorDomain}' 和 IP '${realClientIP || "未知"}' 都未在授权列表中。记录已保存，请联系管理员审核授权。`
-          });
-        }
-        
-        logger.info("手动注册流程完成，返回成功响应");
-        return res.status(200).json({ success: true });
-        
-      } catch (manualError) {
-        logger.error({
-          error: manualError instanceof Error ? manualError.message : "未知错误",
-          stack: manualError instanceof Error ? manualError.stack : undefined,
-        }, "手动处理注册失败");
-      }
+    // 尝试手动处理auth_token注册
+    const manualHandled = await handleManualTokenRegistration(req);
+    if (manualHandled) {
+      return res.status(200).json({ success: true });
     }
 
     logger.info("准备调用baseHandler...");
     
     // 继续执行原始的Saleor注册流程
-    try {
-      const result = await baseHandler(req, res);
-      logger.info("baseHandler执行完成，返回结果");
-      return result;
-    } catch (baseHandlerError) {
-      logger.error({
-        error: baseHandlerError instanceof Error ? baseHandlerError.message : "未知错误",
-        stack: baseHandlerError instanceof Error ? baseHandlerError.stack : undefined,
-      }, "baseHandler执行失败");
-      throw baseHandlerError;
-    }
+    const result = await baseHandler(req, res);
+    logger.info("baseHandler执行完成");
+    return result;
   } catch (error) {
+    return handleRegistrationError(error, req, res);
+  }
+}
+
+/**
+ * 安全初始化数据库
+ */
+async function initializeDatabaseSafely(): Promise<void> {
+  try {
+    await initializeDatabase();
+    logger.info("数据库初始化完成");
+  } catch (error) {
+    logger.error(
+      { error: error instanceof Error ? error.message : "未知错误" },
+      "数据库初始化失败",
+    );
+    // 继续执行，可能数据库已经存在
+  }
+}
+
+/**
+ * 记录请求信息
+ */
+function logRequestInfo(req: any): void {
+  logger.info(
+    {
+      method: req.method,
+      url: req.url,
+      body: req.body,
+      headers: {
+        host: req.headers.host,
+        origin: req.headers.origin,
+        referer: req.headers.referer,
+        "user-agent": req.headers["user-agent"],
+        "x-forwarded-for": req.headers["x-forwarded-for"],
+        "x-real-ip": req.headers["x-real-ip"],
+        forwarded: req.headers.forwarded,
+        "x-forwarded-proto": req.headers["x-forwarded-proto"],
+        "x-forwarded-host": req.headers["x-forwarded-host"],
+        "saleor-domain": req.headers["saleor-domain"],
+        "content-type": req.headers["content-type"],
+        authorization: req.headers.authorization ? "[REDACTED]" : undefined,
+      },
+    },
+    "接收到Saleor注册请求",
+  );
+  
+  logger.info(
+    { 
+      body: req.body, 
+      hasAuthToken: !!(req.body && req.body.auth_token) 
+    }, 
+    "检查请求体"
+  );
+}
+
+/**
+ * 处理注册错误
+ */
+async function handleRegistrationError(
+  error: unknown, 
+  req: NextApiRequest, 
+  res: NextApiResponse
+): Promise<void> {
+  logger.error({ 
+    error: error instanceof Error ? error.message : "未知错误",
+    stack: error instanceof Error ? error.stack : undefined 
+  }, "注册处理器错误");
+  
+  // 尝试回退到基础处理器
+  try {
+    await baseHandler(req, res);
+  } catch (handlerError) {
     logger.error({ 
-      error: error instanceof Error ? error.message : "未知错误",
-      stack: error instanceof Error ? error.stack : undefined 
-    }, "注册处理器错误");
+      error: handlerError instanceof Error ? handlerError.message : "未知错误",
+      stack: handlerError instanceof Error ? handlerError.stack : undefined 
+    }, "基础注册处理器也失败了");
     
-    // 确保我们仍然尝试调用基础处理器
-    try {
-      return baseHandler(req, res);
-    } catch (handlerError) {
-      logger.error({ 
-        error: handlerError instanceof Error ? handlerError.message : "未知错误",
-        stack: handlerError instanceof Error ? handlerError.stack : undefined 
-      }, "基础注册处理器也失败了");
-      
-      // 返回更详细的错误信息
-      return res.status(500).json({
-        error: "Registration failed",
-        message: "应用注册失败，请检查网络连接和配置",
-        details: handlerError instanceof Error ? handlerError.message : "未知错误"
-      });
-    }
+    res.status(500).json({
+      error: "Registration failed",
+      message: "应用注册失败，请检查网络连接和配置",
+      details: handlerError instanceof Error ? handlerError.message : "未知错误"
+    });
   }
 }
