@@ -29,8 +29,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       await initializeDatabase();
       logger.info("数据库初始化完成");
-    } catch (dbError) {
-      logger.error({ error: dbError }, "数据库初始化失败");
+    } catch (_error) {
+      logger.error("数据库初始化失败");
       // 继续执行，可能数据库已经存在
     }
 
@@ -39,17 +39,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const saleorDomain = req.headers["saleor-domain"] as string;
 
     if (saleorApiUrl && saleorDomain) {
-      logger.info({ saleorApiUrl, saleorDomain }, "尝试注册新站点");
+      logger.info("尝试注册新站点");
 
       try {
-        // 提取域名（移除协议和路径）
-        const domain = new URL(`https://${saleorDomain}`).hostname;
+        // 从 saleorApiUrl 中提取域名，而不是直接使用 saleorDomain
+        // saleorApiUrl 通常是完整的 URL，如 https://your-store.saleor.cloud/graphql/
+        let domain: string;
+        try {
+          domain = new URL(saleorApiUrl).hostname;
+        } catch (_error) {
+          logger.error("无法从 saleorApiUrl 提取域名");
+          // 回退到原来的逻辑
+          domain = new URL(`https://${saleorDomain}`).hostname;
+        }
 
         // 检查数据库中是否有白名单配置
         const whitelist = await domainWhitelistManager.getActive();
         if (whitelist.length === 0) {
           // 如果没有白名单配置，添加当前域名到白名单，状态设置为待定
-          logger.info({ domain }, "数据库中没有白名单配置，添加默认配置");
+          logger.info("数据库中没有白名单配置，添加默认配置");
           await domainWhitelistManager.add({
             domainPattern: domain,
             description: `自动添加的域名 - 待审核 (${new Date().toLocaleString()})`,
@@ -57,7 +65,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           });
 
           // 返回安装失败，提示需要审核
-          logger.warn({ domain }, "域名已添加到白名单但需要审核，拒绝安装");
+          logger.warn("域名已添加到白名单但需要审核，拒绝安装");
           return res.status(403).json({
             success: false,
             error: {
@@ -70,7 +78,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // 检查域名是否在白名单中
         const isDomainAllowed = await domainWhitelistManager.isAllowed(domain);
         if (!isDomainAllowed) {
-          logger.warn({ domain }, "域名不在白名单中，拒绝注册");
+          logger.warn("域名不在白名单中，拒绝注册");
           // 返回错误响应
           return res.status(403).json({
             success: false,
@@ -88,32 +96,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           saleorApiUrl,
         });
 
-        logger.info({ domain, saleorApiUrl }, "站点注册成功");
-      } catch (error) {
-        logger.error(
-          {
-            error: error instanceof Error ? error.message : "未知错误",
-            saleorApiUrl,
-            saleorDomain,
-          },
-          "站点注册失败",
-        );
+        logger.info("站点注册成功");
+      } catch (_error) {
+        logger.error("站点注册失败");
 
         // 如果是验证失败，返回错误但不阻止Saleor的注册流程
         // 管理员稍后可以手动处理
-        if (error instanceof Error && error.message.includes("无效的 Saleor URL")) {
-          logger.warn({ error: error.message }, "URL验证失败，但继续Saleor注册流程");
-        }
+        // 这里我们不处理具体的错误，因为错误已经在siteManager中记录了
       }
     }
 
     // 继续执行原始的Saleor注册流程
     return baseHandler(req, res);
-  } catch (error) {
-    logger.error(
-      { errorMessage: error instanceof Error ? error.message : "未知错误" },
-      "注册处理器错误",
-    );
+  } catch (_error) {
+    logger.error("注册处理器错误");
     return baseHandler(req, res);
   }
 }
