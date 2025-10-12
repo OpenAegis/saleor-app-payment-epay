@@ -24,6 +24,32 @@ const config = {
     config.experiments = { ...config.experiments, topLevelAwait: true };
     return config;
   },
+  async headers() {
+    return [
+      {
+        // Apply CORS headers to API routes
+        source: "/api/:path*",
+        headers: [
+          {
+            key: "Access-Control-Allow-Origin",
+            value: "*", // Allow all origins for Saleor app installation
+          },
+          {
+            key: "Access-Control-Allow-Methods",
+            value: "GET, POST, PUT, DELETE, OPTIONS",
+          },
+          {
+            key: "Access-Control-Allow-Headers",
+            value: "Content-Type, Authorization, X-Requested-With, saleor-api-url, saleor-domain, saleor-signature",
+          },
+          {
+            key: "Access-Control-Max-Age",
+            value: "86400",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 const isSentryEnabled = process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN;

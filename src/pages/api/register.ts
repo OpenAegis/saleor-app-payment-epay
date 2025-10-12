@@ -5,8 +5,75 @@ import { siteManager } from "../../lib/managers/site-manager";
 import { initializeDatabase } from "../../lib/db/turso-client";
 import { createLogger } from "../../lib/logger";
 import { domainWhitelistManager } from "../../lib/managers/domain-whitelist-manager";
+import { createGraphQLClient } from "../../lib/create-graphq-client";
 
 const logger = createLogger({ component: "RegisterAPI" });
+
+/**
+ * 测试与Saleor实例的连接
+ */
+async function testSaleorConnection(saleorApiUrl: string, token: string): Promise<boolean> {
+  try {
+    logger.info(`测试连接到Saleor实例: ${saleorApiUrl}`);
+    
+    const client = createGraphQLClient({
+      saleorApiUrl,
+      token,
+    });
+
+    // 尝试执行一个简单的查询来测试连接
+    const query = `
+      query TestConnection {
+        shop {
+          name
+          domain {
+            host
+            sslEnabled
+          }
+        }
+      }
+    `;
+
+    const result = await client.query(query, {}).toPromise();
+    
+    if (result.error) {
+      logger.error(
+        { 
+          error: result.error.message,
+          graphQLErrors: result.error.graphQLErrors?.map(e => e.message),
+          networkError: result.error.networkError?.message,
+        },
+        "Saleor连接测试失败 - GraphQL错误",
+      );
+      return false;
+    }
+
+    if (result.data?.shop) {
+      logger.info(
+        { 
+          shopName: result.data.shop.name,
+          domain: result.data.shop.domain?.host,
+          sslEnabled: result.data.shop.domain?.sslEnabled,
+        },
+        "Saleor连接测试成功",
+      );
+      return true;
+    }
+
+    logger.warn("Saleor连接测试返回空数据");
+    return false;
+  } catch (error) {
+    logger.error(
+      { 
+        error: error instanceof Error ? error.message : "未知错误",
+        stack: error instanceof Error ? error.stack : undefined,
+        saleorApiUrl,
+      },
+      "Saleor连接测试异常",
+    );
+    return false;
+  }
+}
 
 /**
  * 从请求中提取真实客户端IP
@@ -84,9 +151,37 @@ const baseHandler = createAppRegisterHandler({
         domain: authData.domain,
         appId: authData.appId,
         token: authData.token ? "[REDACTED]" : undefined,
+        tokenLength: authData.token?.length,
       },
-      "Saleor回调验证通过",
+      "Saleor回调验证通过 - 开始保存认证数据",
     );
+
+    // 首先测试与Saleor实例的连接
+    const connectionOk = await testSaleorConnection(authData.saleorApiUrl, authData.token);
+    if (!connectionOk) {
+      const errorMsg = `无法连接到Saleor实例: ${authData.saleorApiUrl}`;
+      logger.error({ domain: authData.domain, saleorApiUrl: authData.saleorApiUrl }, errorMsg);
+      throw new Error(errorMsg);
+    }
+
+    // 尝试保存认证数据到APL
+    try {
+      await saleorApp.apl.set(authData);
+      logger.info(
+        { domain: authData.domain, appId: authData.appId },
+        "认证数据已成功保存到APL",
+      );
+    } catch (aplError) {
+      logger.error(
+        { 
+          error: aplError instanceof Error ? aplError.message : "未知错误",
+          stack: aplError instanceof Error ? aplError.stack : undefined,
+          domain: authData.domain 
+        },
+        "保存认证数据到APL失败",
+      );
+      throw aplError; // 重新抛出错误，这样Saleor会知道注册失败
+    }
 
     try {
       // 从authData中提取Saleor信息
@@ -206,6 +301,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 添加详细的请求头日志
     logger.info(
       {
+        method: req.method,
+        url: req.url,
+        body: req.body,
         headers: {
           host: req.headers["host"],
           origin: req.headers["origin"],
@@ -217,16 +315,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           "x-forwarded-proto": req.headers["x-forwarded-proto"],
           "x-forwarded-host": req.headers["x-forwarded-host"],
           domain: req.headers["domain"], // Saleor传递的域名
+          "content-type": req.headers["content-type"],
+          authorization: req.headers["authorization"] ? "[REDACTED]" : undefined,
         },
-        allHeaders: JSON.stringify(req.headers),
       },
-      "接收到的完整请求头信息",
+      "接收到Saleor注册请求",
     );
 
     // 继续执行原始的Saleor注册流程
     return baseHandler(req, res);
   } catch (error) {
-    logger.error({ error: error instanceof Error ? error.message : "未知错误" }, "注册处理器错误");
-    return baseHandler(req, res);
+    logger.error({ 
+      error: error instanceof Error ? error.message : "未知错误",
+      stack: error instanceof Error ? error.stack : undefined 
+    }, "注册处理器错误");
+    
+    // 确保我们仍然尝试调用基础处理器
+    try {
+      return baseHandler(req, res);
+    } catch (handlerError) {
+      logger.error({ 
+        error: handlerError instanceof Error ? handlerError.message : "未知错误",
+        stack: handlerError instanceof Error ? handlerError.stack : undefined 
+      }, "基础注册处理器也失败了");
+      
+      // 返回更详细的错误信息
+      return res.status(500).json({
+        error: "Registration failed",
+        message: "应用注册失败，请检查网络连接和配置",
+        details: handlerError instanceof Error ? handlerError.message : "未知错误"
+      });
+    }
   }
 }
