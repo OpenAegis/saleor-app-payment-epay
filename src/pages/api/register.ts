@@ -5,7 +5,7 @@ import { siteManager } from "../../lib/managers/site-manager";
 import { initializeDatabase } from "../../lib/db/turso-client";
 import { createLogger } from "../../lib/logger";
 import { domainWhitelistManager } from "../../lib/managers/domain-whitelist-manager";
-import { createGraphQLClient } from "../../lib/create-graphq-client";
+import { createClient } from "../../lib/create-graphq-client";
 
 const logger = createLogger({ component: "RegisterAPI" });
 
@@ -16,10 +16,7 @@ async function testSaleorConnection(saleorApiUrl: string, token: string): Promis
   try {
     logger.info(`测试连接到Saleor实例: ${saleorApiUrl}`);
     
-    const client = createGraphQLClient({
-      saleorApiUrl,
-      token,
-    });
+    const client = createClient(saleorApiUrl, token);
 
     // 尝试执行一个简单的查询来测试连接
     const query = `
