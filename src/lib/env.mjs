@@ -6,14 +6,14 @@ export const env = createEnv({
    * Specify your server-side environment variables here.
    */
   server: {
-    APP_URL: z.string().url(),
-    TURSO_DATABASE_URL: z.string().url(),
-    TURSO_AUTH_TOKEN: z.string(),
-    PLUGIN_ADMIN_USERNAME: z.string(),
-    PLUGIN_ADMIN_PASSWORD: z.string(),
-    PLUGIN_SESSION_SECRET: z.string(),
+    APP_URL: z.string().url().default("http://localhost:3000"),
+    TURSO_DATABASE_URL: z.string().url().default("libsql://localhost"),
+    TURSO_AUTH_TOKEN: z.string().default(""),
+    PLUGIN_ADMIN_USERNAME: z.string().default("admin"),
+    PLUGIN_ADMIN_PASSWORD: z.string().default("admin"),
+    PLUGIN_SESSION_SECRET: z.string().default("secret"),
     APP_DEBUG: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
-    SECRET_KEY: z.string(),
+    SECRET_KEY: z.string().default("secret"),
     // APL 配置
     APL: z.enum(["upstash", "saleor-cloud"]).optional(),
     UPSTASH_URL: z.string().optional(),
