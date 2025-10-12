@@ -18,32 +18,54 @@ export class SiteManager {
   async register(input: Omit<NewSite, "id" | "createdAt" | "updatedAt" | "requestedAt">): Promise<Site> {
     logger.info({ domain: input.domain, saleorApiUrl: input.saleorApiUrl }, "开始注册新站点");
 
-    // 验证 Saleor URL
-    const validation = await saleorValidator.validateSaleorUrl(input.saleorApiUrl);
-    if (!validation.isValid) {
-      logger.error({ 
+    let shopName = `Saleor Store (${input.domain})`;
+    let validationNotes = "";
+
+    // 尝试验证 Saleor URL，但不阻止注册
+    try {
+      const validation = await saleorValidator.validateSaleorUrl(input.saleorApiUrl);
+      if (validation.isValid) {
+        logger.info({ 
+          domain: input.domain, 
+          saleorApiUrl: input.saleorApiUrl,
+          shopName: validation.shopName 
+        }, "Saleor URL 验证通过");
+        shopName = validation.shopName || shopName;
+      } else {
+        logger.warn({ 
+          domain: input.domain, 
+          saleorApiUrl: input.saleorApiUrl,
+          error: validation.error 
+        }, "Saleor URL 验证失败，但允许注册");
+        validationNotes = `验证失败: ${validation.error}`;
+      }
+    } catch (error) {
+      logger.warn({ 
         domain: input.domain, 
         saleorApiUrl: input.saleorApiUrl,
-        error: validation.error 
-      }, "Saleor URL 验证失败");
-      throw new Error(`无效的 Saleor URL: ${validation.error}`);
+        error: error instanceof Error ? error.message : "未知错误"
+      }, "Saleor URL 验证异常，但允许注册");
+      validationNotes = `验证异常: ${error instanceof Error ? error.message : "未知错误"}`;
     }
 
-    // 验证域名匹配
-    const domainMatch = await saleorValidator.validateDomainMatch(input.domain, input.saleorApiUrl);
-    if (!domainMatch) {
-      logger.error({ 
+    // 尝试验证域名匹配，但不阻止注册
+    try {
+      const domainMatch = await saleorValidator.validateDomainMatch(input.domain, input.saleorApiUrl);
+      if (!domainMatch) {
+        logger.warn({ 
+          domain: input.domain, 
+          saleorApiUrl: input.saleorApiUrl 
+        }, "域名与 Saleor API URL 不匹配，但允许注册");
+        validationNotes += validationNotes ? " | 域名不匹配" : "域名不匹配";
+      }
+    } catch (error) {
+      logger.warn({ 
         domain: input.domain, 
-        saleorApiUrl: input.saleorApiUrl 
-      }, "域名与 Saleor API URL 不匹配");
-      throw new Error("提供的域名与 Saleor API URL 不匹配");
+        saleorApiUrl: input.saleorApiUrl,
+        error: error instanceof Error ? error.message : "未知错误"
+      }, "域名验证异常，但允许注册");
+      validationNotes += validationNotes ? " | 域名验证异常" : "域名验证异常";
     }
-
-    logger.info({ 
-      domain: input.domain, 
-      saleorApiUrl: input.saleorApiUrl,
-      shopName: validation.shopName 
-    }, "Saleor URL 验证通过");
 
     // 检查是否已经存在相同的域名或API URL
     const existingSite = await this.getByDomain(input.domain);
@@ -56,6 +78,8 @@ export class SiteManager {
     const site: NewSite = {
       id: randomId(),
       ...input,
+      name: shopName, // 使用从验证中获取的商店名称
+      notes: validationNotes || undefined, // 包含验证注释
       status: "pending", // 默认待审批
       requestedAt: now,
       createdAt: now,

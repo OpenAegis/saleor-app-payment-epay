@@ -15,7 +15,7 @@ const logger = createLogger({ component: "RegisterAPI" });
  */
 const baseHandler = createAppRegisterHandler({
   apl: saleorApp.apl,
-  // 暂时允许所有URL，实际的授权检查在中间件中进行
+  // 允许所有URL，安装后通过后台管理进行授权
   allowedSaleorUrls: ["*"],
 });
 
