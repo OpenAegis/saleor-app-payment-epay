@@ -31,9 +31,9 @@ export const EpayConfigurationForm = ({
       returnUrl: "",
       configurationName: "",
       enabled: true,
-    }
+    },
   );
-  
+
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
 
@@ -44,11 +44,11 @@ export const EpayConfigurationForm = ({
   const handleSubmit = () => {
     onSave(config);
   };
-  
+
   const handleTestConnection = async () => {
     setIsTesting(true);
     setTestResult(null);
-    
+
     try {
       const response = await fetch("/api/epay-config/test", {
         method: "POST",
@@ -57,9 +57,9 @@ export const EpayConfigurationForm = ({
         },
         body: JSON.stringify(config),
       });
-      
+
       const result = (await response.json()) as TestResponse;
-      
+
       if (response.ok && result.success) {
         setTestResult({ success: true, message: "连接成功！商户信息验证通过。" });
       } else {
@@ -75,15 +75,17 @@ export const EpayConfigurationForm = ({
   return (
     <Box display="flex" flexDirection="column" gap={4}>
       <h2>彩虹易支付配置</h2>
-      
+
       <Input
         label="配置名称"
         value={config.configurationName}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange("configurationName", e.target.value)}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+          handleChange("configurationName", e.target.value)
+        }
         required
         helperText="为这个支付配置设置一个易于识别的名称"
       />
-      
+
       <Input
         label="商户ID (PID)"
         value={config.pid}
@@ -91,7 +93,7 @@ export const EpayConfigurationForm = ({
         required
         helperText="在彩虹易支付商户后台获取"
       />
-      
+
       <Input
         label="商户密钥"
         value={config.key}
@@ -100,37 +102,43 @@ export const EpayConfigurationForm = ({
         required
         helperText="在彩虹易支付商户后台获取，请妥善保管"
       />
-      
+
       <Input
         label="API地址"
         value={config.apiUrl}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange("apiUrl", e.target.value)}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+          handleChange("apiUrl", e.target.value)
+        }
         required
         helperText="您的彩虹易支付服务提供商提供的API地址"
         placeholder="https://your-epay-domain.com"
       />
-      
+
       <Input
         label="返回地址"
         value={config.returnUrl || ""}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange("returnUrl", e.target.value)}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+          handleChange("returnUrl", e.target.value)
+        }
         helperText="支付完成后跳转的地址，例如: https://your-store-domain.com/checkout/success"
         placeholder="https://your-store-domain.com/checkout/success"
       />
-      
+
       <Box display="flex" alignItems="center" gap={2}>
         <input
           type="checkbox"
           id="enabled"
           checked={config.enabled}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange("enabled", e.target.checked)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+            handleChange("enabled", e.target.checked)
+          }
         />
         <label htmlFor="enabled">启用此支付配置</label>
       </Box>
-      
+
       {testResult && (
-        <Box 
-          padding={2} 
+        <Box
+          padding={2}
           borderRadius={4}
           backgroundColor={testResult.success ? "success1" : "critical1"}
         >
@@ -139,7 +147,7 @@ export const EpayConfigurationForm = ({
           </Text>
         </Box>
       )}
-      
+
       <Box display="flex" gap={2}>
         <Button onClick={() => void handleTestConnection()} disabled={isTesting}>
           {isTesting ? "测试中..." : "测试连接"}
@@ -149,7 +157,7 @@ export const EpayConfigurationForm = ({
           取消
         </Button>
       </Box>
-      
+
       <Box marginTop={4} padding={3} backgroundColor="default1" borderRadius={4}>
         <h3>配置说明</h3>
         <ul>
