@@ -14,6 +14,14 @@ export const env = createEnv({
     PLUGIN_SESSION_SECRET: z.string(),
     APP_DEBUG: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
     SECRET_KEY: z.string(),
+    // APL 配置
+    APL: z.enum(["upstash", "saleor-cloud"]).optional(),
+    UPSTASH_URL: z.string().optional(),
+    UPSTASH_TOKEN: z.string().optional(),
+    REST_APL_ENDPOINT: z.string().optional(),
+    REST_APL_TOKEN: z.string().optional(),
+    // 测试环境变量
+    CI: z.string().optional(),
   },
 
   /**
@@ -36,6 +44,12 @@ export const env = createEnv({
     PLUGIN_SESSION_SECRET: process.env.PLUGIN_SESSION_SECRET,
     APP_DEBUG: process.env.APP_DEBUG,
     SECRET_KEY: process.env.SECRET_KEY,
+    APL: process.env.APL,
+    UPSTASH_URL: process.env.UPSTASH_URL,
+    UPSTASH_TOKEN: process.env.UPSTASH_TOKEN,
+    REST_APL_ENDPOINT: process.env.REST_APL_ENDPOINT,
+    REST_APL_TOKEN: process.env.REST_APL_TOKEN,
+    CI: process.env.CI,
     NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
     NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION,
   },

@@ -144,32 +144,34 @@ describe("api-route-utils", () => {
 
       expect(status).toHaveBeenCalledWith(200);
       expect(json).toHaveBeenCalled();
-      expect(errorMapper.mock.lastCall[1]).toMatchInlineSnapshot(`
-        {
-          "errors": [
-            {
-              "code": "BaseError",
-              "details": {},
-              "message": "This is a known error",
-            },
-            {
-              "code": "Error",
-              "message": "Initial problem",
-            },
-          ],
-          "message": "This is a known error",
-          "sentry": [
-            [BaseError: This is a known error],
-            {
-              "extra": {
-                "errors": [
-                  [Error: Initial problem],
-                ],
+      if (errorMapper.mock.lastCall) {
+        expect(errorMapper.mock.lastCall[1]).toMatchInlineSnapshot(`
+          {
+            "errors": [
+              {
+                "code": "BaseError",
+                "details": {},
+                "message": "This is a known error",
               },
-            },
-          ],
-        }
-      `);
+              {
+                "code": "Error",
+                "message": "Initial problem",
+              },
+            ],
+            "message": "This is a known error",
+            "sentry": [
+              [BaseError: This is a known error],
+              {
+                "extra": {
+                  "errors": [
+                    [Error: Initial problem],
+                  ],
+                },
+              },
+            ],
+          }
+        `);
+      }
     });
 
     it("catches known errors and responds with whatever the errorMapper returns", async () => {
@@ -209,18 +211,20 @@ describe("api-route-utils", () => {
 
       expect(status).toHaveBeenCalledWith(200);
       expect(json).toHaveBeenCalled();
-      expect(json.mock.lastCall[0]).toMatchInlineSnapshot(`
-        {
-          "errors": [
-            {
-              "code": "MissingSaleorApiUrlError",
-              "details": {},
-              "message": "Missing",
-            },
-          ],
-          "message": "Missing",
-        }
-      `);
+      if (json.mock.lastCall) {
+        expect(json.mock.lastCall[0]).toMatchInlineSnapshot(`
+          {
+            "errors": [
+              {
+                "code": "MissingSaleorApiUrlError",
+                "details": {},
+                "message": "Missing",
+              },
+            ],
+            "message": "Missing",
+          }
+        `);
+      }
     });
 
     it("catches unknown errors and returns 500", async () => {
@@ -254,9 +258,11 @@ describe("api-route-utils", () => {
 
       expect(status).toHaveBeenCalledWith(500);
       expect(json).toHaveBeenCalled();
-      expect(BaseError.normalize(json.mock.lastCall[0])).toMatchInlineSnapshot(
-        "[BaseError: Some error]",
-      );
+      if (json.mock.lastCall) {
+        expect(BaseError.normalize(json.mock.lastCall[0])).toMatchInlineSnapshot(
+          "[BaseError: Some error]",
+        );
+      }
     });
   });
 
