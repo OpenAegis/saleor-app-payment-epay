@@ -10,12 +10,46 @@ import { createClient } from "../../lib/create-graphq-client";
 const logger = createLogger({ component: "RegisterAPI" });
 
 /**
+ * 检查URL是否为localhost
+ */
+function isLocalhost(url: string): boolean {
+  try {
+    const parsedUrl = new URL(url);
+    const hostname = parsedUrl.hostname.toLowerCase();
+    return hostname === 'localhost' || 
+           hostname === '127.0.0.1' || 
+           hostname === '::1' ||
+           hostname.endsWith('.localhost');
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 测试与Saleor实例的连接
  */
-async function testSaleorConnection(saleorApiUrl: string, token: string): Promise<boolean> {
+async function testSaleorConnection(saleorApiUrl: string, token: string): Promise<{
+  success: boolean;
+  error?: string;
+  details?: any;
+}> {
   try {
     logger.info(`测试连接到Saleor实例: ${saleorApiUrl}`);
     
+    // 检查是否为localhost URL
+    if (isLocalhost(saleorApiUrl)) {
+      const warningMsg = `检测到localhost URL: ${saleorApiUrl}。部署的应用无法访问localhost，建议使用公网可访问的URL。`;
+      logger.warn(warningMsg);
+      return {
+        success: false,
+        error: "LOCALHOST_NOT_ACCESSIBLE",
+        details: { 
+          message: warningMsg,
+          suggestion: "请使用ngrok、局域网IP或公网域名替代localhost"
+        }
+      };
+    }
+
     const client = createClient(saleorApiUrl, token);
 
     // 尝试执行一个简单的查询来测试连接
@@ -31,44 +65,67 @@ async function testSaleorConnection(saleorApiUrl: string, token: string): Promis
       }
     `;
 
+    logger.info("开始执行GraphQL查询测试连接...");
     const result = await client.query(query, {}).toPromise();
     
     if (result.error) {
-      logger.error(
-        { 
-          error: result.error.message,
-          graphQLErrors: result.error.graphQLErrors?.map(e => e.message),
-          networkError: result.error.networkError?.message,
-        },
-        "Saleor连接测试失败 - GraphQL错误",
-      );
-      return false;
+      const errorDetails = {
+        message: result.error.message,
+        graphQLErrors: result.error.graphQLErrors?.map(e => e.message),
+        networkError: result.error.networkError?.message,
+        networkErrorCode: (result.error.networkError as any)?.code,
+        networkErrorErrno: (result.error.networkError as any)?.errno,
+      };
+      
+      logger.error(errorDetails, "Saleor连接测试失败 - GraphQL错误");
+      
+      return {
+        success: false,
+        error: "GRAPHQL_ERROR",
+        details: errorDetails
+      };
     }
 
     if (result.data?.shop) {
-      logger.info(
-        { 
-          shopName: result.data.shop.name,
-          domain: result.data.shop.domain?.host,
-          sslEnabled: result.data.shop.domain?.sslEnabled,
-        },
-        "Saleor连接测试成功",
-      );
-      return true;
+      const shopDetails = {
+        shopName: result.data.shop.name,
+        domain: result.data.shop.domain?.host,
+        sslEnabled: result.data.shop.domain?.sslEnabled,
+      };
+      
+      logger.info(shopDetails, "Saleor连接测试成功");
+      
+      return {
+        success: true,
+        details: shopDetails
+      };
     }
 
     logger.warn("Saleor连接测试返回空数据");
-    return false;
+    return {
+      success: false,
+      error: "EMPTY_RESPONSE",
+      details: { message: "GraphQL查询返回了空的shop数据" }
+    };
+    
   } catch (error) {
-    logger.error(
-      { 
-        error: error instanceof Error ? error.message : "未知错误",
-        stack: error instanceof Error ? error.stack : undefined,
-        saleorApiUrl,
-      },
-      "Saleor连接测试异常",
-    );
-    return false;
+    const errorDetails = {
+      message: error instanceof Error ? error.message : "未知错误",
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined,
+      code: (error as any)?.code,
+      errno: (error as any)?.errno,
+      syscall: (error as any)?.syscall,
+      saleorApiUrl,
+    };
+    
+    logger.error(errorDetails, "Saleor连接测试异常");
+    
+    return {
+      success: false,
+      error: "CONNECTION_EXCEPTION",
+      details: errorDetails
+    };
   }
 }
 
@@ -142,23 +199,168 @@ const baseHandler = createAppRegisterHandler({
     () => true,
   ],
   async onRequestVerified(req, { authData }) {
+    // 记录完整的请求信息用于调试
     logger.info(
       {
+        // authData信息
         saleorApiUrl: authData.saleorApiUrl,
         domain: authData.domain,
         appId: authData.appId,
         token: authData.token ? "[REDACTED]" : undefined,
         tokenLength: authData.token?.length,
+        
+        // 请求头信息
+        requestHeaders: {
+          host: req.headers.host,
+          origin: req.headers.origin,
+          referer: req.headers.referer,
+          'saleor-api-url': req.headers['saleor-api-url'],
+          'saleor-domain': req.headers['saleor-domain'],
+          'x-forwarded-host': req.headers['x-forwarded-host'],
+          'x-forwarded-proto': req.headers['x-forwarded-proto'],
+        },
+        
+        // 请求体信息
+        requestBody: req.body,
       },
       "Saleor回调验证通过 - 开始保存认证数据",
     );
 
-    // 首先测试与Saleor实例的连接
-    const connectionOk = await testSaleorConnection(authData.saleorApiUrl, authData.token);
-    if (!connectionOk) {
-      const errorMsg = `无法连接到Saleor实例: ${authData.saleorApiUrl}`;
-      logger.error({ domain: authData.domain, saleorApiUrl: authData.saleorApiUrl }, errorMsg);
-      throw new Error(errorMsg);
+    // 尝试从请求头或其他源获取真实的Saleor URL
+    let realSaleorApiUrl = authData.saleorApiUrl;
+    
+    // 检查请求头中是否有更准确的URL信息
+    const saleorApiUrlHeader = req.headers['saleor-api-url'];
+    const saleorDomainHeader = req.headers['saleor-domain'];
+    const originHeader = req.headers['origin'];
+    const refererHeader = req.headers['referer'];
+    
+    if (saleorApiUrlHeader && typeof saleorApiUrlHeader === 'string') {
+      logger.info(`发现saleor-api-url请求头: ${saleorApiUrlHeader}`);
+      realSaleorApiUrl = saleorApiUrlHeader;
+    } else if (saleorDomainHeader && typeof saleorDomainHeader === 'string') {
+      logger.info(`发现saleor-domain请求头: ${saleorDomainHeader}`);
+      // 构建完整的GraphQL URL
+      const protocol = saleorDomainHeader.includes('localhost') ? 'http' : 'https';
+      realSaleorApiUrl = `${protocol}://${saleorDomainHeader}/graphql/`;
+    } else if (originHeader && typeof originHeader === 'string' && !isLocalhost(originHeader)) {
+      logger.info(`尝试从Origin请求头构建URL: ${originHeader}`);
+      realSaleorApiUrl = `${originHeader}/graphql/`;
+    } else if (refererHeader && typeof refererHeader === 'string' && !isLocalhost(refererHeader)) {
+      logger.info(`尝试从Referer请求头构建URL: ${refererHeader}`);
+      try {
+        const refererUrl = new URL(refererHeader);
+        realSaleorApiUrl = `${refererUrl.protocol}//${refererUrl.host}/graphql/`;
+      } catch (error) {
+        logger.warn(`无法解析Referer URL: ${refererHeader}`);
+      }
+    }
+    
+    if (realSaleorApiUrl !== authData.saleorApiUrl) {
+      logger.info(
+        {
+          originalUrl: authData.saleorApiUrl,
+          correctedUrl: realSaleorApiUrl,
+        },
+        "检测到URL差异，使用修正后的URL"
+      );
+      
+      // 更新authData中的URL
+      authData.saleorApiUrl = realSaleorApiUrl;
+    }
+
+    // 如果是localhost，尝试获取真实的域名
+    if (isLocalhost(authData.saleorApiUrl)) {
+      logger.info("检测到localhost URL，尝试获取真实域名信息");
+      
+      try {
+        // 使用当前token查询shop信息来获取真实域名
+        const client = createClient(authData.saleorApiUrl, authData.token);
+        const domainQuery = `
+          query GetShopDomain {
+            shop {
+              domain {
+                url
+                host
+              }
+            }
+          }
+        `;
+        
+        const domainResult = await client.query(domainQuery, {}).toPromise();
+        
+        if (domainResult.data?.shop?.domain?.url) {
+          const realDomainUrl = domainResult.data.shop.domain.url;
+          const realApiUrl = realDomainUrl.endsWith('/') 
+            ? `${realDomainUrl}graphql/`
+            : `${realDomainUrl}/graphql/`;
+            
+          logger.info(
+            {
+              localhost: authData.saleorApiUrl,
+              realDomain: realDomainUrl,
+              realApiUrl: realApiUrl,
+            },
+            "获取到真实域名，更新API URL"
+          );
+          
+          // 更新为真实的API URL
+          authData.saleorApiUrl = realApiUrl;
+          
+          // 同时更新domain字段
+          try {
+            const realDomainHost = new URL(realDomainUrl).hostname;
+            authData.domain = realDomainHost;
+            logger.info(`更新domain字段: ${realDomainHost}`);
+          } catch (error) {
+            logger.warn(`无法解析域名: ${realDomainUrl}`);
+          }
+        } else {
+          logger.warn("无法从shop查询中获取域名信息");
+        }
+      } catch (error) {
+        logger.error(
+          { 
+            error: error instanceof Error ? error.message : "未知错误",
+            stack: error instanceof Error ? error.stack : undefined,
+          },
+          "查询真实域名失败，继续使用localhost"
+        );
+      }
+    }
+
+    // 测试与Saleor实例的连接（现在使用可能已更新的URL）
+    const connectionResult = await testSaleorConnection(authData.saleorApiUrl, authData.token);
+    
+    if (!connectionResult.success) {
+      logger.warn(
+        { 
+          domain: authData.domain, 
+          saleorApiUrl: authData.saleorApiUrl,
+          error: connectionResult.error,
+          details: connectionResult.details 
+        }, 
+        "Saleor连接测试失败，但继续注册流程"
+      );
+      
+      // 对于localhost，记录警告但继续注册
+      if (connectionResult.error === "LOCALHOST_NOT_ACCESSIBLE") {
+        logger.info("检测到localhost URL，跳过连接测试，继续注册流程");
+      } else {
+        // 对于其他连接错误，记录详细信息但仍然尝试注册
+        logger.error(
+          { 
+            connectionError: connectionResult.error,
+            errorDetails: connectionResult.details 
+          },
+          "Saleor连接失败，但尝试继续注册流程"
+        );
+      }
+    } else {
+      logger.info(
+        { connectionDetails: connectionResult.details },
+        "Saleor连接测试成功"
+      );
     }
 
     // 尝试保存认证数据到APL
