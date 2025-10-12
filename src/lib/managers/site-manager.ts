@@ -94,23 +94,21 @@ export class SiteManager {
       throw new Error("该域名已经注册过了");
     }
 
-    const now = new Date().toISOString();
-    const site: NewSite = {
+    const siteData = {
       id: randomId(),
       domain: input.domain,
       name: shopName, // 使用从验证中获取的商店名称
       saleorApiUrl: input.saleorApiUrl,
-      clientIP: input.clientIP || null,
-      appId: input.appId || null,
-      status: "pending", // 默认待审批
-      requestedAt: now,
-      notes: validationNotes || null, // 包含验证注释
+      ...(input.clientIP && { clientIP: input.clientIP }),
+      ...(input.appId && { appId: input.appId }),
+      status: "pending" as const, // 默认待审批
+      ...(validationNotes && { notes: validationNotes }),
     };
 
-    await db.insert(sites).values(site);
-    logger.info({ id: site.id, domain: input.domain }, "站点注册成功");
+    await db.insert(sites).values(siteData);
+    logger.info({ id: siteData.id, domain: input.domain }, "站点注册成功");
 
-    return site as Site;
+    return siteData as Site;
   }
 
   /**
