@@ -1,10 +1,10 @@
 import { createManifestHandler } from "@saleor/app-sdk/handlers/next";
-import { AppManifest } from "@saleor/app-sdk/types";
+import type { AppManifest } from "@saleor/app-sdk/types";
 
 import packageJson from "../../../package.json";
 
 export default createManifestHandler({
-  async manifestFactory(context: any) {
+  async manifestFactory(context) {
     const manifest: AppManifest = {
       name: packageJson.name,
       tokenTargetUrl: `${context.appBaseUrl}/api/register`,
@@ -15,12 +15,12 @@ export default createManifestHandler({
       requiredSaleorVersion: ">=3.13",
       webhooks: [
         {
-          name: "Transaction Action Request",
-          asyncEvents: ["TRANSACTION_ACTION_REQUEST"],
+          name: "Transaction Initialize",
+          syncEvents: ["TRANSACTION_INITIALIZE_SESSION"],
           query: `
             subscription {
               event {
-                ... on TransactionActionRequest {
+                ... on TransactionInitializeSession {
                   action {
                     amount
                     currency
@@ -28,12 +28,66 @@ export default createManifestHandler({
                   }
                   transaction {
                     id
+                    reference
+                  }
+                  sourceObject {
+                    ... on Checkout {
+                      id
+                      email
+                      totalPrice {
+                        gross {
+                          amount
+                          currency
+                        }
+                      }
+                    }
+                    ... on Order {
+                      id
+                      email
+                      total {
+                        gross {
+                          amount
+                          currency
+                        }
+                      }
+                    }
                   }
                 }
               }
             }
           `,
-          targetUrl: `${context.appBaseUrl}/api/webhooks/transaction-action`,
+          targetUrl: `${context.appBaseUrl}/api/webhooks/transaction-initialize`,
+          isActive: true,
+        },
+        {
+          name: "Transaction Process",
+          syncEvents: ["TRANSACTION_PROCESS_SESSION"],
+          query: `
+            subscription {
+              event {
+                ... on TransactionProcessSession {
+                  action {
+                    amount
+                    currency
+                    actionType
+                  }
+                  transaction {
+                    id
+                    reference
+                  }
+                  sourceObject {
+                    ... on Checkout {
+                      id
+                    }
+                    ... on Order {
+                      id
+                    }
+                  }
+                }
+              }
+            }
+          `,
+          targetUrl: `${context.appBaseUrl}/api/webhooks/transaction-process`,
           isActive: true,
         },
       ],
