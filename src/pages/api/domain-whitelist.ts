@@ -1,18 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import {
-  processSaleorProtectedHandler,
-  type ProtectedHandlerContext,
-} from "@saleor/app-sdk/handlers/next";
-import { saleorApp } from "../../saleor-app";
 import { domainWhitelistManager } from "../../lib/managers/domain-whitelist-manager";
 import { createLogger } from "../../lib/logger";
+import { requirePluginAdmin } from "../../lib/auth/plugin-admin-auth";
 
 const logger = createLogger({ component: "DomainWhitelistAPI" });
 
 async function handleGet(
   _req: NextApiRequest,
   res: NextApiResponse,
-  _ctx: ProtectedHandlerContext,
 ) {
   try {
     const whitelist = await domainWhitelistManager.getAll();
@@ -29,7 +24,6 @@ async function handleGet(
 async function handlePost(
   req: NextApiRequest,
   res: NextApiResponse,
-  _ctx: ProtectedHandlerContext,
 ) {
   try {
     const { domainPattern, description, isActive } = req.body as {
@@ -61,7 +55,7 @@ async function handlePost(
   }
 }
 
-async function handlePut(req: NextApiRequest, res: NextApiResponse, _ctx: ProtectedHandlerContext) {
+async function handlePut(req: NextApiRequest, res: NextApiResponse) {
   try {
     const { id } = req.query;
     const { domainPattern, description, isActive } = req.body as {
@@ -103,7 +97,6 @@ async function handlePut(req: NextApiRequest, res: NextApiResponse, _ctx: Protec
 async function handleDelete(
   req: NextApiRequest,
   res: NextApiResponse,
-  _ctx: ProtectedHandlerContext,
 ) {
   try {
     const { id } = req.query;
@@ -138,7 +131,6 @@ async function handleDelete(
 async function handleApprove(
   req: NextApiRequest,
   res: NextApiResponse,
-  _ctx: ProtectedHandlerContext,
 ) {
   try {
     const { id } = req.query;
@@ -175,7 +167,6 @@ async function handleApprove(
 async function handleReject(
   req: NextApiRequest,
   res: NextApiResponse,
-  _ctx: ProtectedHandlerContext,
 ) {
   try {
     const { id } = req.query;
@@ -209,33 +200,33 @@ async function handleReject(
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    // 使用Saleor保护处理器验证请求
-    const ctx = await processSaleorProtectedHandler({
-      req,
-      apl: saleorApp.apl,
-    });
+    // 使用插件管理员认证验证请求
+    const isAuthorized = await requirePluginAdmin(req, res);
+    if (!isAuthorized) {
+      return; // requirePluginAdmin 已经设置了响应
+    }
 
     // 根据HTTP方法和路径路由请求
     const { action } = req.query;
 
     if (req.method === "POST" && action === "approve") {
-      return await handleApprove(req, res, ctx);
+      return await handleApprove(req, res);
     }
 
     if (req.method === "POST" && action === "reject") {
-      return await handleReject(req, res, ctx);
+      return await handleReject(req, res);
     }
 
     // 根据HTTP方法路由请求
     switch (req.method) {
       case "GET":
-        return await handleGet(req, res, ctx);
+        return await handleGet(req, res);
       case "POST":
-        return await handlePost(req, res, ctx);
+        return await handlePost(req, res);
       case "PUT":
-        return await handlePut(req, res, ctx);
+        return await handlePut(req, res);
       case "DELETE":
-        return await handleDelete(req, res, ctx);
+        return await handleDelete(req, res);
       default:
         return res.status(405).json({
           success: false,
