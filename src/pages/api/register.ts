@@ -437,21 +437,12 @@ const baseHandler = createAppRegisterHandler({
         "从Saleor回调中提取的信息",
       );
 
-      // 检查站点是否已经授权（支持域名和IP两种方式）
-      const isSiteAuthorized = await siteManager.isAuthorized(
-        saleorDomain,
-        realClientIP || undefined,
-      );
-      if (!isSiteAuthorized) {
-        logger.warn(`站点未被授权，拒绝安装: 域名=${saleorDomain}, IP=${realClientIP || "未知"}`);
-        // 注意：这里我们不直接返回错误响应，因为这是Saleor的回调处理
-        // 授权检查应该在注册流程的其他部分进行
-      }
+      // 先保存域名和IP到数据库（作为待审核记录），再检查授权
 
       // 检查域名站点是否已经注册
       const existingSite = await siteManager.getByDomain(saleorDomain);
       if (!existingSite) {
-        // 域名站点尚未注册，先注册域名
+        // 域名站点尚未注册，先注册域名（默认为待审核状态）
         logger.info(`域名站点尚未注册，开始注册: ${saleorDomain}`);
 
         // 注册域名站点（包含URL验证）
@@ -474,7 +465,7 @@ const baseHandler = createAppRegisterHandler({
           logger.info(`IP站点尚未注册，开始注册: ${realClientIP}`);
 
           try {
-            // 注册IP站点
+            // 注册IP站点（默认为待审核状态）
             const registeredIPSite = await siteManager.register({
               domain: realClientIP,
               name: `Saleor Store IP (${realClientIP})`,
@@ -496,6 +487,23 @@ const baseHandler = createAppRegisterHandler({
         }
       } else {
         logger.info("未获取到有效的真实客户端IP，跳过IP站点注册");
+      }
+
+      // 现在检查站点是否已经授权（支持域名和IP两种方式）
+      const isSiteAuthorized = await siteManager.isAuthorized(
+        saleorDomain,
+        realClientIP || undefined,
+      );
+      if (!isSiteAuthorized) {
+        const errorMsg = `站点未被授权，拒绝安装: 域名=${saleorDomain}, IP=${realClientIP || "未知"}`;
+        logger.error({
+          domain: saleorDomain,
+          ip: realClientIP,
+          saleorApiUrl,
+        }, errorMsg);
+        
+        // 抛出错误以阻止安装，但域名和IP已经保存到数据库中待管理员审核
+        throw new Error(`未授权访问: 域名 '${saleorDomain}' 和 IP '${realClientIP || "未知"}' 都未在授权列表中。记录已保存，请联系管理员审核授权。`);
       }
 
       // 检查数据库中是否有白名单配置（作为额外的安全层）
