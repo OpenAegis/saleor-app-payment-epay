@@ -97,11 +97,17 @@ export class SiteManager {
     const now = new Date().toISOString();
     const site: NewSite = {
       id: randomId(),
-      ...input,
+      domain: input.domain,
       name: shopName, // 使用从验证中获取的商店名称
-      notes: validationNotes || undefined, // 包含验证注释
+      saleorApiUrl: input.saleorApiUrl,
+      clientIP: input.clientIP || null,
+      appId: input.appId || null,
       status: "pending", // 默认待审批
       requestedAt: now,
+      approvedAt: null,
+      approvedBy: null,
+      notes: validationNotes || null, // 包含验证注释
+      lastActiveAt: null,
       createdAt: now,
       updatedAt: now,
     };
