@@ -61,6 +61,7 @@ export const sites = sqliteTable("sites", {
   domain: text("domain").notNull().unique(), // 站点域名，如 shop.example.com
   name: text("name").notNull(), // 站点名称
   saleorApiUrl: text("saleor_api_url").notNull(), // Saleor API地址
+  clientIP: text("client_ip"), // 客户端真实IP地址
   appId: text("app_id"), // Saleor App ID
   status: text("status").notNull().default("pending"), // pending, approved, rejected, suspended
   requestedAt: text("requested_at")
