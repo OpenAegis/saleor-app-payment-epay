@@ -448,44 +448,54 @@ const baseHandler = createAppRegisterHandler({
         // 授权检查应该在注册流程的其他部分进行
       }
 
-      // 检查站点是否已经注册
+      // 检查域名站点是否已经注册
       const existingSite = await siteManager.getByDomain(saleorDomain);
       if (!existingSite) {
-        // 站点尚未注册，先注册站点
-        logger.info(`站点尚未注册，开始注册: ${saleorDomain}`);
+        // 域名站点尚未注册，先注册域名
+        logger.info(`域名站点尚未注册，开始注册: ${saleorDomain}`);
 
-        // 注册站点（包含URL验证）
+        // 注册域名站点（包含URL验证）
         const registeredSite = await siteManager.register({
           domain: saleorDomain,
           name: `Saleor Store (${saleorDomain})`,
           saleorApiUrl,
         });
 
-        // 如果我们获取到了真实IP，将其添加到站点备注中
-        if (realClientIP) {
-          logger.info(`更新站点备注，添加真实客户端IP: ${realClientIP}`);
-          await siteManager.update(registeredSite.id, {
-            notes: `真实客户端IP: ${realClientIP}${
-              registeredSite.notes ? ` | ${registeredSite.notes}` : ""
-            }`,
-          });
-        }
-
-        logger.info(`站点注册成功: ${saleorDomain} from ${saleorApiUrl}`);
+        logger.info(`域名站点注册成功: ${saleorDomain} from ${saleorApiUrl}`);
       } else {
-        // 站点已注册，更新信息
-        logger.info(`站点已注册: ${saleorDomain}, 状态: ${existingSite.status}`);
+        // 域名站点已注册，更新信息
+        logger.info(`域名站点已注册: ${saleorDomain}, 状态: ${existingSite.status}`);
+      }
 
-        // 如果我们获取到了真实IP，更新站点备注
-        if (realClientIP) {
-          logger.info(`更新站点备注，添加真实客户端IP: ${realClientIP}`);
-          const updatedNotes = `真实客户端IP: ${realClientIP}${
-            existingSite.notes ? ` | ${existingSite.notes}` : ""
-          }`;
-          await siteManager.update(existingSite.id, {
-            notes: updatedNotes,
-          });
+      // 如果获取到了真实IP，同时注册IP站点
+      if (realClientIP && realClientIP !== saleorDomain) {
+        const existingIPSite = await siteManager.getByDomain(realClientIP);
+        if (!existingIPSite) {
+          logger.info(`IP站点尚未注册，开始注册: ${realClientIP}`);
+
+          try {
+            // 注册IP站点
+            const registeredIPSite = await siteManager.register({
+              domain: realClientIP,
+              name: `Saleor Store IP (${realClientIP})`,
+              saleorApiUrl,
+            });
+
+            logger.info(`IP站点注册成功: ${realClientIP} from ${saleorApiUrl}`);
+          } catch (error) {
+            logger.warn(
+              { 
+                ip: realClientIP, 
+                error: error instanceof Error ? error.message : "未知错误" 
+              },
+              "IP站点注册失败，但继续流程"
+            );
+          }
+        } else {
+          logger.info(`IP站点已注册: ${realClientIP}, 状态: ${existingIPSite.status}`);
         }
+      } else {
+        logger.info("未获取到有效的真实客户端IP，跳过IP站点注册");
       }
 
       // 检查数据库中是否有白名单配置（作为额外的安全层）
