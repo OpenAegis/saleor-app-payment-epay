@@ -29,14 +29,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       await initializeDatabase();
       logger.info("数据库初始化完成");
-    } catch (_error) {
-      logger.error("数据库初始化失败");
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : "未知错误" },
+        "数据库初始化失败",
+      );
       // 继续执行，可能数据库已经存在
     }
 
     // 从请求中提取Saleor信息
     const saleorApiUrl = req.headers["saleor-api-url"] as string;
     const saleorDomain = req.headers["saleor-domain"] as string;
+
+    // 添加详细的请求头日志
+    logger.info(
+      {
+        headers: {
+          "saleor-api-url": saleorApiUrl,
+          "saleor-domain": saleorDomain,
+          host: req.headers["host"],
+          origin: req.headers["origin"],
+          referer: req.headers["referer"],
+          "user-agent": req.headers["user-agent"],
+        },
+        allHeaders: JSON.stringify(req.headers),
+      },
+      "接收到的完整请求头信息",
+    );
 
     if (saleorApiUrl && saleorDomain) {
       logger.info(`尝试注册新站点: saleorApiUrl=${saleorApiUrl}, saleorDomain=${saleorDomain}`);
@@ -46,15 +65,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // saleorApiUrl 通常是完整的 URL，如 https://your-store.saleor.cloud/graphql/
         let domain: string;
         try {
-          domain = new URL(saleorApiUrl).hostname;
-          logger.info(`从 saleorApiUrl 成功提取域名: ${domain} from ${saleorApiUrl}`);
-        } catch (_error) {
+          const urlObj = new URL(saleorApiUrl);
+          domain = urlObj.hostname;
+          logger.info(
+            {
+              fullUrl: saleorApiUrl,
+              protocol: urlObj.protocol,
+              hostname: urlObj.hostname,
+              port: urlObj.port,
+              pathname: urlObj.pathname,
+            },
+            `从 saleorApiUrl 成功提取域名: ${domain}`,
+          );
+        } catch (urlError) {
           logger.error(
+            { error: urlError instanceof Error ? urlError.message : "未知错误" },
             `无法从 saleorApiUrl 提取域名，回退到 saleorDomain: saleorApiUrl=${saleorApiUrl}, saleorDomain=${saleorDomain}`,
           );
           // 回退到原来的逻辑
-          domain = new URL(`https://${saleorDomain}`).hostname;
-          logger.info(`从 saleorDomain 提取域名: ${domain} from ${saleorDomain}`);
+          try {
+            const urlObj = new URL(`https://${saleorDomain}`);
+            domain = urlObj.hostname;
+            logger.info(
+              {
+                fullUrl: `https://${saleorDomain}`,
+                protocol: urlObj.protocol,
+                hostname: urlObj.hostname,
+                port: urlObj.port,
+              },
+              `从 saleorDomain 提取域名: ${domain}`,
+            );
+          } catch (fallbackError) {
+            logger.error(
+              { error: fallbackError instanceof Error ? fallbackError.message : "未知错误" },
+              `无法从 saleorDomain 提取域名，使用原始值: ${saleorDomain}`,
+            );
+            // 最后的回退方案
+            domain = saleorDomain;
+            logger.info(`使用原始 saleorDomain 值作为域名: ${domain}`);
+          }
         }
 
         // 检查数据库中是否有白名单配置
@@ -101,8 +150,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
 
         logger.info(`站点注册成功: ${domain} from ${saleorApiUrl}`);
-      } catch (_error) {
-        logger.error("站点注册失败");
+      } catch (error) {
+        logger.error(
+          { error: error instanceof Error ? error.message : "未知错误" },
+          "站点注册失败",
+        );
 
         // 如果是验证失败，返回错误但不阻止Saleor的注册流程
         // 管理员稍后可以手动处理
@@ -112,8 +164,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 继续执行原始的Saleor注册流程
     return baseHandler(req, res);
-  } catch (_error) {
-    logger.error("注册处理器错误");
+  } catch (error) {
+    logger.error({ error: error instanceof Error ? error.message : "未知错误" }, "注册处理器错误");
     return baseHandler(req, res);
   }
 }
