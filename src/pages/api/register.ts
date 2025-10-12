@@ -39,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const saleorDomain = req.headers["saleor-domain"] as string;
 
     if (saleorApiUrl && saleorDomain) {
-      logger.info("尝试注册新站点");
+      logger.info(`尝试注册新站点: saleorApiUrl=${saleorApiUrl}, saleorDomain=${saleorDomain}`);
 
       try {
         // 从 saleorApiUrl 中提取域名，而不是直接使用 saleorDomain
@@ -47,17 +47,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         let domain: string;
         try {
           domain = new URL(saleorApiUrl).hostname;
+          logger.info(`从 saleorApiUrl 成功提取域名: ${domain} from ${saleorApiUrl}`);
         } catch (_error) {
-          logger.error("无法从 saleorApiUrl 提取域名");
+          logger.error(
+            `无法从 saleorApiUrl 提取域名，回退到 saleorDomain: saleorApiUrl=${saleorApiUrl}, saleorDomain=${saleorDomain}`,
+          );
           // 回退到原来的逻辑
           domain = new URL(`https://${saleorDomain}`).hostname;
+          logger.info(`从 saleorDomain 提取域名: ${domain} from ${saleorDomain}`);
         }
 
         // 检查数据库中是否有白名单配置
         const whitelist = await domainWhitelistManager.getActive();
         if (whitelist.length === 0) {
           // 如果没有白名单配置，添加当前域名到白名单，状态设置为待定
-          logger.info("数据库中没有白名单配置，添加默认配置");
+          logger.info(`数据库中没有白名单配置，添加默认配置: ${domain}`);
           await domainWhitelistManager.add({
             domainPattern: domain,
             description: `自动添加的域名 - 待审核 (${new Date().toLocaleString()})`,
@@ -65,7 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           });
 
           // 返回安装失败，提示需要审核
-          logger.warn("域名已添加到白名单但需要审核，拒绝安装");
+          logger.warn(`域名已添加到白名单但需要审核，拒绝安装: ${domain}`);
           return res.status(403).json({
             success: false,
             error: {
@@ -78,7 +82,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // 检查域名是否在白名单中
         const isDomainAllowed = await domainWhitelistManager.isAllowed(domain);
         if (!isDomainAllowed) {
-          logger.warn("域名不在白名单中，拒绝注册");
+          logger.warn(`域名不在白名单中，拒绝注册: ${domain}`);
           // 返回错误响应
           return res.status(403).json({
             success: false,
@@ -96,7 +100,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           saleorApiUrl,
         });
 
-        logger.info("站点注册成功");
+        logger.info(`站点注册成功: ${domain} from ${saleorApiUrl}`);
       } catch (_error) {
         logger.error("站点注册失败");
 
