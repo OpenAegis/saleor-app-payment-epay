@@ -25,7 +25,9 @@ export { schema };
  */
 export async function initializeDatabase() {
   try {
-    // 创建gateways表 (支付渠道)
+    // 按正确的顺序创建表，确保外键引用的表先创建
+
+    // 1. 创建gateways表 (支付渠道) - 没有外键依赖
     await tursoClient.execute(`
       CREATE TABLE IF NOT EXISTS gateways (
         id TEXT PRIMARY KEY,
@@ -45,24 +47,7 @@ export async function initializeDatabase() {
       )
     `);
 
-    // 创建channels表 (支付通道)
-    await tursoClient.execute(`
-      CREATE TABLE IF NOT EXISTS channels (
-        id TEXT PRIMARY KEY,
-        gateway_id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        description TEXT,
-        type TEXT NOT NULL,
-        icon TEXT,
-        enabled INTEGER NOT NULL DEFAULT 1,
-        priority INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-        FOREIGN KEY (gateway_id) REFERENCES gateways(id) ON DELETE CASCADE
-      )
-    `);
-
-    // 创建sites表
+    // 2. 创建sites表 - 没有外键依赖
     await tursoClient.execute(`
       CREATE TABLE IF NOT EXISTS sites (
         id TEXT PRIMARY KEY,
@@ -81,7 +66,7 @@ export async function initializeDatabase() {
       )
     `);
 
-    // 创建domain_whitelist表 (域名白名单)
+    // 3. 创建domain_whitelist表 - 没有外键依赖
     await tursoClient.execute(`
       CREATE TABLE IF NOT EXISTS domain_whitelist (
         id TEXT PRIMARY KEY,
@@ -90,6 +75,23 @@ export async function initializeDatabase() {
         is_active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+
+    // 4. 创建channels表 (支付通道) - 依赖gateways表
+    await tursoClient.execute(`
+      CREATE TABLE IF NOT EXISTS channels (
+        id TEXT PRIMARY KEY,
+        gateway_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        type TEXT NOT NULL,
+        icon TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        priority INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (gateway_id) REFERENCES gateways(id) ON DELETE CASCADE
       )
     `);
 

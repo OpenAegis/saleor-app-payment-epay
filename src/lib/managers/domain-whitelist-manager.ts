@@ -1,4 +1,4 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { db } from "../db/turso-client";
 import { domainWhitelist, type DomainWhitelist, type NewDomainWhitelist } from "../db/schema";
 import { randomId } from "../random-id";
@@ -131,6 +131,22 @@ export class DomainWhitelistManager {
     // 检查域名是否匹配任何白名单模式
     for (const pattern of activePatterns) {
       try {
+        // 特殊处理localhost，不允许通过白名单验证
+        if (domain === "localhost") {
+          logger.info({ domain }, "拒绝localhost域名");
+          return false;
+        }
+
+        // 支持IP地址格式的白名单
+        // 如果模式是IP地址格式，直接比较
+        if (this.isIPAddress(pattern.domainPattern) && this.isIPAddress(domain)) {
+          if (pattern.domainPattern === domain) {
+            logger.info({ domain, pattern: pattern.domainPattern }, "IP地址匹配白名单模式");
+            return true;
+          }
+        }
+
+        // 对于域名模式，使用正则表达式匹配
         const regex = new RegExp(pattern.domainPattern);
         if (regex.test(domain)) {
           logger.info({ domain, pattern: pattern.domainPattern }, "域名匹配白名单模式");
@@ -152,6 +168,27 @@ export class DomainWhitelistManager {
 
     logger.info({ domain }, "域名不在白名单中");
     return false;
+  }
+
+  /**
+   * 检查字符串是否为IP地址格式
+   */
+  private isIPAddress(str: string): boolean {
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (!ipRegex.test(str)) {
+      return false;
+    }
+
+    // 验证每个数字部分是否在0-255范围内
+    const parts = str.split(".");
+    for (const part of parts) {
+      const num = parseInt(part, 10);
+      if (num < 0 || num > 255) {
+        return false;
+      }
+    }
+
+    return true;
   }
 }
 
