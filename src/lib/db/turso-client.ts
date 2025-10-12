@@ -28,29 +28,14 @@ export { schema };
  */
 export async function initializeDatabase() {
   try {
-    // 创建channels表 (支付通道)
-    await tursoClient.execute(`
-      CREATE TABLE IF NOT EXISTS channels (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT,
-        type TEXT NOT NULL,
-        icon TEXT,
-        enabled INTEGER NOT NULL DEFAULT 1,
-        priority INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )
-    `);
-
     // 创建gateways表 (支付渠道)
     await tursoClient.execute(`
       CREATE TABLE IF NOT EXISTS gateways (
         id TEXT PRIMARY KEY,
-        channel_id TEXT NOT NULL,
         name TEXT NOT NULL,
         description TEXT,
-        epay_name TEXT NOT NULL,
+        epay_url TEXT NOT NULL,
+        epay_pid TEXT NOT NULL,
         epay_key TEXT NOT NULL,
         icon TEXT,
         enabled INTEGER NOT NULL DEFAULT 1,
@@ -59,8 +44,24 @@ export async function initializeDatabase() {
         allowed_users TEXT NOT NULL DEFAULT '[]',
         is_global INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+
+    // 创建channels表 (支付通道)
+    await tursoClient.execute(`
+      CREATE TABLE IF NOT EXISTS channels (
+        id TEXT PRIMARY KEY,
+        gateway_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        type TEXT NOT NULL,
+        icon TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        priority INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-        FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
+        FOREIGN KEY (gateway_id) REFERENCES gateways(id) ON DELETE CASCADE
       )
     `);
 
@@ -85,7 +86,7 @@ export async function initializeDatabase() {
 
     // 创建索引
     await tursoClient.execute(`
-      CREATE INDEX IF NOT EXISTS gateway_channel_idx ON gateways(channel_id)
+      CREATE INDEX IF NOT EXISTS channel_gateway_idx ON channels(gateway_id)
     `);
     
     await tursoClient.execute(`

@@ -2,31 +2,15 @@ import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 
 /**
- * 支付通道表
- * 通道是支付方式的分类，如"支付宝通道"、"微信通道"等
- */
-export const channels = sqliteTable("channels", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(), // 通道名称，如"支付宝通道"
-  description: text("description"),
-  type: text("type").notNull(), // 支付类型：alipay, wxpay, qqpay, bank, jdpay, paypal
-  icon: text("icon"),
-  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-  priority: integer("priority").notNull().default(0),
-  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
-  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
-});
-
-/**
  * 支付渠道表
- * 渠道是具体的易支付配置，包含易支付站点名称、密钥等
+ * 渠道是具体的易支付配置，包含易支付API地址、商户ID、密钥等
  */
 export const gateways = sqliteTable("gateways", {
   id: text("id").primaryKey(),
-  channelId: text("channel_id").notNull().references(() => channels.id, { onDelete: "cascade" }),
-  name: text("name").notNull(), // 渠道名称，如"易支付1"、"易支付2"
+  name: text("name").notNull(), // 渠道名称，如"易支付主渠道"、"易支付备用渠道"
   description: text("description"),
-  epayName: text("epay_name").notNull(), // 易支付站点名称
+  epayUrl: text("epay_url").notNull(), // 易支付API地址
+  epayPid: text("epay_pid").notNull(), // 易支付商户ID
   epayKey: text("epay_key").notNull(), // 易支付密钥
   icon: text("icon"),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
@@ -37,6 +21,23 @@ export const gateways = sqliteTable("gateways", {
   allowedUsers: text("allowed_users").notNull().default("[]"), // JSON数组，白名单用户列表
   isGlobal: integer("is_global", { mode: "boolean" }).notNull().default(true), // 是否为全局渠道
   
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+});
+
+/**
+ * 支付通道表
+ * 通道是支付方式的分类，如"支付宝通道"、"微信通道"等，使用指定的渠道进行支付
+ */
+export const channels = sqliteTable("channels", {
+  id: text("id").primaryKey(),
+  gatewayId: text("gateway_id").notNull().references(() => gateways.id, { onDelete: "cascade" }),
+  name: text("name").notNull(), // 通道名称，如"支付宝通道"
+  description: text("description"),
+  type: text("type").notNull(), // 支付类型：alipay, wxpay, qqpay, bank, jdpay, paypal 或自定义类型
+  icon: text("icon"),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  priority: integer("priority").notNull().default(0),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });
@@ -70,6 +71,6 @@ export type Site = typeof sites.$inferSelect;
 export type NewSite = typeof sites.$inferInsert;
 
 // 索引定义
-export const gatewayIndexes = {
-  channelIdIndex: unique("gateway_channel_idx").on(gateways.channelId),
+export const channelIndexes = {
+  gatewayIdIndex: unique("channel_gateway_idx").on(channels.gatewayId),
 };

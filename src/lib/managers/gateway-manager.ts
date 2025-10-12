@@ -1,4 +1,4 @@
-import { eq, and, desc, asc } from "drizzle-orm";
+import { eq, and, desc, asc, sql, inArray } from "drizzle-orm";
 import { db } from "../db/turso-client";
 import { gateways, channels, type Gateway, type NewGateway } from "../db/schema";
 import { randomId } from "../random-id";
@@ -67,13 +67,23 @@ export class GatewayManager {
   }
 
   /**
-   * 获取指定渠道的所有通道
+   * 获取被指定通道使用的渠道
    */
-  async getByChannel(channelId: string): Promise<Gateway[]> {
+  async getUsedByChannels(): Promise<Gateway[]> {
+    // 获取被通道使用的渠道ID
+    const usedGatewayIds = await db
+      .selectDistinct({ gatewayId: channels.gatewayId })
+      .from(channels);
+    
+    if (usedGatewayIds.length === 0) {
+      return [];
+    }
+    
+    const gatewayIds = usedGatewayIds.map(c => c.gatewayId);
     const result = await db
       .select()
       .from(gateways)
-      .where(eq(gateways.channelId, channelId))
+      .where(inArray(gateways.id, gatewayIds))
       .orderBy(desc(gateways.priority), asc(gateways.createdAt));
     
     // 解析allowedUsers JSON
@@ -84,18 +94,13 @@ export class GatewayManager {
   }
 
   /**
-   * 获取启用的通道
+   * 获取启用的渠道
    */
-  async getEnabled(channelId?: string): Promise<Gateway[]> {
-    const conditions = [eq(gateways.enabled, true)];
-    if (channelId) {
-      conditions.push(eq(gateways.channelId, channelId));
-    }
-
+  async getEnabled(): Promise<Gateway[]> {
     const result = await db
       .select()
       .from(gateways)
-      .where(and(...conditions))
+      .where(eq(gateways.enabled, true))
       .orderBy(desc(gateways.priority), asc(gateways.createdAt));
     
     // 解析allowedUsers JSON
@@ -168,17 +173,6 @@ export class GatewayManager {
     return result.length > 0;
   }
 
-  /**
-   * 删除渠道下的所有通道
-   */
-  async deleteByChannel(channelId: string): Promise<number> {
-    const result = await db
-      .delete(gateways)
-      .where(eq(gateways.channelId, channelId))
-      .returning();
-    
-    return result.length;
-  }
 
   /**
    * 切换通道启用状态
@@ -201,29 +195,25 @@ export class GatewayManager {
   }
 
   /**
-   * 按支付类型获取渠道（通过通道类型）
+   * 按支付类型获取渠道（通过通道类型查找使用的渠道）
    */
   async getByType(type: string): Promise<Gateway[]> {
+    // 首先获取指定类型的通道
+    const channelResults = await db
+      .select({ gatewayId: channels.gatewayId })
+      .from(channels)
+      .where(eq(channels.type, type));
+    
+    if (channelResults.length === 0) {
+      return [];
+    }
+    
+    // 获取这些通道使用的渠道
+    const gatewayIds = channelResults.map(c => c.gatewayId);
     const result = await db
-      .select({
-        id: gateways.id,
-        channelId: gateways.channelId,
-        name: gateways.name,
-        description: gateways.description,
-        epayName: gateways.epayName,
-        epayKey: gateways.epayKey,
-        icon: gateways.icon,
-        enabled: gateways.enabled,
-        priority: gateways.priority,
-        isMandatory: gateways.isMandatory,
-        allowedUsers: gateways.allowedUsers,
-        isGlobal: gateways.isGlobal,
-        createdAt: gateways.createdAt,
-        updatedAt: gateways.updatedAt,
-      })
+      .select()
       .from(gateways)
-      .innerJoin(channels, eq(gateways.channelId, channels.id))
-      .where(eq(channels.type, type))
+      .where(inArray(gateways.id, gatewayIds))
       .orderBy(desc(gateways.priority), asc(gateways.createdAt));
     
     // 解析allowedUsers JSON

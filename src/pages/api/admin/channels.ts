@@ -1,6 +1,5 @@
 import { type NextApiRequest, type NextApiResponse } from "next";
 import { channelManager } from "../../../lib/managers/channel-manager";
-import { gatewayManager } from "../../../lib/managers/gateway-manager";
 import { CreateChannelSchema, UpdateChannelSchema } from "../../../lib/models/channel";
 import { requirePluginAdmin } from "../../../lib/auth/plugin-admin-auth";
 
@@ -55,16 +54,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       case "DELETE": {
-        // 删除渠道
+        // 删除通道
         const { id } = req.query;
         if (!id || typeof id !== "string") {
           return res.status(400).json({ error: "Channel ID is required" });
         }
 
-        // 先删除该渠道下的所有通道
-        await gatewayManager.deleteByChannel(id);
-        
-        // 再删除渠道
+        // 删除通道（由于外键约束，删除会自动级联）
         const deleted = await channelManager.delete(id);
         if (!deleted) {
           return res.status(404).json({ error: "Channel not found" });

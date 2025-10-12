@@ -5,10 +5,10 @@ import { z } from "zod";
  */
 export const GatewaySchema = z.object({
   id: z.string(),
-  channelId: z.string().min(1, "通道ID不能为空"), // 所属通道ID
   name: z.string().min(1, "渠道名称不能为空"),
   description: z.string().optional(),
-  epayName: z.string().min(1, "易支付站点名称不能为空"), // 易支付站点名称
+  epayUrl: z.string().url("易支付API地址必须是有效的URL").min(1, "易支付API地址不能为空"), // 易支付API地址
+  epayPid: z.string().min(1, "易支付商户ID不能为空"), // 易支付商户ID
   epayKey: z.string().min(1, "易支付密钥不能为空"), // 易支付密钥
   icon: z.string().optional(), // 图标URL
   enabled: z.boolean().default(true),
@@ -41,7 +41,6 @@ export type CreateGatewayAPIInput = Omit<CreateGatewayInput, 'allowedUsers'> & {
 export const UpdateGatewaySchema = GatewaySchema.partial().omit({
   id: true,
   createdAt: true,
-  channelId: true, // 不允许修改所属渠道
 });
 
 export type UpdateGatewayInput = z.infer<typeof UpdateGatewaySchema>;

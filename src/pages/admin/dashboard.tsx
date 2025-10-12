@@ -3,12 +3,15 @@ import { useRouter } from "next/router";
 import { Button, Box, Text } from "@saleor/macaw-ui";
 import SiteManager from "../../components/SiteManager";
 import ChannelManager from "../../components/ChannelManager";
+import GatewayManager from "../../components/GatewayManager";
+import type { Gateway } from "../../lib/models/gateway";
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState("sites");
+  const [selectedGateway, setSelectedGateway] = useState<Gateway | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -98,6 +101,12 @@ export default function AdminDashboard() {
               站点管理
             </Button>
             <Button
+              variant={activeTab === "gateways" ? "primary" : "secondary"}
+              onClick={() => setActiveTab("gateways")}
+            >
+              渠道管理
+            </Button>
+            <Button
               variant={activeTab === "channels" ? "primary" : "secondary"}
               onClick={() => setActiveTab("channels")}
             >
@@ -118,15 +127,27 @@ export default function AdminDashboard() {
           </Box>
         )}
 
+        {activeTab === "gateways" && (
+          <Box>
+            <Box marginBottom={4}>
+              <Text size={5} fontWeight="bold" marginBottom={2}>渠道管理</Text>
+              <Text size={3} color="default1">
+                管理易支付渠道配置（API地址、商户ID、密钥等）
+              </Text>
+            </Box>
+            <GatewayManager />
+          </Box>
+        )}
+
         {activeTab === "channels" && (
           <Box>
             <Box marginBottom={4}>
               <Text size={5} fontWeight="bold" marginBottom={2}>通道管理</Text>
               <Text size={3} color="default1">
-                管理易支付通道配置
+                管理支付通道配置（选择渠道和支付类型）
               </Text>
             </Box>
-            <ChannelManager onChannelSelect={() => {}} />
+            <ChannelManager />
           </Box>
         )}
       </Box>

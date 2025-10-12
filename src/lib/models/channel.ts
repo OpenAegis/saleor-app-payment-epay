@@ -13,13 +13,14 @@ export const PaymentTypeSchema = z.enum([
 ]);
 
 /**
- * 通道（Channel）- 支付方式的分类
+ * 通道（Channel）- 支付方式的分类，使用指定的渠道进行支付
  */
 export const ChannelSchema = z.object({
   id: z.string(),
+  gatewayId: z.string().min(1, "渠道ID不能为空"), // 使用的渠道ID
   name: z.string().min(1, "通道名称不能为空"),
   description: z.string().optional(),
-  type: PaymentTypeSchema,
+  type: z.string().min(1, "支付类型不能为空"), // 支付类型：alipay, wxpay, qqpay, bank, jdpay, paypal 或自定义类型
   icon: z.string().optional(), // 图标URL
   enabled: z.boolean().default(true),
   priority: z.number().int().min(0).default(0), // 优先级，数字越大优先级越高

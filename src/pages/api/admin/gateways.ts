@@ -17,14 +17,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     switch (req.method) {
       case "GET": {
-        // 获取通道列表，可按渠道ID筛选
-        const { channelId } = req.query;
-
-        const gateways =
-          channelId && typeof channelId === "string"
-            ? await gatewayManager.getByChannel(channelId)
-            : await gatewayManager.getAll();
-
+        // 获取渠道列表
+        const gateways = await gatewayManager.getAll();
         return res.status(200).json({ gateways });
       }
 
