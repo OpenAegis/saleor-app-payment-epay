@@ -39,7 +39,7 @@ const ConfigPage: NextPage = () => {
     const fetchConfig = async () => {
       try {
         setAuthError(null);
-        
+
         // 首先尝试使用公开端点诊断问题
         const diagnoseResponse = await fetch("/api/diagnose-config");
         if (diagnoseResponse.ok) {
@@ -81,7 +81,11 @@ const ConfigPage: NextPage = () => {
             }
           } else {
             const errorData = await epayResponse.json();
-            setAuthError((errorData && typeof errorData === "object" && "error" in errorData ? String(errorData.error) : "获取支付配置失败"));
+            setAuthError(
+              errorData && typeof errorData === "object" && "error" in errorData
+                ? String(errorData.error)
+                : "获取支付配置失败",
+            );
           }
         }
 
@@ -100,7 +104,11 @@ const ConfigPage: NextPage = () => {
             setIsPlaceholderUrl(urlData.isPlaceholder || false);
           } else {
             const errorData = await saleorUrlResponse.json();
-            setAuthError((errorData && typeof errorData === "object" && "error" in errorData ? String(errorData.error) : "获取Saleor URL失败"));
+            setAuthError(
+              errorData && typeof errorData === "object" && "error" in errorData
+                ? String(errorData.error)
+                : "获取Saleor URL失败",
+            );
           }
         }
       } catch (error) {
@@ -145,9 +153,10 @@ const ConfigPage: NextPage = () => {
         setEpayConfig(config);
       } else {
         const errorData = await response.json();
-        const errorMessage = errorData && typeof errorData === "object" && "error" in errorData 
-          ? String(errorData.error) 
-          : "Failed to save epay config";
+        const errorMessage =
+          errorData && typeof errorData === "object" && "error" in errorData
+            ? String(errorData.error)
+            : "Failed to save epay config";
         throw new Error(errorMessage);
       }
     } catch (error) {
@@ -201,9 +210,10 @@ const ConfigPage: NextPage = () => {
         setIsPlaceholderUrl(false);
       } else {
         const errorData = await response.json();
-        const errorMessage = errorData && typeof errorData === "object" && "error" in errorData 
-          ? String(errorData.error) 
-          : "Failed to save Saleor API URL";
+        const errorMessage =
+          errorData && typeof errorData === "object" && "error" in errorData
+            ? String(errorData.error)
+            : "Failed to save Saleor API URL";
         throw new Error(errorMessage);
       }
     } catch (error) {

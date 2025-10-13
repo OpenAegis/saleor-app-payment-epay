@@ -16,14 +16,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     logger.info("Checking auth data directly from database");
 
     // 查询认证表中的所有数据
-    const result = await tursoClient.execute(
-      "SELECT * FROM saleor_auth_data"
-    );
-    
+    const result = await tursoClient.execute("SELECT * FROM saleor_auth_data");
+
     logger.info(`Found ${result.rows.length} rows in auth table`);
 
     // 格式化数据
-    const authData = result.rows.map(row => ({
+    const authData = result.rows.map((row) => ({
       saleorApiUrl: row.saleor_api_url as string,
       domain: row.domain as string,
       token: row.token as string,
@@ -41,10 +39,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    logger.error("检查认证数据时出错: " + (error instanceof Error ? error.message : "Unknown error"));
-    return res.status(500).json({ 
+    logger.error(
+      "检查认证数据时出错: " + (error instanceof Error ? error.message : "Unknown error"),
+    );
+    return res.status(500).json({
       error: "Failed to check auth data",
-      details: error instanceof Error ? error.message : "Unknown error"
+      details: error instanceof Error ? error.message : "Unknown error",
     });
   }
 }

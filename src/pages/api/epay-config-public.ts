@@ -21,9 +21,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     logger.info("APL配置状态: " + JSON.stringify(aplConfigured));
 
     if (!aplConfigured.configured) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: "APL not configured",
-        details: aplConfigured.error?.message || "Unknown error"
+        details: aplConfigured.error?.message || "Unknown error",
       });
     }
 
@@ -33,10 +33,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 如果没有认证数据，返回空配置
     if (allAuthData.length === 0) {
-      return res.status(200).json({ 
+      return res.status(200).json({
         message: "No auth data found",
         configurations: [],
-        channelToConfigurationId: {}
+        channelToConfigurationId: {},
       });
     }
 
@@ -66,7 +66,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             "Error fetching epay config: " +
               (error instanceof Error ? error.message : "Unknown error"),
           );
-          return res.status(500).json({ error: "Failed to fetch config", details: error instanceof Error ? error.message : "Unknown error" });
+          return res
+            .status(500)
+            .json({
+              error: "Failed to fetch config",
+              details: error instanceof Error ? error.message : "Unknown error",
+            });
         }
 
       case "POST":
@@ -81,9 +86,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       "Unexpected error in epay-config-public API: " +
         (error instanceof Error ? error.message : "Unknown error"),
     );
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: "Internal server error",
-      details: error instanceof Error ? error.message : "Unknown error"
+      details: error instanceof Error ? error.message : "Unknown error",
     });
   }
 }

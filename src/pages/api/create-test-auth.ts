@@ -20,9 +20,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     logger.info("APL配置状态: " + JSON.stringify(aplConfigured));
 
     if (!aplConfigured.configured) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: "APL not configured",
-        details: aplConfigured.error?.message || "Unknown error"
+        details: aplConfigured.error?.message || "Unknown error",
       });
     }
 
@@ -32,7 +32,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       domain: "test-saleor-instance.saleor.cloud",
       token: "test-auth-token",
       appId: "test-app-id",
-      jwks: "{}"
+      jwks: "{}",
     };
 
     // 保存测试数据
@@ -46,13 +46,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({
       success: true,
       message: "Test auth data created successfully",
-      savedData
+      savedData,
     });
   } catch (error) {
-    logger.error("创建测试认证数据时出错: " + (error instanceof Error ? error.message : "Unknown error"));
-    return res.status(500).json({ 
+    logger.error(
+      "创建测试认证数据时出错: " + (error instanceof Error ? error.message : "Unknown error"),
+    );
+    return res.status(500).json({
       error: "Failed to create test auth data",
-      details: error instanceof Error ? error.message : "Unknown error"
+      details: error instanceof Error ? error.message : "Unknown error",
     });
   }
 }

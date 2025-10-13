@@ -16,9 +16,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     logger.info("APL配置状态: " + JSON.stringify(aplConfigured));
 
     if (!aplConfigured.configured) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: "APL not configured",
-        details: aplConfigured.error?.message || "Unknown error"
+        details: aplConfigured.error?.message || "Unknown error",
       });
     }
 
@@ -54,11 +54,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   } catch (error) {
     logger.error(
-      "Error in update-saleor-url-public API: " + (error instanceof Error ? error.message : "未知错误"),
+      "Error in update-saleor-url-public API: " +
+        (error instanceof Error ? error.message : "未知错误"),
     );
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: "Internal server error",
-      details: error instanceof Error ? error.message : "Unknown error"
+      details: error instanceof Error ? error.message : "Unknown error",
     });
   }
 }

@@ -26,12 +26,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 检查表结构
     try {
       const { tursoClient } = await import("../../lib/db/turso-client");
-      const tableInfo = await tursoClient.execute(
-        "PRAGMA table_info(saleor_auth_data)"
-      );
+      const tableInfo = await tursoClient.execute("PRAGMA table_info(saleor_auth_data)");
       logger.info("Auth table structure: " + JSON.stringify(tableInfo));
     } catch (error) {
-      logger.error("检查表结构时出错: " + (error instanceof Error ? error.message : "Unknown error"));
+      logger.error(
+        "检查表结构时出错: " + (error instanceof Error ? error.message : "Unknown error"),
+      );
     }
 
     return res.status(200).json({
@@ -43,9 +43,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   } catch (error) {
     logger.error("诊断配置时出错: " + (error instanceof Error ? error.message : "Unknown error"));
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: "Failed to diagnose config",
-      details: error instanceof Error ? error.message : "Unknown error"
+      details: error instanceof Error ? error.message : "Unknown error",
     });
   }
 }
