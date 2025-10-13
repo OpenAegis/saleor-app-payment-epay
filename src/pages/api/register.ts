@@ -64,7 +64,18 @@ export default createAppRegisterHandler({
    * You can restrict this to specific domains if needed
    */
   allowedSaleorUrls: [
-    (_saleorApiUrl: string) => {
+    (saleorApiUrl: string) => {
+      // 检查是否为localhost URL
+      try {
+        const url = new URL(saleorApiUrl);
+        if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+          // 拒绝localhost URL，让Saleor使用修正后的URL重新尝试
+          return false;
+        }
+      } catch (error) {
+        logger.error("解析Saleor API URL时出错: " + saleorApiUrl + ", 错误: " + (error instanceof Error ? error.message : "未知错误"));
+        return false;
+      }
       return true;
     },
   ],
