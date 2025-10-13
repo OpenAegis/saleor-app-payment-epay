@@ -1,4 +1,4 @@
-import { createAppRegisterHandler } from "@saleor/app-sdk/handlers/next";
+import { type NextApiRequest, type NextApiResponse } from "next";
 import { saleorApp } from "../../saleor-app";
 import { createLogger } from "../../lib/logger";
 import { env } from "../../../src/lib/env.mjs";
@@ -53,74 +53,152 @@ function correctSaleorApiUrl(saleorApiUrl: string, _saleorDomain: string | undef
 }
 
 /**
+ * 获取App ID
+ */
+async function getAppId(saleorApiUrl: string, token: string): Promise<string | undefined> {
+  try {
+    const response = await fetch(saleorApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        query: `
+        {
+          app{
+            id
+          }
+        }
+        `
+      })
+    });
+    
+    if (response.status !== 200) {
+      logger.error(`Could not get the app ID: Saleor API has response code ${response.status}`);
+      return undefined;
+    }
+    
+    const body: unknown = await response.json();
+    if (body && typeof body === "object" && "data" in body) {
+      const data = body.data;
+      if (data && typeof data === "object" && "app" in data) {
+        const app = data.app;
+        if (app && typeof app === "object" && "id" in app) {
+          return app.id as string;
+        }
+      }
+    }
+    return undefined;
+  } catch (error) {
+    logger.error("Could not get the app ID: " + (error instanceof Error ? error.message : "未知错误"));
+    return undefined;
+  }
+}
+
+/**
+ * 获取JWKS
+ */
+async function fetchRemoteJwks(saleorApiUrl: string): Promise<string | undefined> {
+  try {
+    const jwksUrl = saleorApiUrl.replace("/graphql/", "/.well-known/jwks.json");
+    const response = await fetch(jwksUrl);
+    const jwksText = await response.text();
+    return jwksText;
+  } catch (error) {
+    logger.error("Could not fetch the remote JWKS: " + (error instanceof Error ? error.message : "未知错误"));
+    return undefined;
+  }
+}
+
+/**
  * Required endpoint, called by Saleor to install app.
  * It will exchange tokens with app, so saleorApp.apl will contain token
  */
-export default createAppRegisterHandler({
-  apl: saleorApp.apl,
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
-  /**
-   * Allow all Saleor URLs for installation
-   * You can restrict this to specific domains if needed
-   */
-  allowedSaleorUrls: [
-    (_saleorApiUrl: string) => {
-      return true;
-    },
-  ],
-
-  /**
-   * 记录请求开始并输出所有请求内容
-   */
-  onRequestStart: async (request, { saleorDomain, saleorApiUrl }) => {
-    logger.info("Register请求开始");
-    logger.info("请求方法: " + request.method);
-    logger.info("请求URL: " + request.url);
-    logger.info("请求头信息: " + JSON.stringify(request.headers));
-    logger.info("请求参数: " + JSON.stringify(request.params));
-    
-    // 检查saleorApiUrl是否存在
-    if (saleorApiUrl) {
-      // 修正saleorApiUrl，确保在getAppId调用之前就使用正确的URL
-      const correctedUrl = correctSaleorApiUrl(saleorApiUrl, saleorDomain || undefined);
-      if (correctedUrl !== saleorApiUrl) {
-        logger.info("在onRequestStart中修正了saleorApiUrl: " + saleorApiUrl + " -> " + correctedUrl);
-        // 注意：我们不能直接修改saleorApiUrl参数，但可以在日志中记录
-      }
+  try {
+    const body: unknown = req.body;
+    let authToken: string | undefined;
+    if (body && typeof body === "object" && body !== null && "auth_token" in body) {
+      authToken = body.auth_token as string;
     }
-  },
+    
+    const saleorDomain = req.headers["saleor-domain"];
+    const saleorApiUrl = req.headers["saleor-api-url"] as string;
 
-  /**
-   * 修正authData中的saleorApiUrl
-   */
-  onRequestVerified: async (request, { authData }) => {
-    logger.info("开始处理authData，saleorApiUrl: " + authData.saleorApiUrl);
-    logger.info("原始authData: " + JSON.stringify(authData));
+    logger.info("Register请求开始");
+    logger.info("请求方法: " + req.method);
+    logger.info("请求URL: " + req.url);
+    logger.info("请求头信息: " + JSON.stringify(req.headers));
+    logger.info("请求参数: " + JSON.stringify(req.body));
+
+    if (!saleorApiUrl) {
+      logger.error("saleorApiUrl不存在于请求头中");
+      return res.status(400).json({ error: "Missing saleor-api-url header" });
+    }
+
+    if (!authToken) {
+      logger.error("authToken不存在于请求体中");
+      return res.status(400).json({ error: "Missing auth_token" });
+    }
 
     // 修正saleorApiUrl
-    const correctedUrl = correctSaleorApiUrl(authData.saleorApiUrl, authData.domain);
+    const correctedUrl = correctSaleorApiUrl(saleorApiUrl, saleorDomain as string | undefined);
+    logger.info("修正saleorApiUrl: " + saleorApiUrl + " -> " + correctedUrl);
 
-    logger.info("修正saleorApiUrl: " + authData.saleorApiUrl + " -> " + correctedUrl);
-    authData.saleorApiUrl = correctedUrl;
+    // 获取App ID（使用修正后的URL）
+    const appId = await getAppId(correctedUrl, authToken);
+    if (!appId) {
+      logger.error(`The auth data given during registration request could not be used to fetch app ID. This usually means that App could not connect to Saleor during installation. Saleor URL that App tried to connect: ${correctedUrl}`);
+      return res.status(401).json({ 
+        success: false,
+        error: {
+          code: "UNKNOWN_APP_ID",
+          message: `The auth data given during registration request could not be used to fetch app ID. This usually means that App could not connect to Saleor during installation. Saleor URL that App tried to connect: ${correctedUrl}`
+        }
+      });
+    }
 
-    logger.info("修正后的authData: " + JSON.stringify(authData));
-  },
+    // 获取JWKS（使用修正后的URL）
+    const jwks = await fetchRemoteJwks(correctedUrl);
+    if (!jwks) {
+      logger.error("Can't fetch the remote JWKS");
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: "JWKS_NOT_AVAILABLE",
+          message: "Can't fetch the remote JWKS."
+        }
+      });
+    }
 
-  /**
-   * 记录APL保存成功
-   */
-  onAuthAplSaved: async (request, { authData }) => {
-    logger.info("AuthData已成功保存到APL");
-    logger.info("保存的authData: " + JSON.stringify(authData));
-  },
+    // 构建authData（使用原始URL，因为这是Saleor传递给我们的）
+    const authData = {
+      domain: saleorDomain as string | undefined,
+      token: authToken,
+      saleorApiUrl: correctedUrl, // 使用修正后的URL
+      appId,
+      jwks
+    };
 
-  /**
-   * 记录APL保存失败
-   */
-  onAplSetFailed: async (request, { authData, error }) => {
-    logger.error(
-      "AuthData保存到APL失败: " + (error instanceof Error ? error.message : String(error)),
-    );
-    logger.error("失败的authData: " + JSON.stringify(authData));
-  },
-});
+    logger.info("authData: " + JSON.stringify(authData));
+
+    // 保存到APL
+    await saleorApp.apl.set(authData);
+
+    logger.info("Register完成");
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    logger.error("Registration failed: " + (error instanceof Error ? error.message : "未知错误"));
+    return res.status(500).json({ 
+      success: false,
+      error: {
+        message: "Registration failed: could not save the auth data."
+      }
+    });
+  }
+}
