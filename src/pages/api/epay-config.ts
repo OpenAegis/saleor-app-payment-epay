@@ -10,8 +10,17 @@ import { createEpayClient } from "@/lib/epay/client";
 
 const logger = createLogger({ component: "EpayConfigAPI" });
 
+// 创建一个不使用认证的处理程序用于调试
+export const config = {
+  api: {
+    externalResolver: true,
+  },
+};
+
 export default createProtectedHandler(
   async (req: NextApiRequest, res: NextApiResponse, { authData }) => {
+    logger.info("EpayConfigAPI called with authData: " + JSON.stringify(authData));
+
     const { saleorApiUrl, token } = authData;
 
     // 验证authData

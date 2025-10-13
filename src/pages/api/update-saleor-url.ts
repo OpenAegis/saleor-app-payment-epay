@@ -5,8 +5,17 @@ import { createLogger } from "../../lib/logger";
 
 const logger = createLogger({ component: "UpdateSaleorUrlAPI" });
 
+// 创建一个不使用认证的处理程序用于调试
+export const config = {
+  api: {
+    externalResolver: true,
+  },
+};
+
 export default createProtectedHandler(
   async (req: NextApiRequest, res: NextApiResponse, { authData }) => {
+    logger.info("UpdateSaleorUrlAPI called with authData: " + JSON.stringify(authData));
+
     const { saleorApiUrl: currentSaleorApiUrl } = authData;
 
     switch (req.method) {
