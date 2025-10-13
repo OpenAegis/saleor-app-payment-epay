@@ -14,8 +14,9 @@ export default createProtectedHandler(
         try {
           // 返回当前的Saleor API URL
           return res.status(200).json({
-            saleorApiUrl: currentSaleorApiUrl,
-            isPlaceholder: currentSaleorApiUrl.includes("your-saleor-instance.com"),
+            saleorApiUrl: currentSaleorApiUrl || "",
+            isPlaceholder:
+              !currentSaleorApiUrl || currentSaleorApiUrl.includes("your-saleor-instance.com"),
           });
         } catch (error) {
           logger.error(
@@ -29,6 +30,11 @@ export default createProtectedHandler(
           const { saleorApiUrl } = req.body as { saleorApiUrl: string };
 
           // 验证URL格式
+          if (!saleorApiUrl) {
+            logger.warn("No URL provided");
+            return res.status(400).json({ error: "URL is required" });
+          }
+
           try {
             new URL(saleorApiUrl);
           } catch (error) {
@@ -43,7 +49,26 @@ export default createProtectedHandler(
           const existingAuthData = await saleorApp.apl.get(currentSaleorApiUrl);
 
           if (!existingAuthData) {
-            return res.status(404).json({ error: "Auth data not found" });
+            logger.warn("Auth data not found for URL: " + currentSaleorApiUrl);
+            // 如果没有找到现有数据，创建新的authData
+            const newAuthData = {
+              saleorApiUrl: saleorApiUrl,
+              domain: authData.domain || new URL(saleorApiUrl).hostname,
+              token: authData.token,
+              appId: authData.appId,
+              jwks: authData.jwks,
+            };
+
+            // 保存新的authData
+            await saleorApp.apl.set(newAuthData);
+
+            logger.info("New Saleor API URL created successfully: " + saleorApiUrl);
+
+            return res.status(200).json({
+              success: true,
+              message: "Saleor API URL created successfully",
+              saleorApiUrl: saleorApiUrl,
+            });
           }
 
           // 更新authData中的saleorApiUrl
@@ -56,7 +81,7 @@ export default createProtectedHandler(
           await saleorApp.apl.set(updatedAuthData);
 
           // 如果URL已更改，删除旧的记录
-          if (currentSaleorApiUrl !== saleorApiUrl) {
+          if (currentSaleorApiUrl && currentSaleorApiUrl !== saleorApiUrl) {
             await saleorApp.apl.delete(currentSaleorApiUrl);
           }
 

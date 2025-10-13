@@ -59,8 +59,8 @@ const ConfigPage: NextPage = () => {
         const saleorUrlResponse = await fetch("/api/update-saleor-url");
         if (saleorUrlResponse.ok) {
           const urlData = (await saleorUrlResponse.json()) as SaleorUrlResponse;
-          setSaleorApiUrl(urlData.saleorApiUrl);
-          setIsPlaceholderUrl(urlData.isPlaceholder);
+          setSaleorApiUrl(urlData.saleorApiUrl || "");
+          setIsPlaceholderUrl(urlData.isPlaceholder || false);
         }
       } catch (error) {
         console.error("获取配置失败:", error);
@@ -102,7 +102,12 @@ const ConfigPage: NextPage = () => {
         });
         setEpayConfig(config);
       } else {
-        throw new Error("Failed to save epay config");
+        const errorData = await response.json();
+        const errorMessage =
+          errorData && typeof errorData === "object" && "error" in errorData
+            ? String(errorData.error)
+            : "Failed to save epay config";
+        throw new Error(errorMessage);
       }
     } catch (error) {
       console.error("保存彩虹易支付配置时出错:", error);
@@ -110,7 +115,7 @@ const ConfigPage: NextPage = () => {
         type: "notification",
         payload: {
           title: "保存失败",
-          text: "保存彩虹易支付配置时出错",
+          text: error instanceof Error ? error.message : "保存彩虹易支付配置时出错",
           status: "error",
           actionId: "epay-config",
         },
@@ -119,6 +124,19 @@ const ConfigPage: NextPage = () => {
   };
 
   const saveSaleorApiUrl = async () => {
+    if (!saleorApiUrl) {
+      await appBridge?.dispatch({
+        type: "notification",
+        payload: {
+          title: "保存失败",
+          text: "请输入Saleor API URL",
+          status: "error",
+          actionId: "saleor-url",
+        },
+      });
+      return;
+    }
+
     try {
       const response = await fetch("/api/update-saleor-url", {
         method: "POST",
@@ -141,7 +159,12 @@ const ConfigPage: NextPage = () => {
         });
         setIsPlaceholderUrl(false);
       } else {
-        throw new Error("Failed to save Saleor API URL");
+        const errorData = await response.json();
+        const errorMessage =
+          errorData && typeof errorData === "object" && "error" in errorData
+            ? String(errorData.error)
+            : "Failed to save Saleor API URL";
+        throw new Error(errorMessage);
       }
     } catch (error) {
       console.error("保存Saleor API URL时出错:", error);
@@ -149,7 +172,7 @@ const ConfigPage: NextPage = () => {
         type: "notification",
         payload: {
           title: "保存失败",
-          text: "保存Saleor API URL时出错",
+          text: error instanceof Error ? error.message : "保存Saleor API URL时出错",
           status: "error",
           actionId: "saleor-url",
         },
