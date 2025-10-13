@@ -1,6 +1,13 @@
-import { APL, AplConfiguredResult, AplReadyResult, AuthData } from "@saleor/app-sdk/APL";
-import { db, tursoClient } from "./db/turso-client";
-import { sql } from "drizzle-orm";
+import {
+  type APL,
+  type AplConfiguredResult,
+  type AplReadyResult,
+  type AuthData,
+} from "@saleor/app-sdk/APL";
+import { tursoClient } from "./db/turso-client";
+import { createLogger } from "./logger";
+
+const logger = createLogger({ component: "TursoAPL" });
 
 /**
  * Turso-based APL (Auth Persistence Layer)
@@ -38,9 +45,9 @@ export class TursoAPL implements APL {
       `);
 
       this.initialized = true;
-      console.log("✅ Turso APL table initialized successfully");
+      logger.info("✅ Turso APL table initialized successfully");
     } catch (error) {
-      console.error("❌ Failed to initialize Turso APL table:", error);
+      logger.error("❌ Failed to initialize Turso APL table: " + (error instanceof Error ? error.message : "Unknown error"));
       throw error;
     }
   }
@@ -49,22 +56,22 @@ export class TursoAPL implements APL {
     await this.initTable();
 
     try {
-      console.log(`🔍 TursoAPL: Looking for auth data with URL: ${saleorApiUrl}`);
-      
+      logger.info(`🔍 TursoAPL: Looking for auth data with URL: ${saleorApiUrl}`);
+
       const result = await tursoClient.execute(
         `SELECT * FROM ${this.tableName} WHERE saleor_api_url = ?`,
-        [saleorApiUrl]
+        [saleorApiUrl],
       );
 
-      console.log(`🔍 TursoAPL: Found ${result.rows.length} rows for URL: ${saleorApiUrl}`);
+      logger.info(`🔍 TursoAPL: Found ${result.rows.length} rows for URL: ${saleorApiUrl}`);
 
       if (result.rows.length === 0) {
         // 也试试查找所有记录，看看数据库中有什么
         const allResult = await tursoClient.execute(
-          `SELECT saleor_api_url FROM ${this.tableName} LIMIT 5`
+          `SELECT saleor_api_url FROM ${this.tableName} LIMIT 5`,
         );
-        console.log(`🔍 TursoAPL: Available URLs in database:`, 
-          allResult.rows.map(r => r.saleor_api_url));
+        const urls = allResult.rows.map((r) => r.saleor_api_url as string);
+        logger.info(`🔍 TursoAPL: Available URLs in database: ${urls.join(", ")}`);
         return undefined;
       }
 
@@ -74,13 +81,13 @@ export class TursoAPL implements APL {
         domain: row.domain as string,
         token: row.token as string,
         appId: row.app_id as string,
-        jwks: row.jwks ? JSON.parse(row.jwks as string) as string : undefined,
+        jwks: row.jwks ? (JSON.parse(row.jwks as string) as string) : undefined,
       };
-      
-      console.log(`✅ TursoAPL: Successfully retrieved auth data for domain: ${authData.domain}`);
+
+      logger.info(`✅ TursoAPL: Successfully retrieved auth data for domain: ${authData.domain}`);
       return authData;
     } catch (error) {
-      console.error("❌ Failed to get auth data from Turso APL:", error);
+      logger.error("❌ Failed to get auth data from Turso APL: " + (error instanceof Error ? error.message : "Unknown error"));
       return undefined;
     }
   }
@@ -100,13 +107,13 @@ export class TursoAPL implements APL {
           authData.domain || "",
           authData.token || "",
           authData.appId || "",
-          jwksString || ""
-        ]
+          jwksString || "",
+        ],
       );
 
-      console.log(`✅ Auth data saved for domain: ${authData.domain}`);
+      logger.info(`✅ Auth data saved for domain: ${authData.domain}`);
     } catch (error) {
-      console.error("❌ Failed to save auth data to Turso APL:", error);
+      logger.error("❌ Failed to save auth data to Turso APL: " + (error instanceof Error ? error.message : "Unknown error"));
       throw error;
     }
   }
@@ -115,14 +122,13 @@ export class TursoAPL implements APL {
     await this.initTable();
 
     try {
-      await tursoClient.execute(
-        `DELETE FROM ${this.tableName} WHERE saleor_api_url = ?`,
-        [saleorApiUrl]
-      );
+      await tursoClient.execute(`DELETE FROM ${this.tableName} WHERE saleor_api_url = ?`, [
+        saleorApiUrl,
+      ]);
 
-      console.log(`✅ Auth data deleted for API URL: ${saleorApiUrl}`);
+      logger.info(`✅ Auth data deleted for API URL: ${saleorApiUrl}`);
     } catch (error) {
-      console.error("❌ Failed to delete auth data from Turso APL:", error);
+      logger.error("❌ Failed to delete auth data from Turso APL: " + (error instanceof Error ? error.message : "Unknown error"));
       throw error;
     }
   }
@@ -132,18 +138,18 @@ export class TursoAPL implements APL {
 
     try {
       const result = await tursoClient.execute(
-        `SELECT * FROM ${this.tableName} ORDER BY created_at DESC`
+        `SELECT * FROM ${this.tableName} ORDER BY created_at DESC`,
       );
 
-      return result.rows.map(row => ({
+      return result.rows.map((row) => ({
         saleorApiUrl: row.saleor_api_url as string,
         domain: row.domain as string,
         token: row.token as string,
         appId: row.app_id as string,
-        jwks: row.jwks ? JSON.parse(row.jwks as string) as string : undefined,
+        jwks: row.jwks ? (JSON.parse(row.jwks as string) as string) : undefined,
       }));
     } catch (error) {
-      console.error("❌ Failed to get all auth data from Turso APL:", error);
+      logger.error("❌ Failed to get all auth data from Turso APL: " + (error instanceof Error ? error.message : "Unknown error"));
       return [];
     }
   }
@@ -153,9 +159,9 @@ export class TursoAPL implements APL {
       await this.initTable();
       return { ready: true };
     } catch (error) {
-      return { 
-        ready: false, 
-        error: error instanceof Error ? error : new Error('Unknown error') 
+      return {
+        ready: false,
+        error: error instanceof Error ? error : new Error("Unknown error"),
       };
     }
   }
@@ -168,15 +174,13 @@ export class TursoAPL implements APL {
       }
 
       // 检查表是否存在且可访问
-      await tursoClient.execute(
-        `SELECT COUNT(*) as count FROM ${this.tableName}`
-      );
+      await tursoClient.execute(`SELECT COUNT(*) as count FROM ${this.tableName}`);
 
       return { configured: true };
     } catch (error) {
-      return { 
-        configured: false, 
-        error: error instanceof Error ? error : new Error('APL configuration error') 
+      return {
+        configured: false,
+        error: error instanceof Error ? error : new Error("APL configuration error"),
       };
     }
   }

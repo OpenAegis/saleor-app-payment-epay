@@ -29,7 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const authDataPath = path.join(process.cwd(), ".auth-data.json");
     const fileExists = fs.existsSync(authDataPath);
     let fileContent = "";
-    
+
     if (fileExists) {
       fileContent = fs.readFileSync(authDataPath, "utf8");
       logger.info("认证文件内容: " + fileContent);
@@ -47,9 +47,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   } catch (error) {
     logger.error("诊断认证时出错: " + (error instanceof Error ? error.message : "Unknown error"));
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: "Failed to diagnose auth",
-      details: error instanceof Error ? error.message : "Unknown error"
+      details: error instanceof Error ? error.message : "Unknown error",
     });
   }
 }

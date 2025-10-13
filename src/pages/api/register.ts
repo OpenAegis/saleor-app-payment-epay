@@ -43,7 +43,7 @@ async function getAppId(saleorApiUrl: string, token: string): Promise<string | u
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${token}`
       },
       body: JSON.stringify({
         query: `
@@ -52,15 +52,15 @@ async function getAppId(saleorApiUrl: string, token: string): Promise<string | u
             id
           }
         }
-        `,
-      }),
+        `
+      })
     });
-
+    
     if (response.status !== 200) {
       logger.error(`Could not get the app ID: Saleor API has response code ${response.status}`);
       return undefined;
     }
-
+    
     const body: unknown = await response.json();
     if (body && typeof body === "object" && "data" in body) {
       const data = body.data;
@@ -73,9 +73,7 @@ async function getAppId(saleorApiUrl: string, token: string): Promise<string | u
     }
     return undefined;
   } catch (error) {
-    logger.error(
-      "Could not get the app ID: " + (error instanceof Error ? error.message : "未知错误"),
-    );
+    logger.error("Could not get the app ID: " + (error instanceof Error ? error.message : "未知错误"));
     return undefined;
   }
 }
@@ -90,9 +88,7 @@ async function fetchRemoteJwks(saleorApiUrl: string): Promise<string | undefined
     const jwksText = await response.text();
     return jwksText;
   } catch (error) {
-    logger.error(
-      "Could not fetch the remote JWKS: " + (error instanceof Error ? error.message : "未知错误"),
-    );
+    logger.error("Could not fetch the remote JWKS: " + (error instanceof Error ? error.message : "未知错误"));
     return undefined;
   }
 }
@@ -112,7 +108,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (body && typeof body === "object" && body !== null && "auth_token" in body) {
       authToken = body.auth_token as string;
     }
-
+    
     const saleorDomain = req.headers["saleor-domain"];
     const saleorApiUrl = req.headers["saleor-api-url"] as string;
 
@@ -158,7 +154,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       token: authToken,
       saleorApiUrl: correctedUrl, // 使用修正后的URL
       appId,
-      jwks,
+      jwks
     };
 
     logger.info("准备保存authData: " + JSON.stringify(authData));
@@ -167,27 +163,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const aplConfigured = await saleorApp.apl.isConfigured();
       logger.info("APL配置状态: " + JSON.stringify(aplConfigured));
-
+      
       if (!aplConfigured.configured) {
         logger.error("APL未正确配置: " + (aplConfigured.error?.message || "未知错误"));
-        return res.status(503).json({
+        return res.status(503).json({ 
           success: false,
           error: {
-            message: "APL not configured: " + (aplConfigured.error?.message || "未知错误"),
-          },
+            message: "APL not configured: " + (aplConfigured.error?.message || "未知错误")
+          }
         });
       }
     } catch (configError) {
-      logger.error(
-        "检查APL配置时出错: " + (configError instanceof Error ? configError.message : "未知错误"),
-      );
-      return res.status(503).json({
+      logger.error("检查APL配置时出错: " + (configError instanceof Error ? configError.message : "未知错误"));
+      return res.status(503).json({ 
         success: false,
         error: {
-          message:
-            "Error checking APL configuration: " +
-            (configError instanceof Error ? configError.message : "未知错误"),
-        },
+          message: "Error checking APL configuration: " + (configError instanceof Error ? configError.message : "未知错误")
+        }
       });
     }
 
@@ -196,17 +188,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await saleorApp.apl.set(authData);
       logger.info("AuthData保存成功");
     } catch (saveError) {
-      logger.error(
-        "保存AuthData时出错: " + (saveError instanceof Error ? saveError.message : "未知错误"),
-      );
+      logger.error("保存AuthData时出错: " + (saveError instanceof Error ? saveError.message : "未知错误"));
       logger.error("保存失败的authData: " + JSON.stringify(authData));
-      return res.status(500).json({
+      return res.status(500).json({ 
         success: false,
         error: {
-          message:
-            "Could not save auth data: " +
-            (saveError instanceof Error ? saveError.message : "未知错误"),
-        },
+          message: "Could not save auth data: " + (saveError instanceof Error ? saveError.message : "未知错误")
+        }
       });
     }
 
@@ -214,11 +202,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ success: true });
   } catch (error) {
     logger.error("Registration failed: " + (error instanceof Error ? error.message : "未知错误"));
-    return res.status(500).json({
+    return res.status(500).json({ 
       success: false,
       error: {
-        message: "Registration failed: " + (error instanceof Error ? error.message : "未知错误"),
-      },
+        message: "Registration failed: " + (error instanceof Error ? error.message : "未知错误")
+      }
     });
   }
 }
