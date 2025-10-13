@@ -73,7 +73,12 @@ export default createAppRegisterHandler({
           return false;
         }
       } catch (error) {
-        logger.error("解析Saleor API URL时出错: " + saleorApiUrl + ", 错误: " + (error instanceof Error ? error.message : "未知错误"));
+        logger.error(
+          "解析Saleor API URL时出错: " +
+            saleorApiUrl +
+            ", 错误: " +
+            (error instanceof Error ? error.message : "未知错误"),
+        );
         return false;
       }
       return true;
@@ -89,13 +94,15 @@ export default createAppRegisterHandler({
     logger.info("请求URL: " + request.url);
     logger.info("请求头信息: " + JSON.stringify(request.headers));
     logger.info("请求参数: " + JSON.stringify(request.params));
-    
+
     // 检查saleorApiUrl是否存在
     if (saleorApiUrl) {
       // 修正saleorApiUrl，确保在getAppId调用之前就使用正确的URL
       const correctedUrl = correctSaleorApiUrl(saleorApiUrl, saleorDomain || undefined);
       if (correctedUrl !== saleorApiUrl) {
-        logger.info("在onRequestStart中修正了saleorApiUrl: " + saleorApiUrl + " -> " + correctedUrl);
+        logger.info(
+          "在onRequestStart中修正了saleorApiUrl: " + saleorApiUrl + " -> " + correctedUrl,
+        );
         // 注意：我们不能直接修改saleorApiUrl参数，但可以在日志中记录
       }
     }
