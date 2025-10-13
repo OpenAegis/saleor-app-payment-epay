@@ -7,14 +7,14 @@ const logger = createLogger({ component: "RegisterAPI" });
 
 /**
  * 修正Saleor API URL
- * 如果URL是localhost，尝试从domain或环境变量构建正确的URL
+ * 如果URL是localhost，使用环境变量或占位符
  */
-function correctSaleorApiUrl(saleorApiUrl: string, saleorDomain: string | undefined): string {
+function correctSaleorApiUrl(saleorApiUrl: string, _saleorDomain: string | undefined): string {
   try {
     // 检查是否为localhost URL
     const url = new URL(saleorApiUrl);
     if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
-      logger.info("检测到localhost URL: " + saleorApiUrl + ", 尝试修正");
+      logger.info("检测到localhost URL: " + saleorApiUrl + ", 使用占位符URL");
 
       // 首先尝试使用环境变量中的APP_URL
       if (env.APP_URL) {
@@ -22,7 +22,7 @@ function correctSaleorApiUrl(saleorApiUrl: string, saleorDomain: string | undefi
           const appUrl = new URL(env.APP_URL);
           // 从APP_URL构建Saleor API URL（假设Saleor API在相同域名下）
           const correctedUrl = appUrl.origin + "/graphql/";
-          logger.info("使用环境变量APP_URL修正URL从 " + saleorApiUrl + " 到 " + correctedUrl);
+          logger.info("使用环境变量APP_URL构建URL: " + correctedUrl);
           return correctedUrl;
         } catch (error) {
           logger.warn(
@@ -34,33 +34,10 @@ function correctSaleorApiUrl(saleorApiUrl: string, saleorDomain: string | undefi
         }
       }
 
-      // 从domain构建正确的URL
-      if (saleorDomain) {
-        try {
-          // 检查domain是否也是localhost，如果是则跳过
-          if (!saleorDomain.includes("localhost") && !saleorDomain.includes("127.0.0.1")) {
-            const domainUrl = new URL("https://" + saleorDomain);
-            const correctedUrl = "https://" + domainUrl.hostname + "/graphql/";
-            logger.info("从domain修正URL从 " + saleorApiUrl + " 到 " + correctedUrl);
-            return correctedUrl;
-          } else {
-            logger.warn("domain也是localhost，无法用于修正URL: " + saleorDomain);
-          }
-        } catch (error) {
-          logger.warn(
-            "无法从domain构建URL: " +
-              saleorDomain +
-              ", 错误: " +
-              (error instanceof Error ? error.message : "未知错误"),
-          );
-        }
-      }
-
-      // 如果无法从环境变量或domain构建，至少确保协议是https
-      const correctedUrl =
-        "https://" + url.hostname + (url.port ? ":" + url.port : "") + url.pathname;
-      logger.info("修正localhost协议从 " + saleorApiUrl + " 到 " + correctedUrl);
-      return correctedUrl;
+      // 使用占位符URL，稍后在应用设置中手动配置
+      const placeholderUrl = "https://your-saleor-instance.com/graphql/";
+      logger.info("使用占位符URL: " + placeholderUrl);
+      return placeholderUrl;
     }
   } catch (error) {
     logger.error(
@@ -71,7 +48,7 @@ function correctSaleorApiUrl(saleorApiUrl: string, saleorDomain: string | undefi
     );
   }
 
-  // 如果不需要修正，返回原始URL
+  // 如果不是localhost，返回原始URL
   return saleorApiUrl;
 }
 
@@ -107,18 +84,16 @@ export default createAppRegisterHandler({
    * 修正authData中的saleorApiUrl
    */
   onRequestVerified: async (request, { authData }) => {
-    logger.info("开始修正authData中的saleorApiUrl: " + authData.saleorApiUrl);
+    logger.info("开始处理authData，saleorApiUrl: " + authData.saleorApiUrl);
     logger.info("原始authData: " + JSON.stringify(authData));
 
     // 修正saleorApiUrl
     const correctedUrl = correctSaleorApiUrl(authData.saleorApiUrl, authData.domain);
-    if (correctedUrl !== authData.saleorApiUrl) {
-      logger.info("修正了saleorApiUrl: " + authData.saleorApiUrl + " -> " + correctedUrl);
-      authData.saleorApiUrl = correctedUrl;
-    }
 
-    logger.info("修正后的authData: " + authData.saleorApiUrl);
-    logger.info("完整修正后的authData: " + JSON.stringify(authData));
+    logger.info("修正saleorApiUrl: " + authData.saleorApiUrl + " -> " + correctedUrl);
+    authData.saleorApiUrl = correctedUrl;
+
+    logger.info("修正后的authData: " + JSON.stringify(authData));
   },
 
   /**
