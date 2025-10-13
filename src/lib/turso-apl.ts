@@ -47,7 +47,10 @@ export class TursoAPL implements APL {
       this.initialized = true;
       logger.info("✅ Turso APL table initialized successfully");
     } catch (error) {
-      logger.error("❌ Failed to initialize Turso APL table: " + (error instanceof Error ? error.message : "Unknown error"));
+      logger.error(
+        "❌ Failed to initialize Turso APL table: " +
+          (error instanceof Error ? error.message : "Unknown error"),
+      );
       throw error;
     }
   }
@@ -87,7 +90,10 @@ export class TursoAPL implements APL {
       logger.info(`✅ TursoAPL: Successfully retrieved auth data for domain: ${authData.domain}`);
       return authData;
     } catch (error) {
-      logger.error("❌ Failed to get auth data from Turso APL: " + (error instanceof Error ? error.message : "Unknown error"));
+      logger.error(
+        "❌ Failed to get auth data from Turso APL: " +
+          (error instanceof Error ? error.message : "Unknown error"),
+      );
       return undefined;
     }
   }
@@ -113,7 +119,10 @@ export class TursoAPL implements APL {
 
       logger.info(`✅ Auth data saved for domain: ${authData.domain}`);
     } catch (error) {
-      logger.error("❌ Failed to save auth data to Turso APL: " + (error instanceof Error ? error.message : "Unknown error"));
+      logger.error(
+        "❌ Failed to save auth data to Turso APL: " +
+          (error instanceof Error ? error.message : "Unknown error"),
+      );
       throw error;
     }
   }
@@ -128,7 +137,10 @@ export class TursoAPL implements APL {
 
       logger.info(`✅ Auth data deleted for API URL: ${saleorApiUrl}`);
     } catch (error) {
-      logger.error("❌ Failed to delete auth data from Turso APL: " + (error instanceof Error ? error.message : "Unknown error"));
+      logger.error(
+        "❌ Failed to delete auth data from Turso APL: " +
+          (error instanceof Error ? error.message : "Unknown error"),
+      );
       throw error;
     }
   }
@@ -149,7 +161,10 @@ export class TursoAPL implements APL {
         jwks: row.jwks ? (JSON.parse(row.jwks as string) as string) : undefined,
       }));
     } catch (error) {
-      logger.error("❌ Failed to get all auth data from Turso APL: " + (error instanceof Error ? error.message : "Unknown error"));
+      logger.error(
+        "❌ Failed to get all auth data from Turso APL: " +
+          (error instanceof Error ? error.message : "Unknown error"),
+      );
       return [];
     }
   }

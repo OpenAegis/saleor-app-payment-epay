@@ -21,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 检查认证表是否存在
     const tableResult = await tursoClient.execute(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='saleor_auth_data'"
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='saleor_auth_data'",
     );
     const tableExists = tableResult.rows.length > 0;
     logger.info("Auth table exists: " + tableExists);
@@ -40,10 +40,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    logger.error("Turso数据库测试失败: " + (error instanceof Error ? error.message : "Unknown error"));
-    return res.status(500).json({ 
+    logger.error(
+      "Turso数据库测试失败: " + (error instanceof Error ? error.message : "Unknown error"),
+    );
+    return res.status(500).json({
       error: "Failed to test Turso database",
-      details: error instanceof Error ? error.message : "Unknown error"
+      details: error instanceof Error ? error.message : "Unknown error",
     });
   }
 }

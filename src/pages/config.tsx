@@ -32,11 +32,21 @@ const ConfigPage: NextPage = () => {
   const [saleorApiUrl, setSaleorApiUrl] = useState<string>("");
   const [isPlaceholderUrl, setIsPlaceholderUrl] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // 页面加载时获取现有配置
   useEffect(() => {
     const fetchConfig = async () => {
       try {
+        setAuthError(null);
+        
+        // 首先尝试使用公开端点诊断问题
+        const diagnoseResponse = await fetch("/api/diagnose-config");
+        if (diagnoseResponse.ok) {
+          const diagnoseData = await diagnoseResponse.json();
+          console.log("诊断信息:", diagnoseData);
+        }
+
         // 获取支付配置
         const epayResponse = await fetch("/api/epay-config");
         if (epayResponse.ok) {
@@ -53,6 +63,26 @@ const ConfigPage: NextPage = () => {
               enabled: firstConfig.enabled,
             });
           }
+        } else {
+          // 如果认证端点失败，尝试公开端点
+          const publicEpayResponse = await fetch("/api/epay-config-public");
+          if (publicEpayResponse.ok) {
+            const config = (await publicEpayResponse.json()) as EpayConfigResponse;
+            if (config.configurations && config.configurations.length > 0) {
+              const firstConfig = config.configurations[0];
+              setEpayConfig({
+                pid: firstConfig.pid,
+                key: firstConfig.key,
+                apiUrl: firstConfig.apiUrl,
+                returnUrl: firstConfig.returnUrl || "",
+                configurationName: firstConfig.configurationName,
+                enabled: firstConfig.enabled,
+              });
+            }
+          } else {
+            const errorData = await epayResponse.json();
+            setAuthError((errorData && typeof errorData === "object" && "error" in errorData ? String(errorData.error) : "获取支付配置失败"));
+          }
         }
 
         // 获取Saleor API URL
@@ -61,9 +91,21 @@ const ConfigPage: NextPage = () => {
           const urlData = (await saleorUrlResponse.json()) as SaleorUrlResponse;
           setSaleorApiUrl(urlData.saleorApiUrl || "");
           setIsPlaceholderUrl(urlData.isPlaceholder || false);
+        } else {
+          // 如果认证端点失败，尝试公开端点
+          const publicSaleorUrlResponse = await fetch("/api/update-saleor-url-public");
+          if (publicSaleorUrlResponse.ok) {
+            const urlData = (await publicSaleorUrlResponse.json()) as SaleorUrlResponse;
+            setSaleorApiUrl(urlData.saleorApiUrl || "");
+            setIsPlaceholderUrl(urlData.isPlaceholder || false);
+          } else {
+            const errorData = await saleorUrlResponse.json();
+            setAuthError((errorData && typeof errorData === "object" && "error" in errorData ? String(errorData.error) : "获取Saleor URL失败"));
+          }
         }
       } catch (error) {
         console.error("获取配置失败:", error);
+        setAuthError(error instanceof Error ? error.message : "获取配置失败");
       } finally {
         setLoading(false);
       }
@@ -103,10 +145,9 @@ const ConfigPage: NextPage = () => {
         setEpayConfig(config);
       } else {
         const errorData = await response.json();
-        const errorMessage =
-          errorData && typeof errorData === "object" && "error" in errorData
-            ? String(errorData.error)
-            : "Failed to save epay config";
+        const errorMessage = errorData && typeof errorData === "object" && "error" in errorData 
+          ? String(errorData.error) 
+          : "Failed to save epay config";
         throw new Error(errorMessage);
       }
     } catch (error) {
@@ -160,10 +201,9 @@ const ConfigPage: NextPage = () => {
         setIsPlaceholderUrl(false);
       } else {
         const errorData = await response.json();
-        const errorMessage =
-          errorData && typeof errorData === "object" && "error" in errorData
-            ? String(errorData.error)
-            : "Failed to save Saleor API URL";
+        const errorMessage = errorData && typeof errorData === "object" && "error" in errorData 
+          ? String(errorData.error) 
+          : "Failed to save Saleor API URL";
         throw new Error(errorMessage);
       }
     } catch (error) {
@@ -194,6 +234,13 @@ const ConfigPage: NextPage = () => {
     <AppLayout title="">
       <Box display="flex" flexDirection="column" gap={4}>
         <h2>应用配置</h2>
+
+        {authError && (
+          <Box padding={2} backgroundColor="critical1" borderRadius={4}>
+            <p>认证错误: {authError}</p>
+            <p>请检查应用是否正确安装，或联系管理员。</p>
+          </Box>
+        )}
 
         {/* Saleor API URL 配置 */}
         <Box display="flex" flexDirection="column" gap={2}>
