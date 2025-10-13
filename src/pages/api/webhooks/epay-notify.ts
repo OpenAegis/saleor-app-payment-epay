@@ -1,7 +1,10 @@
 import { type NextApiRequest, type NextApiResponse } from "next";
 import { createServerClient } from "@/lib/create-graphq-client";
 import { type EpayNotifyParams } from "@/lib/epay/client";
-import { env } from "@/lib/env.mjs";
+import { siteManager } from "@/lib/managers/site-manager";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger({ component: "EpayNotifyWebhook" });
 
 // Saleor GraphQL mutations
 const TRANSACTION_EVENT_REPORT = `
@@ -21,6 +24,37 @@ const TRANSACTION_EVENT_REPORT = `
   }
 `;
 
+// 检查站点授权
+async function checkSiteAuthorization(saleorApiUrl: string): Promise<boolean> {
+  try {
+    // 从URL中提取域名
+    const url = new URL(saleorApiUrl);
+    const domain = url.hostname;
+
+    logger.info({ domain, saleorApiUrl }, "检查站点授权");
+
+    // 检查站点是否已授权
+    const isAuthorized = await siteManager.isAuthorized(domain);
+
+    if (!isAuthorized) {
+      logger.warn({ domain, saleorApiUrl }, "站点未授权访问支付功能");
+      return false;
+    }
+
+    logger.info({ domain, saleorApiUrl }, "站点授权检查通过");
+    return true;
+  } catch (error) {
+    logger.error(
+      {
+        error: error instanceof Error ? error.message : "未知错误",
+        saleorApiUrl,
+      },
+      "站点授权检查失败",
+    );
+    return false;
+  }
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     return res.status(405).send("fail");
@@ -38,17 +72,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // 支付成功，更新 Saleor 订单
       // 这里需要调用 Saleor transactionEventReport mutation
 
-      console.log("支付成功:", {
-        orderNo: params.out_trade_no,
-        tradeNo: params.trade_no,
-        amount: params.money,
-      });
+      logger.info(
+        `支付成功: orderNo=${params.out_trade_no}, tradeNo=${params.trade_no}, amount=${params.money}`,
+      );
 
       // 如果有Saleor API信息，更新交易状态
       const saleorApiUrl = req.headers["saleor-api-url"] as string;
       const authToken = req.headers["authorization"]?.replace("Bearer ", "");
 
       if (saleorApiUrl && authToken) {
+        // 检查站点授权
+        const isSiteAuthorized = await checkSiteAuthorization(saleorApiUrl);
+        if (!isSiteAuthorized) {
+          logger.warn("站点未授权访问支付功能");
+          return res.status(403).send("fail");
+        }
+
         try {
           const client = createServerClient(saleorApiUrl, authToken);
 
@@ -63,7 +102,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             message: `支付成功，交易号: ${params.trade_no}`,
           });
         } catch (saleorError) {
-          console.error("更新Saleor交易状态失败:", saleorError);
+          logger.error(
+            `更新Saleor交易状态失败: ${
+              saleorError instanceof Error ? saleorError.message : "未知错误"
+            }`,
+          );
         }
       }
 
@@ -71,8 +114,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     return res.status(200).send("fail");
-  } catch (error: any) {
-    console.error("Notify handler error:", error);
+  } catch (error) {
+    logger.error(`Notify handler error: ${error instanceof Error ? error.message : "未知错误"}`);
     return res.status(200).send("fail");
   }
 }

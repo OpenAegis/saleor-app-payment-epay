@@ -5,6 +5,10 @@ import { createServerClient } from "@/lib/create-graphq-client";
 import { createPrivateSettingsManager } from "@/modules/app-configuration/metadata-manager";
 import { EpayConfigManager } from "@/modules/payment-app-configuration/epay-config-manager";
 import { type EpayConfigEntry } from "@/modules/payment-app-configuration/epay-config";
+import { siteManager } from "@/lib/managers/site-manager";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger({ component: "TransactionInitializeWebhook" });
 
 // 定义事件数据接口
 interface TransactionEvent {
@@ -58,6 +62,37 @@ async function getEpayConfig(
   return { config: null, returnUrl: null };
 }
 
+// 检查站点授权
+async function checkSiteAuthorization(saleorApiUrl: string): Promise<boolean> {
+  try {
+    // 从URL中提取域名
+    const url = new URL(saleorApiUrl);
+    const domain = url.hostname;
+
+    logger.info({ domain, saleorApiUrl }, "检查站点授权");
+
+    // 检查站点是否已授权
+    const isAuthorized = await siteManager.isAuthorized(domain);
+
+    if (!isAuthorized) {
+      logger.warn({ domain, saleorApiUrl }, "站点未授权访问支付功能");
+      return false;
+    }
+
+    logger.info({ domain, saleorApiUrl }, "站点授权检查通过");
+    return true;
+  } catch (error) {
+    logger.error(
+      {
+        error: error instanceof Error ? error.message : "未知错误",
+        saleorApiUrl,
+      },
+      "站点授权检查失败",
+    );
+    return false;
+  }
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -67,11 +102,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { event } = req.body as { event: TransactionEvent };
     const { action, transaction, sourceObject } = event;
 
-    // 获取支付配置
-    // 注意：这里需要从请求中获取Saleor API信息
+    // 获取Saleor API信息
     const saleorApiUrl = req.headers["saleor-api-url"] as string;
     const authToken = req.headers["authorization"]?.replace("Bearer ", "");
 
+    // 验证必要参数
+    if (!saleorApiUrl || !authToken) {
+      logger.warn("缺少必要的Saleor API信息");
+      return res.status(400).json({
+        result: "CHARGE_FAILURE",
+        message: "缺少必要的Saleor API信息",
+      });
+    }
+
+    // 检查站点授权
+    const isSiteAuthorized = await checkSiteAuthorization(saleorApiUrl);
+    if (!isSiteAuthorized) {
+      return res.status(403).json({
+        result: "CHARGE_FAILURE",
+        message: "站点未授权使用支付功能",
+      });
+    }
+
+    // 获取支付配置
     const { config: epayConfig, returnUrl } = await getEpayConfig(saleorApiUrl, authToken || "");
     if (!epayConfig) {
       return res.status(200).json({
@@ -125,7 +178,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       message: result.msg || "创建支付订单失败",
     });
   } catch (error) {
-    console.error("Transaction initialize error:", error);
+    logger.error(
+      {
+        error: error instanceof Error ? error.message : "未知错误",
+        stack: error instanceof Error ? error.stack : undefined,
+      },
+      "Transaction initialize error",
+    );
     const message = error instanceof Error ? error.message : "未知错误";
     return res.status(200).json({
       result: "CHARGE_FAILURE",
