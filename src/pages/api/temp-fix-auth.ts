@@ -41,7 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       message: "Temporary auth data created successfully",
     });
   } catch (error) {
-    logger.error("❌ Error creating temporary auth data:", error);
+    logger.error("❌ Error creating temporary auth data: " + (error instanceof Error ? error.message : "Unknown error"));
     return res.status(500).json({ error: "Failed to create auth data" });
   }
 }
