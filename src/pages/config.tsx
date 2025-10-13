@@ -3,21 +3,8 @@ import { useState, useEffect } from "react";
 import { Box, Input, Button } from "@saleor/macaw-ui";
 import { type NextPage } from "next";
 import { AppLayout } from "@/modules/ui/templates/AppLayout";
-import { EpayConfigurationForm } from "@/modules/ui/organisms/EpayConfigurationForm";
-import { type EpayFormConfig } from "@/modules/payment-app-configuration/epay-config";
 
 // 定义API响应接口
-interface EpayConfigResponse {
-  configurations: Array<{
-    pid: string;
-    key: string;
-    apiUrl: string;
-    returnUrl?: string;
-    configurationName: string;
-    enabled: boolean;
-  }>;
-  channelToConfigurationId: Record<string, string>;
-}
 
 interface SaleorUrlResponse {
   saleorApiUrl: string;
@@ -28,7 +15,6 @@ const ConfigPage: NextPage = () => {
   const { appBridgeState, appBridge } = useAppBridge();
   const { token } = appBridgeState ?? {};
 
-  const [epayConfig, setEpayConfig] = useState<EpayFormConfig | null>(null);
   const [saleorApiUrl, setSaleorApiUrl] = useState<string>("");
   const [isPlaceholderUrl, setIsPlaceholderUrl] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
@@ -47,47 +33,7 @@ const ConfigPage: NextPage = () => {
           console.log("诊断信息:", diagnoseData);
         }
 
-        // 获取支付配置
-        const epayResponse = await appBridge?.fetch("/api/epay-config") ?? await fetch("/api/epay-config");
-        if (epayResponse.ok) {
-          const config = (await epayResponse.json()) as EpayConfigResponse;
-          // 获取第一个配置项作为当前配置
-          if (config.configurations && config.configurations.length > 0) {
-            const firstConfig = config.configurations[0];
-            setEpayConfig({
-              pid: firstConfig.pid,
-              key: firstConfig.key,
-              apiUrl: firstConfig.apiUrl,
-              returnUrl: firstConfig.returnUrl || "",
-              configurationName: firstConfig.configurationName,
-              enabled: firstConfig.enabled,
-            });
-          }
-        } else {
-          // 如果认证端点失败，尝试公开端点
-          const publicEpayResponse = await fetch("/api/epay-config-public");
-          if (publicEpayResponse.ok) {
-            const config = (await publicEpayResponse.json()) as EpayConfigResponse;
-            if (config.configurations && config.configurations.length > 0) {
-              const firstConfig = config.configurations[0];
-              setEpayConfig({
-                pid: firstConfig.pid,
-                key: firstConfig.key,
-                apiUrl: firstConfig.apiUrl,
-                returnUrl: firstConfig.returnUrl || "",
-                configurationName: firstConfig.configurationName,
-                enabled: firstConfig.enabled,
-              });
-            }
-          } else {
-            const errorData = await epayResponse.json();
-            setAuthError(
-              errorData && typeof errorData === "object" && "error" in errorData
-                ? String(errorData.error)
-                : "获取支付配置失败",
-            );
-          }
-        }
+        // 支付配置由插件超级管理员管理，这里不需要获取
 
         // 获取Saleor API URL
         const saleorUrlResponse = await appBridge?.fetch("/api/update-saleor-url") ?? await fetch("/api/update-saleor-url");
@@ -124,60 +70,6 @@ const ConfigPage: NextPage = () => {
     }
   }, [token]);
 
-  const saveEpayConfig = async (config: EpayFormConfig) => {
-    try {
-      const configWithId = {
-        ...config,
-        configurationId: "epay-config-1",
-        configurationName: config.configurationName || "彩虹易支付",
-      };
-
-      const response = await appBridge?.fetch("/api/epay-config", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(configWithId),
-      }) ?? await fetch("/api/epay-config", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(configWithId),
-      });
-
-      if (response.ok) {
-        await appBridge?.dispatch({
-          type: "notification",
-          payload: {
-            title: "配置已保存",
-            text: "彩虹易支付配置已成功保存",
-            status: "success",
-            actionId: "epay-config",
-          },
-        });
-        setEpayConfig(config);
-      } else {
-        const errorData = await response.json();
-        const errorMessage =
-          errorData && typeof errorData === "object" && "error" in errorData
-            ? String(errorData.error)
-            : "Failed to save epay config";
-        throw new Error(errorMessage);
-      }
-    } catch (error) {
-      console.error("保存彩虹易支付配置时出错:", error);
-      await appBridge?.dispatch({
-        type: "notification",
-        payload: {
-          title: "保存失败",
-          text: error instanceof Error ? error.message : "保存彩虹易支付配置时出错",
-          status: "error",
-          actionId: "epay-config",
-        },
-      });
-    }
-  };
 
   const saveSaleorApiUrl = async () => {
     if (!saleorApiUrl) {
@@ -284,14 +176,25 @@ const ConfigPage: NextPage = () => {
           </Box>
         </Box>
 
-        {/* 彩虹易支付配置 */}
+        {/* 支付通道管理 */}
         <Box display="flex" flexDirection="column" gap={2}>
-          <h3>彩虹易支付配置</h3>
-          <EpayConfigurationForm
-            initialConfig={epayConfig || undefined}
-            onSave={(config) => void saveEpayConfig(config)}
-            onCancel={() => {}}
-          />
+          <h3>支付通道管理</h3>
+          <Box padding={2} backgroundColor="info1" borderRadius={4}>
+            <p>⚠️ 易支付配置信息（PID、密钥等）只能由插件超级管理员设置。</p>
+            <p>Saleor管理员只能管理支付通道的排序和启用状态。</p>
+            <p>如需配置易支付信息，请访问: <a href="/admin/login" target="_blank" rel="noopener noreferrer">插件管理后台</a></p>
+          </Box>
+          
+          <Box display="flex" flexDirection="column" gap={2} marginTop={4}>
+            <h4>当前可用支付通道</h4>
+            <p>支付通道的创建和配置需要通过插件管理后台完成。</p>
+            <p>在这里您可以查看为当前销售渠道配置的支付通道状态。</p>
+            
+            {/* TODO: 添加通道列表和排序功能 */}
+            <Box padding={3} backgroundColor="default2" borderRadius={4}>
+              <p>功能开发中：支付通道排序和启用/禁用控制</p>
+            </Box>
+          </Box>
         </Box>
       </Box>
     </AppLayout>
