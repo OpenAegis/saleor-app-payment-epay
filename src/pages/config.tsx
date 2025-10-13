@@ -48,7 +48,7 @@ const ConfigPage: NextPage = () => {
         }
 
         // 获取支付配置
-        const epayResponse = await fetch("/api/epay-config");
+        const epayResponse = await appBridge?.fetch("/api/epay-config") ?? await fetch("/api/epay-config");
         if (epayResponse.ok) {
           const config = (await epayResponse.json()) as EpayConfigResponse;
           // 获取第一个配置项作为当前配置
@@ -90,7 +90,7 @@ const ConfigPage: NextPage = () => {
         }
 
         // 获取Saleor API URL
-        const saleorUrlResponse = await fetch("/api/update-saleor-url");
+        const saleorUrlResponse = await appBridge?.fetch("/api/update-saleor-url") ?? await fetch("/api/update-saleor-url");
         if (saleorUrlResponse.ok) {
           const urlData = (await saleorUrlResponse.json()) as SaleorUrlResponse;
           setSaleorApiUrl(urlData.saleorApiUrl || "");
@@ -132,7 +132,13 @@ const ConfigPage: NextPage = () => {
         configurationName: config.configurationName || "彩虹易支付",
       };
 
-      const response = await fetch("/api/epay-config", {
+      const response = await appBridge?.fetch("/api/epay-config", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(configWithId),
+      }) ?? await fetch("/api/epay-config", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -188,7 +194,13 @@ const ConfigPage: NextPage = () => {
     }
 
     try {
-      const response = await fetch("/api/update-saleor-url", {
+      const response = await appBridge?.fetch("/api/update-saleor-url", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ saleorApiUrl }),
+      }) ?? await fetch("/api/update-saleor-url", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
