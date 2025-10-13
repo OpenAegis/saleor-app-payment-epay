@@ -49,23 +49,36 @@ export class TursoAPL implements APL {
     await this.initTable();
 
     try {
+      console.log(`🔍 TursoAPL: Looking for auth data with URL: ${saleorApiUrl}`);
+      
       const result = await tursoClient.execute(
         `SELECT * FROM ${this.tableName} WHERE saleor_api_url = ?`,
         [saleorApiUrl]
       );
 
+      console.log(`🔍 TursoAPL: Found ${result.rows.length} rows for URL: ${saleorApiUrl}`);
+
       if (result.rows.length === 0) {
+        // 也试试查找所有记录，看看数据库中有什么
+        const allResult = await tursoClient.execute(
+          `SELECT saleor_api_url FROM ${this.tableName} LIMIT 5`
+        );
+        console.log(`🔍 TursoAPL: Available URLs in database:`, 
+          allResult.rows.map(r => r.saleor_api_url));
         return undefined;
       }
 
       const row = result.rows[0];
-      return {
+      const authData = {
         saleorApiUrl: row.saleor_api_url as string,
         domain: row.domain as string,
         token: row.token as string,
         appId: row.app_id as string,
         jwks: row.jwks ? JSON.parse(row.jwks as string) as string : undefined,
       };
+      
+      console.log(`✅ TursoAPL: Successfully retrieved auth data for domain: ${authData.domain}`);
+      return authData;
     } catch (error) {
       console.error("❌ Failed to get auth data from Turso APL:", error);
       return undefined;

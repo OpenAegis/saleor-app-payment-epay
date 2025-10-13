@@ -8,9 +8,9 @@ import { TursoAPL } from "./lib/turso-apl";
  * 使用 TursoAPL 将认证数据存储在 Turso 数据库中
  * 这样可以在多个实例间共享认证数据，且与业务数据统一管理
  * 
- * 如果需要回退到 FileAPL，请将 USE_TURSO_APL 设置为 false
+ * 暂时回退到 FileAPL，直到有认证数据时再切换到 TursoAPL
  */
-const USE_TURSO_APL = true;
+const USE_TURSO_APL = false;
 
 const getApl = async () => {
   if (isTest()) {
