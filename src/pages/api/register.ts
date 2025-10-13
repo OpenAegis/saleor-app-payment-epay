@@ -1,13 +1,12 @@
 import { type NextApiRequest, type NextApiResponse } from "next";
 import { saleorApp } from "../../saleor-app";
 import { createLogger } from "../../lib/logger";
-import { env } from "../../../src/lib/env.mjs";
 
 const logger = createLogger({ component: "RegisterAPI" });
 
 /**
  * 修正Saleor API URL
- * 如果URL是localhost，使用环境变量或占位符
+ * 如果URL是localhost，使用占位符URL
  */
 function correctSaleorApiUrl(saleorApiUrl: string, _saleorDomain: string | undefined): string {
   try {
@@ -15,24 +14,6 @@ function correctSaleorApiUrl(saleorApiUrl: string, _saleorDomain: string | undef
     const url = new URL(saleorApiUrl);
     if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
       logger.info("检测到localhost URL: " + saleorApiUrl + ", 使用占位符URL");
-
-      // 首先尝试使用环境变量中的APP_URL
-      if (env.APP_URL) {
-        try {
-          const appUrl = new URL(env.APP_URL);
-          // 从APP_URL构建Saleor API URL（假设Saleor API在相同域名下）
-          const correctedUrl = appUrl.origin + "/graphql/";
-          logger.info("使用环境变量APP_URL构建URL: " + correctedUrl);
-          return correctedUrl;
-        } catch (error) {
-          logger.warn(
-            "无法从环境变量APP_URL构建URL: " +
-              env.APP_URL +
-              ", 错误: " +
-              (error instanceof Error ? error.message : "未知错误"),
-          );
-        }
-      }
 
       // 使用占位符URL，稍后在应用设置中手动配置
       const placeholderUrl = "https://your-saleor-instance.com/graphql/";
@@ -176,7 +157,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // 构建authData（使用原始URL，因为这是Saleor传递给我们的）
+    // 构建authData（使用修正后的URL）
     const authData = {
       domain: saleorDomain as string | undefined,
       token: authToken,
