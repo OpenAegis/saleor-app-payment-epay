@@ -1,4 +1,5 @@
 import { type NextApiRequest, type NextApiResponse } from "next";
+import { type AuthData } from "@saleor/app-sdk/APL";
 import { saleorApp } from "../../saleor-app";
 import { createLogger } from "../../lib/logger";
 
@@ -148,7 +149,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // 构建authData（使用修正后的URL）
-    const authData = {
+    const authData: AuthData = {
       domain: saleorDomain as string | undefined,
       token: authToken,
       saleorApiUrl: correctedUrl, // 使用修正后的URL
@@ -156,10 +157,46 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       jwks
     };
 
-    logger.info("authData: " + JSON.stringify(authData));
+    logger.info("准备保存authData: " + JSON.stringify(authData));
+
+    // 检查APL是否已配置
+    try {
+      const aplConfigured = await saleorApp.apl.isConfigured();
+      logger.info("APL配置状态: " + JSON.stringify(aplConfigured));
+      
+      if (!aplConfigured.configured) {
+        logger.error("APL未正确配置: " + (aplConfigured.error?.message || "未知错误"));
+        return res.status(503).json({ 
+          success: false,
+          error: {
+            message: "APL not configured: " + (aplConfigured.error?.message || "未知错误")
+          }
+        });
+      }
+    } catch (configError) {
+      logger.error("检查APL配置时出错: " + (configError instanceof Error ? configError.message : "未知错误"));
+      return res.status(503).json({ 
+        success: false,
+        error: {
+          message: "Error checking APL configuration: " + (configError instanceof Error ? configError.message : "未知错误")
+        }
+      });
+    }
 
     // 保存到APL
-    await saleorApp.apl.set(authData);
+    try {
+      await saleorApp.apl.set(authData);
+      logger.info("AuthData保存成功");
+    } catch (saveError) {
+      logger.error("保存AuthData时出错: " + (saveError instanceof Error ? saveError.message : "未知错误"));
+      logger.error("保存失败的authData: " + JSON.stringify(authData));
+      return res.status(500).json({ 
+        success: false,
+        error: {
+          message: "Could not save auth data: " + (saveError instanceof Error ? saveError.message : "未知错误")
+        }
+      });
+    }
 
     logger.info("Register完成");
     return res.status(200).json({ success: true });
@@ -168,7 +205,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ 
       success: false,
       error: {
-        message: "Registration failed: could not save the auth data."
+        message: "Registration failed: " + (error instanceof Error ? error.message : "未知错误")
       }
     });
   }
