@@ -1,4 +1,4 @@
-import { useAppBridge, withAuthorization } from "@saleor/app-sdk/app-bridge";
+import { useAppBridge, withAuthorization, createAuthenticatedFetch } from "@saleor/app-sdk/app-bridge";
 import { useState, useEffect } from "react";
 import { Box, Input, Button } from "@saleor/macaw-ui";
 import { type NextPage } from "next";
@@ -14,6 +14,7 @@ interface SaleorUrlResponse {
 const ConfigPage: NextPage = () => {
   const { appBridgeState, appBridge } = useAppBridge();
   const { token } = appBridgeState ?? {};
+  const authenticatedFetch = appBridge ? createAuthenticatedFetch(appBridge) : fetch;
 
   const [saleorApiUrl, setSaleorApiUrl] = useState<string>("");
   const [isPlaceholderUrl, setIsPlaceholderUrl] = useState<boolean>(true);
@@ -36,7 +37,7 @@ const ConfigPage: NextPage = () => {
         // 支付配置由插件超级管理员管理，这里不需要获取
 
         // 获取Saleor API URL
-        const saleorUrlResponse = await appBridge?.fetch("/api/update-saleor-url") ?? await fetch("/api/update-saleor-url");
+        const saleorUrlResponse = await authenticatedFetch("/api/update-saleor-url");
         if (saleorUrlResponse.ok) {
           const urlData = (await saleorUrlResponse.json()) as SaleorUrlResponse;
           setSaleorApiUrl(urlData.saleorApiUrl || "");
@@ -86,13 +87,7 @@ const ConfigPage: NextPage = () => {
     }
 
     try {
-      const response = await appBridge?.fetch("/api/update-saleor-url", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ saleorApiUrl }),
-      }) ?? await fetch("/api/update-saleor-url", {
+      const response = await authenticatedFetch("/api/update-saleor-url", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

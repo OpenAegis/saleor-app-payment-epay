@@ -34,5 +34,5 @@
     "**/*.mts",
     "**/*.tsx"
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "rich-text-editor-app"]
 }
