@@ -2,51 +2,22 @@ import { createManifestHandler } from "@saleor/app-sdk/handlers/next";
 import type { AppManifest } from "@saleor/app-sdk/types";
 
 import packageJson from "../../../package.json";
-
-/**
- * 从请求头中提取真实的基础URL
- * 考虑CDN和反向代理的情况
- */
-function getRealAppBaseUrl(headers: { [key: string]: string | string[] | undefined }): string {
-  // 尝试从常见的HTTP头字段中提取真实的基础URL
-  const forwardedProto = headers["x-forwarded-proto"];
-  const forwardedHost = headers["x-forwarded-host"];
-
-  if (forwardedProto && forwardedHost) {
-    const proto = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto;
-    const host = Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost;
-    return `${proto}://${host}`;
-  }
-
-  // 回退到host头
-  const host = headers["host"];
-  if (host) {
-    const hostStr = Array.isArray(host) ? host[0] : host;
-    // 默认使用https，除非明确指定是localhost
-    const proto = hostStr.includes("localhost") ? "http" : "https";
-    return `${proto}://${hostStr}`;
-  }
-
-  // 最后的回退方案
-  return "https://example.com";
-}
+import { env } from "../../../src/lib/env.mjs";
 
 export default createManifestHandler({
   async manifestFactory({ appBaseUrl, request }) {
     // 记录manifest请求信息用于调试
-    console.log('Manifest请求信息:', {
+    console.log("Manifest请求信息:", {
       appBaseUrl,
       headers: request?.headers,
       query: request?.query,
       url: request?.url,
     });
 
-    // 优先使用环境变量，然后是从请求头推断的URL，最后使用默认的appBaseUrl
-    const apiBaseURL = process.env.APP_API_BASE_URL ?? 
-                      getRealAppBaseUrl(request?.headers || {}) ?? 
-                      appBaseUrl;
+    // 优先使用环境变量APP_API_BASE_URL，然后使用Saleor App SDK提供的appBaseUrl
+    const apiBaseURL = env.APP_API_BASE_URL ?? appBaseUrl;
 
-    console.log('使用的API基础URL:', apiBaseURL);
+    console.log("使用的API基础URL:", apiBaseURL);
 
     const manifest: AppManifest = {
       name: packageJson.name,
