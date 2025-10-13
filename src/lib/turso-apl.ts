@@ -76,18 +76,18 @@ export class TursoAPL implements APL {
     await this.initTable();
 
     try {
-      const jwksString = authData.jwks ? JSON.stringify(authData.jwks) : null;
+      const jwksString = authData.jwks ? JSON.stringify(authData.jwks) : "";
 
       await tursoClient.execute(
         `INSERT OR REPLACE INTO ${this.tableName} 
          (saleor_api_url, domain, token, app_id, jwks, updated_at)
          VALUES (?, ?, ?, ?, ?, datetime('now'))`,
         [
-          authData.saleorApiUrl,
-          authData.domain,
-          authData.token,
-          authData.appId,
-          jwksString
+          authData.saleorApiUrl || "",
+          authData.domain || "",
+          authData.token || "",
+          authData.appId || "",
+          jwksString || ""
         ]
       );
 

@@ -1,8 +1,8 @@
+import path from "path";
 import { SaleorApp } from "@saleor/app-sdk/saleor-app";
 import { FileAPL } from "@saleor/app-sdk/APL";
 import { isTest } from "./lib/isEnv";
 import { TursoAPL } from "./lib/turso-apl";
-import path from "path";
 
 /**
  * 使用 TursoAPL 将认证数据存储在 Turso 数据库中
