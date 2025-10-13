@@ -64,23 +64,7 @@ export default createAppRegisterHandler({
    * You can restrict this to specific domains if needed
    */
   allowedSaleorUrls: [
-    (saleorApiUrl: string) => {
-      // 检查是否为localhost URL
-      try {
-        const url = new URL(saleorApiUrl);
-        if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
-          // 拒绝localhost URL，让Saleor使用修正后的URL重新尝试
-          return false;
-        }
-      } catch (error) {
-        logger.error(
-          "解析Saleor API URL时出错: " +
-            saleorApiUrl +
-            ", 错误: " +
-            (error instanceof Error ? error.message : "未知错误"),
-        );
-        return false;
-      }
+    (_saleorApiUrl: string) => {
       return true;
     },
   ],
@@ -94,15 +78,13 @@ export default createAppRegisterHandler({
     logger.info("请求URL: " + request.url);
     logger.info("请求头信息: " + JSON.stringify(request.headers));
     logger.info("请求参数: " + JSON.stringify(request.params));
-
+    
     // 检查saleorApiUrl是否存在
     if (saleorApiUrl) {
       // 修正saleorApiUrl，确保在getAppId调用之前就使用正确的URL
       const correctedUrl = correctSaleorApiUrl(saleorApiUrl, saleorDomain || undefined);
       if (correctedUrl !== saleorApiUrl) {
-        logger.info(
-          "在onRequestStart中修正了saleorApiUrl: " + saleorApiUrl + " -> " + correctedUrl,
-        );
+        logger.info("在onRequestStart中修正了saleorApiUrl: " + saleorApiUrl + " -> " + correctedUrl);
         // 注意：我们不能直接修改saleorApiUrl参数，但可以在日志中记录
       }
     }
