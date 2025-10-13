@@ -1,4 +1,4 @@
-import { useAppBridge, withAuthorization, createAuthenticatedFetch } from "@saleor/app-sdk/app-bridge";
+import { useAppBridge, withAuthorization, useAuthenticatedFetch } from "@saleor/app-sdk/app-bridge";
 import { useState, useEffect } from "react";
 import { Box, Input, Button } from "@saleor/macaw-ui";
 import { type NextPage } from "next";
@@ -14,7 +14,7 @@ interface SaleorUrlResponse {
 const ConfigPage: NextPage = () => {
   const { appBridgeState, appBridge } = useAppBridge();
   const { token } = appBridgeState ?? {};
-  const authenticatedFetch = appBridge ? createAuthenticatedFetch(appBridge) : fetch;
+  const authenticatedFetch = useAuthenticatedFetch();
 
   const [saleorApiUrl, setSaleorApiUrl] = useState<string>("");
   const [isPlaceholderUrl, setIsPlaceholderUrl] = useState<boolean>(true);

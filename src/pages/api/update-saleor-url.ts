@@ -15,6 +15,7 @@ export const config = {
 export default createProtectedHandler(
   async (req: NextApiRequest, res: NextApiResponse, { authData }) => {
     logger.info("UpdateSaleorUrlAPI called with authData: " + JSON.stringify(authData));
+    logger.info("Request headers: " + JSON.stringify(req.headers));
 
     const { saleorApiUrl: currentSaleorApiUrl } = authData;
 
