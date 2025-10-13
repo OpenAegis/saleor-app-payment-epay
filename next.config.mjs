@@ -20,8 +20,17 @@ const config = {
     ignoreDuringBuilds: true,
   },
   /** @param { import("webpack").Configuration } config */
-  webpack(config) {
+  webpack(config, { webpack }) {
     config.experiments = { ...config.experiments, topLevelAwait: true };
+    
+    // Fix for 'global is not defined' error
+    config.plugins = config.plugins || [];
+    config.plugins.push(
+      new webpack.DefinePlugin({
+        global: 'globalThis',
+      })
+    );
+    
     return config;
   },
   async headers() {
