@@ -4,6 +4,11 @@ import {
   type AplReadyResult,
   type AuthData,
 } from "@saleor/app-sdk/APL";
+
+// 扩展AuthData接口以包含站点关联
+export interface ExtendedAuthData extends AuthData {
+  siteId?: string;
+}
 import { tursoClient } from "./db/turso-client";
 import { createLogger } from "./logger";
 
@@ -24,6 +29,7 @@ export class TursoAPL implements APL {
     if (this.initialized) return;
 
     try {
+      // 创建saleor_auth_data表，与sites表关联
       await tursoClient.execute(`
         CREATE TABLE IF NOT EXISTS ${this.tableName} (
           saleor_api_url TEXT PRIMARY KEY,
@@ -31,8 +37,10 @@ export class TursoAPL implements APL {
           token TEXT NOT NULL,
           app_id TEXT NOT NULL,
           jwks TEXT,
+          site_id TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE SET NULL
         )
       `);
 
@@ -44,8 +52,12 @@ export class TursoAPL implements APL {
         CREATE INDEX IF NOT EXISTS auth_data_app_id_idx ON ${this.tableName}(app_id)
       `);
 
+      await tursoClient.execute(`
+        CREATE INDEX IF NOT EXISTS auth_data_site_id_idx ON ${this.tableName}(site_id)
+      `);
+
       this.initialized = true;
-      logger.info("✅ Turso APL table initialized successfully");
+      logger.info("✅ Turso APL table initialized successfully with site relationship");
     } catch (error) {
       logger.error(
         "❌ Failed to initialize Turso APL table: " +
@@ -79,12 +91,13 @@ export class TursoAPL implements APL {
       }
 
       const row = result.rows[0];
-      const authData = {
+      const authData: ExtendedAuthData = {
         saleorApiUrl: row.saleor_api_url as string,
         domain: row.domain as string,
         token: row.token as string,
         appId: row.app_id as string,
         jwks: row.jwks ? (JSON.parse(row.jwks as string) as string) : undefined,
+        siteId: row.site_id as string | undefined,
       };
 
       logger.info(`✅ TursoAPL: Successfully retrieved auth data for domain: ${authData.domain}`);
@@ -98,26 +111,28 @@ export class TursoAPL implements APL {
     }
   }
 
-  async set(authData: AuthData): Promise<void> {
+  async set(authData: AuthData | ExtendedAuthData): Promise<void> {
     await this.initTable();
 
     try {
       const jwksString = authData.jwks ? JSON.stringify(authData.jwks) : "";
+      const extendedData = authData as ExtendedAuthData;
 
       await tursoClient.execute(
         `INSERT OR REPLACE INTO ${this.tableName} 
-         (saleor_api_url, domain, token, app_id, jwks, updated_at)
-         VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+         (saleor_api_url, domain, token, app_id, jwks, site_id, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
         [
           authData.saleorApiUrl || "",
           authData.domain || "",
           authData.token || "",
           authData.appId || "",
           jwksString || "",
+          extendedData.siteId || null,
         ],
       );
 
-      logger.info(`✅ Auth data saved for domain: ${authData.domain}`);
+      logger.info(`✅ Auth data saved for domain: ${authData.domain}${extendedData.siteId ? ` (site: ${extendedData.siteId})` : ""}`);
     } catch (error) {
       logger.error(
         "❌ Failed to save auth data to Turso APL: " +
@@ -145,7 +160,7 @@ export class TursoAPL implements APL {
     }
   }
 
-  async getAll(): Promise<AuthData[]> {
+  async getAll(): Promise<ExtendedAuthData[]> {
     await this.initTable();
 
     try {
@@ -153,12 +168,13 @@ export class TursoAPL implements APL {
         `SELECT * FROM ${this.tableName} ORDER BY created_at DESC`,
       );
 
-      return result.rows.map((row) => ({
+      return result.rows.map((row): ExtendedAuthData => ({
         saleorApiUrl: row.saleor_api_url as string,
         domain: row.domain as string,
         token: row.token as string,
         appId: row.app_id as string,
         jwks: row.jwks ? (JSON.parse(row.jwks as string) as string) : undefined,
+        siteId: row.site_id as string | undefined,
       }));
     } catch (error) {
       logger.error(
@@ -197,6 +213,93 @@ export class TursoAPL implements APL {
         configured: false,
         error: error instanceof Error ? error : new Error("APL configuration error"),
       };
+    }
+  }
+
+  /**
+   * 根据站点ID获取认证数据
+   */
+  async getBySiteId(siteId: string): Promise<ExtendedAuthData | undefined> {
+    await this.initTable();
+
+    try {
+      const result = await tursoClient.execute(
+        `SELECT * FROM ${this.tableName} WHERE site_id = ?`,
+        [siteId],
+      );
+
+      if (result.rows.length === 0) {
+        return undefined;
+      }
+
+      const row = result.rows[0];
+      return {
+        saleorApiUrl: row.saleor_api_url as string,
+        domain: row.domain as string,
+        token: row.token as string,
+        appId: row.app_id as string,
+        jwks: row.jwks ? (JSON.parse(row.jwks as string) as string) : undefined,
+        siteId: row.site_id as string,
+      };
+    } catch (error) {
+      logger.error(
+        "❌ Failed to get auth data by site ID: " +
+          (error instanceof Error ? error.message : "Unknown error"),
+      );
+      return undefined;
+    }
+  }
+
+  /**
+   * 更新认证数据的站点关联
+   */
+  async updateSiteAssociation(saleorApiUrl: string, siteId: string | null): Promise<void> {
+    await this.initTable();
+
+    try {
+      await tursoClient.execute(
+        `UPDATE ${this.tableName} SET site_id = ?, updated_at = datetime('now') WHERE saleor_api_url = ?`,
+        [siteId, saleorApiUrl],
+      );
+
+      logger.info(`✅ Updated site association for ${saleorApiUrl}: ${siteId || 'null'}`);
+    } catch (error) {
+      logger.error(
+        "❌ Failed to update site association: " +
+          (error instanceof Error ? error.message : "Unknown error"),
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * 获取授权状态的认证数据（需要有关联的已批准站点）
+   */
+  async getAuthorizedAuthData(): Promise<ExtendedAuthData[]> {
+    await this.initTable();
+
+    try {
+      const result = await tursoClient.execute(`
+        SELECT a.* FROM ${this.tableName} a
+        INNER JOIN sites s ON a.site_id = s.id
+        WHERE s.status = 'approved'
+        ORDER BY a.created_at DESC
+      `);
+
+      return result.rows.map((row): ExtendedAuthData => ({
+        saleorApiUrl: row.saleor_api_url as string,
+        domain: row.domain as string,
+        token: row.token as string,
+        appId: row.app_id as string,
+        jwks: row.jwks ? (JSON.parse(row.jwks as string) as string) : undefined,
+        siteId: row.site_id as string,
+      }));
+    } catch (error) {
+      logger.error(
+        "❌ Failed to get authorized auth data: " +
+          (error instanceof Error ? error.message : "Unknown error"),
+      );
+      return [];
     }
   }
 }

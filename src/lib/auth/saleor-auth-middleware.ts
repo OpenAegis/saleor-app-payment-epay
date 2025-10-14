@@ -2,12 +2,14 @@ import { type NextApiRequest, type NextApiResponse } from "next";
 import { SALEOR_AUTHORIZATION_BEARER_HEADER, SALEOR_API_URL_HEADER } from "@saleor/app-sdk/const";
 import { type AuthData } from "@saleor/app-sdk/APL";
 import { saleorApp } from "../../saleor-app";
+import { siteManager } from "../managers/site-manager";
 import { createLogger } from "../logger";
+import { type ExtendedAuthData } from "../turso-apl";
 
 const logger = createLogger({ component: "SaleorAuthMiddleware" });
 
 export interface AuthenticatedRequest extends NextApiRequest {
-  authData: AuthData;
+  authData: ExtendedAuthData;
 }
 
 export type AuthenticatedHandler = (
@@ -119,6 +121,33 @@ export function withSaleorAuth(handler: AuthenticatedHandler) {
       }
 
       logger.info("Authentication successful for: " + saleorApiUrl);
+
+      // 检查站点授权状态（如果有关联站点）
+      if (authData.siteId) {
+        const site = await siteManager.get(authData.siteId);
+        if (!site) {
+          logger.warn(`关联的站点不存在: ${authData.siteId}`);
+          return res.status(401).json({ 
+            error: "Associated site not found",
+            siteId: authData.siteId 
+          });
+        }
+
+        if (site.status !== 'approved') {
+          logger.warn(`站点未被授权: ${site.domain} (状态: ${site.status})`);
+          return res.status(403).json({ 
+            error: "Site not authorized",
+            siteStatus: site.status,
+            domain: site.domain 
+          });
+        }
+
+        logger.info(`站点授权验证通过: ${site.domain}`);
+      } else {
+        logger.warn(`认证数据未关联站点: ${saleorApiUrl}`);
+        // 对于未关联站点的认证数据，可以选择是否允许访问
+        // 这里暂时允许，但记录警告
+      }
 
       // 将认证数据添加到请求对象
       (req as AuthenticatedRequest).authData = authData;

@@ -2,6 +2,8 @@ import { type NextApiRequest, type NextApiResponse } from "next";
 import { type AuthData } from "@saleor/app-sdk/APL";
 import { saleorApp } from "../../saleor-app";
 import { createLogger } from "../../lib/logger";
+import { siteManager } from "../../lib/managers/site-manager";
+import { type ExtendedAuthData } from "../../lib/turso-apl";
 
 const logger = createLogger({ component: "RegisterAPI" });
 
@@ -156,16 +158,44 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       jwks = "{}";
     }
 
-    // 构建authData（优先使用原始URL，这样自动检测机制可以正常工作）
-    const authData: AuthData = {
+    // 首先注册站点
+    let site;
+    try {
+      site = await siteManager.register({
+        domain: saleorDomain as string,
+        name: `Saleor Store (${saleorDomain})`,
+        saleorApiUrl: saleorApiUrl,
+        clientIP: req.headers['x-forwarded-for'] as string || req.headers['x-real-ip'] as string || null,
+        appId,
+      });
+      logger.info(`站点注册成功: ${site.id}`);
+    } catch (siteError) {
+      // 如果站点已存在，获取现有站点
+      if (siteError instanceof Error && siteError.message.includes('已经注册过了')) {
+        site = await siteManager.getByDomain(saleorDomain as string);
+        if (site) {
+          logger.info(`使用现有站点: ${site.id}`);
+        } else {
+          logger.error("无法获取现有站点信息");
+          return res.status(500).json({ error: "Site registration failed" });
+        }
+      } else {
+        logger.error("站点注册失败: " + (siteError instanceof Error ? siteError.message : "未知错误"));
+        return res.status(500).json({ error: "Site registration failed" });
+      }
+    }
+
+    // 构建认证数据（关联站点ID）
+    const authData: ExtendedAuthData = {
       domain: saleorDomain as string | undefined,
       token: authToken,
       saleorApiUrl: saleorApiUrl, // 使用原始URL，让自动检测机制处理
       appId,
       jwks,
+      siteId: site.id, // 关联站点ID
     };
 
-    logger.info("准备保存authData: " + JSON.stringify(authData));
+    logger.info("准备保存authData: " + JSON.stringify({ ...authData, token: "***" }));
 
     // 检查APL是否已配置
     try {

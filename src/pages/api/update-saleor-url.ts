@@ -3,6 +3,7 @@ import { SALEOR_API_URL_HEADER } from "@saleor/app-sdk/const";
 import { saleorApp } from "../../saleor-app";
 import { createLogger } from "../../lib/logger";
 import { withSaleorAuth, type AuthenticatedRequest } from "../../lib/auth/saleor-auth-middleware";
+import { type ExtendedAuthData } from "../../lib/turso-apl";
 
 const logger = createLogger({ component: "UpdateSaleorUrlAPI" });
 
@@ -30,7 +31,7 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
             logger.info(`Updating saleorApiUrl from ${currentSaleorApiUrl} to ${realSaleorApiUrl}`);
             
             // 更新认证数据中的URL
-            const updatedAuthData = {
+            const updatedAuthData: ExtendedAuthData = {
               ...req.authData,
               saleorApiUrl: realSaleorApiUrl,
             };
@@ -107,7 +108,7 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
           }
 
           // 更新authData中的saleorApiUrl
-          const updatedAuthData = {
+          const updatedAuthData: ExtendedAuthData = {
             ...existingAuthData,
             saleorApiUrl: saleorApiUrl,
           };
