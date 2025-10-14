@@ -103,6 +103,7 @@ export class SiteManager {
       appId: input.appId || null,
       status: "pending" as const,
       notes: validationNotes || null,
+      // 不设置时间戳字段，让数据库默认值处理
     };
 
     await db.insert(sites).values(siteData);

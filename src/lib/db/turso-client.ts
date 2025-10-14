@@ -54,6 +54,7 @@ export async function initializeDatabase() {
         domain TEXT NOT NULL UNIQUE,
         name TEXT NOT NULL,
         saleor_api_url TEXT NOT NULL,
+        client_ip TEXT,
         app_id TEXT,
         status TEXT NOT NULL DEFAULT 'pending',
         requested_at TEXT NOT NULL DEFAULT (datetime('now')),
