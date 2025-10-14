@@ -72,14 +72,25 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           if (requestedSaleorApiUrl && existingAuthData.saleorApiUrl !== requestedSaleorApiUrl) {
             logger.info(`Auto-updating saleorApiUrl from ${existingAuthData.saleorApiUrl} to ${requestedSaleorApiUrl}`);
             
-            // 从请求头中获取domain
+            // 从请求头中获取domain，如果没有则从URL中提取
             const requestedDomain = req.headers["saleor-domain"] as string;
+            let domainToUpdate = requestedDomain || existingAuthData.domain;
+            
+            // 如果没有saleor-domain请求头，尝试从URL提取domain
+            if (!requestedDomain && requestedSaleorApiUrl) {
+              try {
+                domainToUpdate = new URL(requestedSaleorApiUrl).hostname;
+                logger.info(`🔄 Extracting domain from URL: ${requestedSaleorApiUrl} -> ${domainToUpdate}`);
+              } catch {
+                logger.warn(`Failed to extract domain from URL: ${requestedSaleorApiUrl}`);
+              }
+            }
             
             // 更新认证数据中的URL和domain
             const updatedAuthData: ExtendedAuthData = {
               ...existingAuthData,
               saleorApiUrl: requestedSaleorApiUrl,
-              domain: requestedDomain || existingAuthData.domain, // 更新domain
+              domain: domainToUpdate, // 更新domain
             };
             
             // 保存新的认证数据

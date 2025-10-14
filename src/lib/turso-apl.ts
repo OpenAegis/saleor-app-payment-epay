@@ -116,11 +116,15 @@ export class TursoAPL implements APL {
       if (existing.length > 0) {
         // 更新现有记录，包括从URL中提取的domain
         let domainToUpdate = authData.domain;
-        if (!domainToUpdate && authData.saleorApiUrl) {
+        
+        // 总是尝试从saleorApiUrl提取最新的domain
+        if (authData.saleorApiUrl) {
           try {
-            domainToUpdate = new URL(authData.saleorApiUrl).hostname;
+            const extractedDomain = new URL(authData.saleorApiUrl).hostname;
+            domainToUpdate = extractedDomain;
+            logger.info(`🔄 Extracting domain from URL: ${authData.saleorApiUrl} -> ${extractedDomain}`);
           } catch {
-            domainToUpdate = authData.domain;
+            logger.warn(`Failed to extract domain from URL: ${authData.saleorApiUrl}, using existing: ${domainToUpdate}`);
           }
         }
 

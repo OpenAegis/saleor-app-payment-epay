@@ -199,6 +199,61 @@ const ConfigPage: NextPage = () => {
                   <p>管理员登录地址: <a href="/admin/login" target="_blank" rel="noopener noreferrer">插件管理后台</a></p>
                 </Box>
               )}
+              
+              {/* 域名同步按钮 */}
+              {siteAuth.authData && (() => {
+                try {
+                  return siteAuth.authData.domain !== new URL(siteAuth.authData.saleorApiUrl).hostname;
+                } catch {
+                  return false;
+                }
+              })() && (
+                <Box marginTop={2} padding={2} backgroundColor="warning1" borderRadius={4}>
+                  <p><strong>⚠️ 检测到域名不匹配</strong></p>
+                  <p>当前域名: {siteAuth.authData.domain}</p>
+                  <p>URL域名: {(() => {
+                    try {
+                      return new URL(siteAuth.authData.saleorApiUrl).hostname;
+                    } catch {
+                      return "无法解析";
+                    }
+                  })()}</p>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="small"
+                    disabled={loading}
+                    onClick={async () => {
+                      if (token) {
+                        setLoading(true);
+                        try {
+                          const syncResponse = await authenticatedFetch("/api/sync-domain", {
+                            method: "POST"
+                          });
+                          if (syncResponse.ok) {
+                            // 刷新授权状态
+                            const siteAuthResponse = await authenticatedFetch("/api/check-site-auth");
+                            if (siteAuthResponse.ok) {
+                              const authData = (await siteAuthResponse.json()) as SiteAuthResponse;
+                              setSiteAuth(authData);
+                            }
+                            alert("域名已同步成功！");
+                          } else {
+                            alert("域名同步失败，请重试");
+                          }
+                        } catch (error) {
+                          console.error("Failed to sync domain:", error);
+                          alert("域名同步失败，请重试");
+                        } finally {
+                          setLoading(false);
+                        }
+                      }
+                    }}
+                  >
+                    🔄 同步域名
+                  </Button>
+                </Box>
+              )}
             </Box>
           </Box>
         )}
