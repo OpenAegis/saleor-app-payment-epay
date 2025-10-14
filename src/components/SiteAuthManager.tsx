@@ -99,6 +99,23 @@ export function SiteAuthManager() {
     }
   };
 
+  const handleUpdateSite = async (siteId: string, updateData: { notes?: string }) => {
+    try {
+      const res = await fetch(`/api/admin/sites?action=update`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: siteId, ...updateData }),
+      });
+
+      if (res.ok) {
+        await fetchOverview();
+        alert("站点信息已更新");
+      }
+    } catch (error) {
+      console.error("Failed to update site:", error);
+    }
+  };
+
   const handleAuthAction = async (action: string, saleorApiUrl: string, siteId?: string) => {
     try {
       const res = await fetch(`/api/admin/auth-management?action=${action}`, {
@@ -403,6 +420,22 @@ export function SiteAuthManager() {
                             🔄 恢复
                           </Button>
                         )}
+
+                        {/* 编辑备注按钮 */}
+                        <Button 
+                          type="button" 
+                          size="small"
+                          variant="secondary"
+                          onClick={() => {
+                            const currentNotes = item.site!.notes || "";
+                            const newNotes = prompt("编辑备注:", currentNotes);
+                            if (newNotes !== null) {
+                              handleUpdateSite(item.site!.id, { notes: newNotes });
+                            }
+                          }}
+                        >
+                          📝 编辑备注
+                        </Button>
                       </Box>
                     </Box>
                   )}
