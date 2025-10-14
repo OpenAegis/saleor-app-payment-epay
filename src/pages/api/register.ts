@@ -158,8 +158,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       jwks = "{}";
     }
 
-    // 首先注册站点
-    let site;
+    // 尝试注册站点
+    let site = null;
     try {
       site = await siteManager.register({
         domain: saleorDomain as string,
@@ -175,27 +175,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         site = await siteManager.getByDomain(saleorDomain as string);
         if (site) {
           logger.info(`使用现有站点: ${site.id}`);
-        } else {
-          logger.error("无法获取现有站点信息");
-          return res.status(500).json({ error: "Site registration failed" });
         }
       } else {
-        logger.error("站点注册失败: " + (siteError instanceof Error ? siteError.message : "未知错误"));
-        return res.status(500).json({ error: "Site registration failed" });
+        logger.warn("站点注册失败，但继续安装流程: " + (siteError instanceof Error ? siteError.message : "未知错误"));
+        // 不中断安装流程，继续创建认证数据
+        site = null;
       }
     }
 
-    // 构建认证数据（关联站点ID）
+    // 构建认证数据（如果有站点则关联站点ID）
     const authData: ExtendedAuthData = {
       domain: saleorDomain as string | undefined,
       token: authToken,
       saleorApiUrl: saleorApiUrl, // 使用原始URL，让自动检测机制处理
       appId,
       jwks,
-      siteId: site.id, // 关联站点ID
+      siteId: site?.id, // 如果站点注册成功则关联站点ID
     };
 
-    logger.info("准备保存authData: " + JSON.stringify({ ...authData, token: "***" }));
+    logger.info("准备保存authData: " + JSON.stringify({ ...authData, token: "***", siteId: site?.id || "未关联" }));
 
     // 检查APL是否已配置
     try {

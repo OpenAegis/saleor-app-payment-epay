@@ -47,7 +47,7 @@ export async function initializeDatabase() {
       )
     `);
 
-    // 2. 创建sites表 - 没有外键依赖
+    // 2. 创建sites表（合并认证数据） - 没有外键依赖
     await tursoClient.execute(`
       CREATE TABLE IF NOT EXISTS sites (
         id TEXT PRIMARY KEY,
@@ -55,7 +55,9 @@ export async function initializeDatabase() {
         name TEXT NOT NULL,
         saleor_api_url TEXT NOT NULL,
         client_ip TEXT,
+        token TEXT,
         app_id TEXT,
+        jwks TEXT,
         status TEXT NOT NULL DEFAULT 'pending',
         requested_at TEXT NOT NULL DEFAULT (datetime('now')),
         approved_at TEXT,

@@ -53,16 +53,24 @@ export const channels = sqliteTable("channels", {
 });
 
 /**
- * 站点授权表
- * 管理哪些Saleor站点被允许使用此支付插件
+ * 站点授权和认证数据表（合并表）
+ * 管理Saleor站点的授权状态和认证数据
  */
 export const sites = sqliteTable("sites", {
   id: text("id").primaryKey(),
+  
+  // 站点基本信息
   domain: text("domain").notNull().unique(), // 站点域名，如 shop.example.com
   name: text("name").notNull(), // 站点名称
-  saleorApiUrl: text("saleor_api_url").notNull(), // Saleor API地址
+  saleorApiUrl: text("saleor_api_url").notNull(), // Saleor API地址（也是认证数据的主键）
   clientIP: text("client_ip"), // 客户端真实IP地址
+  
+  // 认证数据字段
+  token: text("token"), // Saleor认证token
   appId: text("app_id"), // Saleor App ID
+  jwks: text("jwks"), // JWKS数据（JSON字符串）
+  
+  // 授权管理字段
   status: text("status").notNull().default("pending"), // pending, approved, rejected, suspended
   requestedAt: text("requested_at")
     .notNull()
@@ -71,6 +79,8 @@ export const sites = sqliteTable("sites", {
   approvedBy: text("approved_by"), // 审批人（插件管理员）
   notes: text("notes"), // 备注
   lastActiveAt: text("last_active_at"), // 最后活跃时间
+  
+  // 时间戳
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),

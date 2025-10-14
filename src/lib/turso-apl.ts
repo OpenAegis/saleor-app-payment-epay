@@ -4,74 +4,41 @@ import {
   type AplReadyResult,
   type AuthData,
 } from "@saleor/app-sdk/APL";
+import { eq } from "drizzle-orm";
+import { db } from "./db/turso-client";
+import { sites } from "./db/schema";
+import { createLogger } from "./logger";
 
-// 扩展AuthData接口以包含站点关联
+// 扩展AuthData接口以包含站点信息
 export interface ExtendedAuthData extends AuthData {
   siteId?: string;
+  status?: string;
+  notes?: string;
 }
-import { tursoClient } from "./db/turso-client";
-import { createLogger } from "./logger";
 
 const logger = createLogger({ component: "TursoAPL" });
 
 /**
  * Turso-based APL (Auth Persistence Layer)
- * 将 Saleor 应用的认证数据存储在 Turso 数据库中
+ * 使用合并的sites表存储认证数据和站点信息
  */
 export class TursoAPL implements APL {
-  private tableName = "saleor_auth_data";
   private initialized = false;
 
   /**
-   * 初始化认证数据表
+   * 初始化（检查sites表是否存在）
    */
   private async initTable() {
     if (this.initialized) return;
 
     try {
-      // 首先创建基本的saleor_auth_data表（向后兼容）
-      await tursoClient.execute(`
-        CREATE TABLE IF NOT EXISTS ${this.tableName} (
-          saleor_api_url TEXT PRIMARY KEY,
-          domain TEXT NOT NULL,
-          token TEXT NOT NULL,
-          app_id TEXT NOT NULL,
-          jwks TEXT,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        )
-      `);
-
-      // 检查site_id列是否存在，如果不存在则添加
-      try {
-        await tursoClient.execute(`SELECT site_id FROM ${this.tableName} LIMIT 1`);
-        logger.info("✅ site_id column already exists");
-      } catch (columnError) {
-        // 列不存在，添加它
-        logger.info("🔄 Adding site_id column to existing table");
-        await tursoClient.execute(`
-          ALTER TABLE ${this.tableName} ADD COLUMN site_id TEXT
-        `);
-        logger.info("✅ site_id column added successfully");
-      }
-
-      await tursoClient.execute(`
-        CREATE INDEX IF NOT EXISTS auth_data_domain_idx ON ${this.tableName}(domain)
-      `);
-
-      await tursoClient.execute(`
-        CREATE INDEX IF NOT EXISTS auth_data_app_id_idx ON ${this.tableName}(app_id)
-      `);
-
-      await tursoClient.execute(`
-        CREATE INDEX IF NOT EXISTS auth_data_site_id_idx ON ${this.tableName}(site_id)
-      `);
-
+      // 检查sites表是否存在
+      await db.select().from(sites).limit(1);
       this.initialized = true;
-      logger.info("✅ Turso APL table initialized successfully with site relationship");
+      logger.info("✅ Sites table is ready for APL operations");
     } catch (error) {
       logger.error(
-        "❌ Failed to initialize Turso APL table: " +
+        "❌ Sites table not available for APL operations: " +
           (error instanceof Error ? error.message : "Unknown error"),
       );
       throw error;
@@ -84,31 +51,32 @@ export class TursoAPL implements APL {
     try {
       logger.info(`🔍 TursoAPL: Looking for auth data with URL: ${saleorApiUrl}`);
 
-      const result = await tursoClient.execute(
-        `SELECT * FROM ${this.tableName} WHERE saleor_api_url = ?`,
-        [saleorApiUrl],
-      );
+      const result = await db
+        .select()
+        .from(sites)
+        .where(eq(sites.saleorApiUrl, saleorApiUrl))
+        .limit(1);
 
-      logger.info(`🔍 TursoAPL: Found ${result.rows.length} rows for URL: ${saleorApiUrl}`);
+      logger.info(`🔍 TursoAPL: Found ${result.length} rows for URL: ${saleorApiUrl}`);
 
-      if (result.rows.length === 0) {
-        // 也试试查找所有记录，看看数据库中有什么
-        const allResult = await tursoClient.execute(
-          `SELECT saleor_api_url FROM ${this.tableName} LIMIT 5`,
-        );
-        const urls = allResult.rows.map((r) => r.saleor_api_url as string);
+      if (result.length === 0) {
+        // 查找所有记录，看看数据库中有什么
+        const allResult = await db.select({ saleorApiUrl: sites.saleorApiUrl }).from(sites).limit(5);
+        const urls = allResult.map((r) => r.saleorApiUrl);
         logger.info(`🔍 TursoAPL: Available URLs in database: ${urls.join(", ")}`);
         return undefined;
       }
 
-      const row = result.rows[0];
+      const site = result[0];
       const authData: ExtendedAuthData = {
-        saleorApiUrl: row.saleor_api_url as string,
-        domain: row.domain as string,
-        token: row.token as string,
-        appId: row.app_id as string,
-        jwks: row.jwks ? (JSON.parse(row.jwks as string) as string) : undefined,
-        siteId: (row.site_id as string | undefined) || undefined,
+        saleorApiUrl: site.saleorApiUrl,
+        domain: site.domain,
+        token: site.token || "",
+        appId: site.appId || "",
+        jwks: site.jwks ? JSON.parse(site.jwks) as string : undefined,
+        siteId: site.id,
+        status: site.status,
+        notes: site.notes || undefined,
       };
 
       logger.info(`✅ TursoAPL: Successfully retrieved auth data for domain: ${authData.domain}`);
@@ -126,24 +94,45 @@ export class TursoAPL implements APL {
     await this.initTable();
 
     try {
-      const jwksString = authData.jwks ? JSON.stringify(authData.jwks) : "";
+      const jwksString = authData.jwks ? JSON.stringify(authData.jwks) : null;
       const extendedData = authData as ExtendedAuthData;
 
-      await tursoClient.execute(
-        `INSERT OR REPLACE INTO ${this.tableName} 
-         (saleor_api_url, domain, token, app_id, jwks, site_id, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
-        [
-          authData.saleorApiUrl || "",
-          authData.domain || "",
-          authData.token || "",
-          authData.appId || "",
-          jwksString || "",
-          extendedData.siteId || null,
-        ],
-      );
+      // 检查是否已存在相同的 saleorApiUrl 记录
+      const existing = await db
+        .select()
+        .from(sites)
+        .where(eq(sites.saleorApiUrl, authData.saleorApiUrl))
+        .limit(1);
 
-      logger.info(`✅ Auth data saved for domain: ${authData.domain}${extendedData.siteId ? ` (site: ${extendedData.siteId})` : ""}`);
+      if (existing.length > 0) {
+        // 更新现有记录
+        await db
+          .update(sites)
+          .set({
+            token: authData.token || null,
+            appId: authData.appId || null,
+            jwks: jwksString,
+            updatedAt: new Date().toISOString(),
+          })
+          .where(eq(sites.saleorApiUrl, authData.saleorApiUrl));
+        
+        logger.info(`✅ Auth data updated for API URL: ${authData.saleorApiUrl}`);
+      } else {
+        // 创建新记录
+        const siteId = extendedData.siteId || `site-${Date.now()}`;
+        await db.insert(sites).values({
+          id: siteId,
+          domain: authData.domain || "unknown",
+          name: `Saleor Store (${authData.domain || "unknown"})`,
+          saleorApiUrl: authData.saleorApiUrl,
+          token: authData.token || null,
+          appId: authData.appId || null,
+          jwks: jwksString,
+          status: "pending",
+        });
+        
+        logger.info(`✅ Auth data created for API URL: ${authData.saleorApiUrl} (site: ${siteId})`);
+      }
     } catch (error) {
       logger.error(
         "❌ Failed to save auth data to Turso APL: " +
@@ -157,9 +146,9 @@ export class TursoAPL implements APL {
     await this.initTable();
 
     try {
-      await tursoClient.execute(`DELETE FROM ${this.tableName} WHERE saleor_api_url = ?`, [
-        saleorApiUrl,
-      ]);
+      await db
+        .delete(sites)
+        .where(eq(sites.saleorApiUrl, saleorApiUrl));
 
       logger.info(`✅ Auth data deleted for API URL: ${saleorApiUrl}`);
     } catch (error) {
@@ -175,17 +164,20 @@ export class TursoAPL implements APL {
     await this.initTable();
 
     try {
-      const result = await tursoClient.execute(
-        `SELECT * FROM ${this.tableName} ORDER BY created_at DESC`,
-      );
+      const result = await db
+        .select()
+        .from(sites)
+        .orderBy(sites.createdAt);
 
-      return result.rows.map((row): ExtendedAuthData => ({
-        saleorApiUrl: row.saleor_api_url as string,
-        domain: row.domain as string,
-        token: row.token as string,
-        appId: row.app_id as string,
-        jwks: row.jwks ? (JSON.parse(row.jwks as string) as string) : undefined,
-        siteId: row.site_id as string | undefined,
+      return result.map((site): ExtendedAuthData => ({
+        saleorApiUrl: site.saleorApiUrl,
+        domain: site.domain,
+        token: site.token || "",
+        appId: site.appId || "",
+        jwks: site.jwks ? JSON.parse(site.jwks) as string : undefined,
+        siteId: site.id,
+        status: site.status,
+        notes: site.notes || undefined,
       }));
     } catch (error) {
       logger.error(
@@ -216,7 +208,7 @@ export class TursoAPL implements APL {
       }
 
       // 检查表是否存在且可访问
-      await tursoClient.execute(`SELECT COUNT(*) as count FROM ${this.tableName}`);
+      await db.select().from(sites).limit(1);
 
       return { configured: true };
     } catch (error) {
@@ -234,23 +226,26 @@ export class TursoAPL implements APL {
     await this.initTable();
 
     try {
-      const result = await tursoClient.execute(
-        `SELECT * FROM ${this.tableName} WHERE site_id = ?`,
-        [siteId],
-      );
+      const result = await db
+        .select()
+        .from(sites)
+        .where(eq(sites.id, siteId))
+        .limit(1);
 
-      if (result.rows.length === 0) {
+      if (result.length === 0) {
         return undefined;
       }
 
-      const row = result.rows[0];
+      const site = result[0];
       return {
-        saleorApiUrl: row.saleor_api_url as string,
-        domain: row.domain as string,
-        token: row.token as string,
-        appId: row.app_id as string,
-        jwks: row.jwks ? (JSON.parse(row.jwks as string) as string) : undefined,
-        siteId: row.site_id as string,
+        saleorApiUrl: site.saleorApiUrl,
+        domain: site.domain,
+        token: site.token || "",
+        appId: site.appId || "",
+        jwks: site.jwks ? JSON.parse(site.jwks) as string : undefined,
+        siteId: site.id,
+        status: site.status,
+        notes: site.notes || undefined,
       };
     } catch (error) {
       logger.error(
@@ -268,10 +263,13 @@ export class TursoAPL implements APL {
     await this.initTable();
 
     try {
-      await tursoClient.execute(
-        `UPDATE ${this.tableName} SET site_id = ?, updated_at = datetime('now') WHERE saleor_api_url = ?`,
-        [siteId, saleorApiUrl],
-      );
+      await db
+        .update(sites)
+        .set({
+          id: siteId || undefined,
+          updatedAt: new Date().toISOString(),
+        })
+        .where(eq(sites.saleorApiUrl, saleorApiUrl));
 
       logger.info(`✅ Updated site association for ${saleorApiUrl}: ${siteId || 'null'}`);
     } catch (error) {
@@ -290,20 +288,21 @@ export class TursoAPL implements APL {
     await this.initTable();
 
     try {
-      const result = await tursoClient.execute(`
-        SELECT a.* FROM ${this.tableName} a
-        INNER JOIN sites s ON a.site_id = s.id
-        WHERE s.status = 'approved'
-        ORDER BY a.created_at DESC
-      `);
+      const result = await db
+        .select()
+        .from(sites)
+        .where(eq(sites.status, "approved"))
+        .orderBy(sites.createdAt);
 
-      return result.rows.map((row): ExtendedAuthData => ({
-        saleorApiUrl: row.saleor_api_url as string,
-        domain: row.domain as string,
-        token: row.token as string,
-        appId: row.app_id as string,
-        jwks: row.jwks ? (JSON.parse(row.jwks as string) as string) : undefined,
-        siteId: row.site_id as string,
+      return result.map((site): ExtendedAuthData => ({
+        saleorApiUrl: site.saleorApiUrl,
+        domain: site.domain,
+        token: site.token || "",
+        appId: site.appId || "",
+        jwks: site.jwks ? JSON.parse(site.jwks) as string : undefined,
+        siteId: site.id,
+        status: site.status,
+        notes: site.notes || undefined,
       }));
     } catch (error) {
       logger.error(
