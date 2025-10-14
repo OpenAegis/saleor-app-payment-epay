@@ -114,11 +114,21 @@ export class TursoAPL implements APL {
       }
 
       if (existing.length > 0) {
-        // 更新现有记录
+        // 更新现有记录，包括从URL中提取的domain
+        let domainToUpdate = authData.domain;
+        if (!domainToUpdate && authData.saleorApiUrl) {
+          try {
+            domainToUpdate = new URL(authData.saleorApiUrl).hostname;
+          } catch {
+            domainToUpdate = authData.domain;
+          }
+        }
+
         await db
           .update(sites)
           .set({
-            saleorApiUrl: authData.saleorApiUrl, // 也更新URL
+            saleorApiUrl: authData.saleorApiUrl, // 更新URL
+            domain: domainToUpdate || existing[0].domain, // 更新domain
             token: authData.token || null,
             appId: authData.appId || null,
             jwks: jwksString,
@@ -126,7 +136,7 @@ export class TursoAPL implements APL {
           })
           .where(eq(sites.id, existing[0].id)); // 使用ID更新，更安全
         
-        logger.info(`✅ Auth data updated for site ID: ${existing[0].id}, new URL: ${authData.saleorApiUrl}`);
+        logger.info(`✅ Auth data updated for site ID: ${existing[0].id}, new URL: ${authData.saleorApiUrl}, new domain: ${domainToUpdate}`);
       } else {
         // 创建新记录，只插入必要字段，让数据库处理默认值
         const siteId = extendedData.siteId || `site-${Date.now()}`;

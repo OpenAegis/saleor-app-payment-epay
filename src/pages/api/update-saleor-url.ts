@@ -72,10 +72,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           if (requestedSaleorApiUrl && existingAuthData.saleorApiUrl !== requestedSaleorApiUrl) {
             logger.info(`Auto-updating saleorApiUrl from ${existingAuthData.saleorApiUrl} to ${requestedSaleorApiUrl}`);
             
-            // 更新认证数据中的URL
+            // 从请求头中获取domain
+            const requestedDomain = req.headers["saleor-domain"] as string;
+            
+            // 更新认证数据中的URL和domain
             const updatedAuthData: ExtendedAuthData = {
               ...existingAuthData,
               saleorApiUrl: requestedSaleorApiUrl,
+              domain: requestedDomain || existingAuthData.domain, // 更新domain
             };
             
             // 保存新的认证数据
