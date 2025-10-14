@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { Button, Box, Text } from "@saleor/macaw-ui";
-import SiteManager from "../../components/SiteManager";
+import SiteAuthManager from "../../components/SiteAuthManager";
 import ChannelManager from "../../components/ChannelManager";
 import GatewayManager from "../../components/GatewayManager";
 import { DomainWhitelistManager } from "@/modules/ui/organisms/DomainWhitelistManager";
@@ -94,7 +94,7 @@ export default function AdminDashboard() {
               variant={activeTab === "sites" ? "primary" : "secondary"}
               onClick={() => setActiveTab("sites")}
             >
-              站点管理
+              站点授权管理
             </Button>
             <Button
               variant={activeTab === "gateways" ? "primary" : "secondary"}
@@ -121,13 +121,13 @@ export default function AdminDashboard() {
           <Box>
             <Box marginBottom={4}>
               <Text size={5} fontWeight="bold" marginBottom={2}>
-                站点管理
+                站点授权管理
               </Text>
               <Text size={3} color="default1">
-                管理 Saleor 站点的安装申请和授权状态
+                管理 Saleor 站点的安装申请、授权状态和认证数据
               </Text>
             </Box>
-            <SiteManager />
+            <SiteAuthManager />
           </Box>
         )}
 
