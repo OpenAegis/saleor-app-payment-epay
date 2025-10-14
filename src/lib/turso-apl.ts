@@ -118,18 +118,34 @@ export class TursoAPL implements APL {
         
         logger.info(`✅ Auth data updated for API URL: ${authData.saleorApiUrl}`);
       } else {
-        // 创建新记录
+        // 创建新记录，只插入必要字段，让数据库处理默认值
         const siteId = extendedData.siteId || `site-${Date.now()}`;
-        await db.insert(sites).values({
+        
+        // 构建基础插入数据，只包含必需字段
+        const domainValue = authData.domain || "unknown";
+        const insertData: {
+          id: string;
+          domain: string;
+          name: string;
+          saleorApiUrl: string;
+          token?: string;
+          appId?: string;
+          jwks?: string;
+          clientIP?: string;
+        } = {
           id: siteId,
-          domain: authData.domain || "unknown",
-          name: `Saleor Store (${authData.domain || "unknown"})`,
+          domain: domainValue,
+          name: `Saleor Store (${domainValue})`,
           saleorApiUrl: authData.saleorApiUrl,
-          token: authData.token || null,
-          appId: authData.appId || null,
-          jwks: jwksString,
-          status: "pending",
-        });
+        };
+
+        // 只在有值时添加可选字段
+        if (authData.token) insertData.token = authData.token;
+        if (authData.appId) insertData.appId = authData.appId;
+        if (jwksString) insertData.jwks = jwksString;
+
+        logger.info(`🔄 Attempting to insert site data:`, JSON.stringify(insertData, null, 2));
+        await db.insert(sites).values(insertData);
         
         logger.info(`✅ Auth data created for API URL: ${authData.saleorApiUrl} (site: ${siteId})`);
       }
