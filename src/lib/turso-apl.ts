@@ -340,6 +340,32 @@ export class TursoAPL implements APL {
 
           // 更新返回的数据
           result[0] = { ...site, token: token };
+        } else {
+          // 如果app ID也找不到，检查是否存在placeholder记录
+          logger.info(`🔄 App ID not found, checking for placeholder records`);
+          const placeholderResult = await db
+            .select()
+            .from(sites)
+            .where(eq(sites.appId, "app-placeholder-id"))
+            .limit(1);
+
+          if (placeholderResult.length > 0) {
+            const site = placeholderResult[0];
+            logger.info(`🔄 Found placeholder record, updating with new token and app ID`);
+            
+            await db
+              .update(sites)
+              .set({
+                token: token,
+                appId: appId,
+                updatedAt: new Date().toISOString(),
+              })
+              .where(eq(sites.id, site.id));
+
+            // 更新返回的数据
+            result = [{ ...site, token: token, appId: appId }];
+            logger.info(`✅ Updated placeholder record with new auth data`);
+          }
         }
       }
 
