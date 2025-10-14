@@ -100,6 +100,7 @@ export class SiteManager {
       name: shopName,
       saleorApiUrl: input.saleorApiUrl,
       clientIP: input.clientIP || null,
+      appId: input.appId || null,
       status: "pending" as const,
       notes: validationNotes || null,
     };
