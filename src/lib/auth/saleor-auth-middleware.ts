@@ -70,10 +70,34 @@ export function withSaleorAuth(handler: AuthenticatedHandler) {
         }
       }
 
-      // 验证token (简单比较，实际应该验证JWT)
+      // 验证token
       if (authData.token !== token) {
         logger.warn("Token mismatch");
-        return res.status(401).json({ error: "Invalid token" });
+        logger.info("APL token preview: " + (authData.token ? authData.token.substring(0, 50) + "..." : "null"));
+        logger.info("Request token preview: " + (token ? token.substring(0, 50) + "..." : "null"));
+        
+        // 尝试解析JWT token获取内部token
+        try {
+          const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+          logger.info("JWT payload token: " + payload.token);
+          
+          // 如果JWT中的token字段匹配APL中存储的token
+          if (payload.token && authData.token === payload.token) {
+            logger.info("Token matched via JWT payload");
+          } else {
+            return res.status(401).json({ 
+              error: "Invalid token",
+              debug: {
+                aplTokenPreview: authData.token ? authData.token.substring(0, 10) + "..." : "null",
+                requestTokenPreview: token ? token.substring(0, 10) + "..." : "null",
+                jwtPayloadToken: payload.token || "not found"
+              }
+            });
+          }
+        } catch (jwtError) {
+          logger.error("JWT parsing error: " + (jwtError instanceof Error ? jwtError.message : "Unknown"));
+          return res.status(401).json({ error: "Invalid token format" });
+        }
       }
 
       logger.info("Authentication successful for: " + saleorApiUrl);
