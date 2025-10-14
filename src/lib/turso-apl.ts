@@ -144,7 +144,7 @@ export class TursoAPL implements APL {
         if (authData.appId) insertData.appId = authData.appId;
         if (jwksString) insertData.jwks = jwksString;
 
-        logger.info(`🔄 Attempting to insert site data:`, JSON.stringify(insertData, null, 2));
+        logger.info(`🔄 Attempting to insert site data: ${JSON.stringify(insertData, null, 2)}`);
         await db.insert(sites).values(insertData);
         
         logger.info(`✅ Auth data created for API URL: ${authData.saleorApiUrl} (site: ${siteId})`);
