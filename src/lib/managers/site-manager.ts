@@ -20,7 +20,7 @@ export class SiteManager {
   ): Promise<Site> {
     logger.info({ domain: input.domain, saleorApiUrl: input.saleorApiUrl }, "开始注册新站点");
 
-    let shopName = `Saleor Store (${input.domain})`;
+    let shopName = ""; // 默认站点名称为空，让用户在config页面填写
     let validationNotes = "";
 
     // 尝试验证 Saleor URL，但不阻止注册
@@ -35,7 +35,8 @@ export class SiteManager {
           },
           "Saleor URL 验证通过",
         );
-        shopName = validation.shopName || shopName;
+        // 不使用API返回的店铺名称，保持为空让用户自定义
+        // shopName = validation.shopName || shopName;
       } else {
         logger.warn(
           {

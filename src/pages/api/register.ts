@@ -163,7 +163,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       site = await siteManager.register({
         domain: saleorDomain as string,
-        name: `Saleor Store (${saleorDomain})`,
+        name: "", // 默认站点名称为空，让用户在config页面自定义
         saleorApiUrl: saleorApiUrl,
         clientIP: req.headers['x-forwarded-for'] as string || req.headers['x-real-ip'] as string || null,
         appId,

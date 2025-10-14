@@ -57,6 +57,8 @@ const ConfigPage: NextPage = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [siteAuth, setSiteAuth] = useState<SiteAuthResponse | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [siteName, setSiteName] = useState<string>("");
+  const [savingSiteName, setSavingSiteName] = useState(false);
 
   // 页面加载时获取现有配置
   useEffect(() => {
@@ -78,6 +80,10 @@ const ConfigPage: NextPage = () => {
         if (siteAuthResponse.ok) {
           const authData = (await siteAuthResponse.json()) as SiteAuthResponse;
           setSiteAuth(authData);
+          // 设置站点名称
+          if (authData.site) {
+            setSiteName(authData.site.name || "");
+          }
         } else {
           console.error("Failed to fetch site auth status");
         }
@@ -150,6 +156,42 @@ const ConfigPage: NextPage = () => {
     return new Date(dateString).toLocaleString("zh-CN");
   };
 
+  const handleSiteNameUpdate = async () => {
+    if (!token || !siteName.trim()) return;
+
+    setSavingSiteName(true);
+    try {
+      const response = await authenticatedFetch("/api/update-site-name", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          siteName: siteName.trim(),
+        }),
+      });
+
+      if (response.ok) {
+        // 刷新站点授权状态以获取最新数据
+        const siteAuthResponse = await authenticatedFetch("/api/check-site-auth");
+        if (siteAuthResponse.ok) {
+          const authData = (await siteAuthResponse.json()) as SiteAuthResponse;
+          setSiteAuth(authData);
+          setSiteName(authData.site?.name || "");
+        }
+        setSyncMessage("站点名称已成功更新");
+      } else {
+        const error = await response.json();
+        setAuthError(`更新站点名称失败: ${error.error || "未知错误"}`);
+      }
+    } catch (error) {
+      console.error("Failed to update site name:", error);
+      setAuthError("更新站点名称失败，请重试");
+    } finally {
+      setSavingSiteName(false);
+    }
+  };
+
   return (
     <AppLayout title="">
       <Box display="flex" flexDirection="column" gap={4}>
@@ -211,6 +253,10 @@ const ConfigPage: NextPage = () => {
                         if (siteAuthResponse.ok) {
                           const authData = (await siteAuthResponse.json()) as SiteAuthResponse;
                           setSiteAuth(authData);
+                          // 更新站点名称
+                          if (authData.site) {
+                            setSiteName(authData.site.name || "");
+                          }
                         }
                       } catch (error) {
                         console.error("Failed to refresh status:", error);
@@ -248,12 +294,6 @@ const ConfigPage: NextPage = () => {
                 </Box>
               )}
               
-              {!siteAuth.isAuthorized && (
-                <Box marginTop={2} padding={2} backgroundColor="info1" borderRadius={4}>
-                  <p><strong>如需申请授权或解决问题，请联系插件管理员。</strong></p>
-                  <p>管理员登录地址: <a href="/admin/login" target="_blank" rel="noopener noreferrer">插件管理后台</a></p>
-                </Box>
-              )}
               
             </Box>
           </Box>
@@ -280,19 +320,43 @@ const ConfigPage: NextPage = () => {
           )}
         </Box>
 
+        {/* 站点名称配置 */}
+        {siteAuth?.site && (
+          <Box display="flex" flexDirection="column" gap={2}>
+            <h3>站点名称配置</h3>
+            <Box display="flex" gap={2} alignItems="end">
+              <Box style={{ flex: 1 }}>
+                <Input
+                  label="站点名称"
+                  value={siteName}
+                  onChange={(e) => setSiteName(e.target.value)}
+                  placeholder="请输入您的店铺名称"
+                  helperText="自定义您的店铺显示名称"
+                />
+              </Box>
+              <Button
+                type="button"
+                variant="primary"
+                disabled={savingSiteName || !siteName.trim() || siteName === siteAuth.site.name}
+                onClick={handleSiteNameUpdate}
+              >
+                {savingSiteName ? "保存中..." : "保存"}
+              </Button>
+            </Box>
+            {siteName !== siteAuth.site.name && siteName.trim() && (
+              <Box padding={2} backgroundColor="warning1" borderRadius={4}>
+                <p>⚠️ 站点名称已修改，请点击"保存"按钮保存更改</p>
+              </Box>
+            )}
+          </Box>
+        )}
+
         {/* 支付通道管理 */}
         <Box display="flex" flexDirection="column" gap={2}>
           <h3>支付通道管理</h3>
-          <Box padding={2} backgroundColor="info1" borderRadius={4}>
-            <p>⚠️ 易支付配置信息（PID、密钥等）只能由插件超级管理员设置。</p>
-            <p>Saleor管理员只能管理支付通道的排序和启用状态。</p>
-            <p>如需配置易支付信息，请访问: <a href="/admin/login" target="_blank" rel="noopener noreferrer">插件管理后台</a></p>
-          </Box>
           
-          <Box display="flex" flexDirection="column" gap={2} marginTop={4}>
+          <Box display="flex" flexDirection="column" gap={2} marginTop={2}>
             <h4>当前可用支付通道</h4>
-            <p>支付通道的创建和配置需要通过插件管理后台完成。</p>
-            <p>在这里您可以查看为当前销售渠道配置的支付通道状态。</p>
             
             {/* TODO: 添加通道列表和排序功能 */}
             <Box padding={3} backgroundColor="default2" borderRadius={4}>
