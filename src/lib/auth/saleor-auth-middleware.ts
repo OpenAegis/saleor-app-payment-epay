@@ -123,13 +123,14 @@ export function withSaleorAuth(handler: AuthenticatedHandler) {
       logger.info("Authentication successful for: " + saleorApiUrl);
 
       // 检查站点授权状态（如果有关联站点）
-      if (authData.siteId) {
-        const site = await siteManager.get(authData.siteId);
+      const extendedAuthData = authData as ExtendedAuthData;
+      if (extendedAuthData.siteId) {
+        const site = await siteManager.get(extendedAuthData.siteId);
         if (!site) {
-          logger.warn(`关联的站点不存在: ${authData.siteId}`);
+          logger.warn(`关联的站点不存在: ${extendedAuthData.siteId}`);
           return res.status(401).json({ 
             error: "Associated site not found",
-            siteId: authData.siteId 
+            siteId: extendedAuthData.siteId 
           });
         }
 
@@ -150,7 +151,7 @@ export function withSaleorAuth(handler: AuthenticatedHandler) {
       }
 
       // 将认证数据添加到请求对象
-      (req as AuthenticatedRequest).authData = authData;
+      (req as AuthenticatedRequest).authData = extendedAuthData;
 
       // 调用实际的处理函数
       return await handler(req as AuthenticatedRequest, res);

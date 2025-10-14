@@ -4,6 +4,7 @@ import { saleorApp } from "../../../saleor-app";
 import { siteManager } from "../../../lib/managers/site-manager";
 import { z } from "zod";
 import { createLogger } from "../../../lib/logger";
+import { type ExtendedAuthData, TursoAPL } from "../../../lib/turso-apl";
 
 const logger = createLogger({ component: "AuthManagementAPI" });
 
@@ -44,12 +45,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           const authDataList = await saleorApp.apl.getAll();
           const enrichedData = await Promise.all(
             authDataList.map(async (authData) => {
+              const extendedAuthData = authData as ExtendedAuthData;
               let site = null;
-              if (authData.siteId) {
-                site = await siteManager.get(authData.siteId);
+              if (extendedAuthData.siteId) {
+                site = await siteManager.get(extendedAuthData.siteId);
               }
               return {
-                ...authData,
+                ...extendedAuthData,
                 site,
                 token: "***", // 隐藏敏感信息
               };
@@ -131,7 +133,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
 
           // 更新关联
-          await saleorApp.apl.updateSiteAssociation(saleorApiUrl, siteId || null);
+          await (saleorApp.apl as TursoAPL).updateSiteAssociation(saleorApiUrl, siteId || null);
           logger.info(`✅ 认证数据关联已更新: ${saleorApiUrl} -> ${siteId || 'null'}`);
 
           return res.status(200).json({ 
@@ -190,7 +192,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
     }
   } catch (error) {
-    logger.error("认证管理API错误:", error);
+    logger.error("认证管理API错误: " + (error instanceof Error ? error.message : "未知错误"));
     return res.status(500).json({ error: "Internal server error" });
   }
 }

@@ -3,6 +3,7 @@ import { requirePluginAdmin } from "../../../lib/auth/plugin-admin-auth";
 import { saleorApp } from "../../../saleor-app";
 import { siteManager } from "../../../lib/managers/site-manager";
 import { createLogger } from "../../../lib/logger";
+import { type ExtendedAuthData } from "../../../lib/turso-apl";
 
 const logger = createLogger({ component: "SitesAuthOverviewAPI" });
 
@@ -34,7 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const overview = await Promise.all(
       sites.map(async (site) => {
         // 查找关联的认证数据
-        const authData = allAuthData.find(auth => auth.siteId === site.id);
+        const authData = allAuthData.find(auth => (auth as ExtendedAuthData).siteId === site.id) as ExtendedAuthData | undefined;
         
         return {
           site: {
@@ -66,22 +67,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 查找没有关联站点的认证数据（孤儿认证数据）
     const orphanedAuthData = allAuthData
-      .filter(auth => !auth.siteId || !sites.find(site => site.id === auth.siteId))
-      .map(auth => ({
-        site: null,
-        authData: {
-          saleorApiUrl: auth.saleorApiUrl,
-          domain: auth.domain,
-          appId: auth.appId,
-          hasToken: !!auth.token,
-          hasJwks: !!auth.jwks,
-          siteId: auth.siteId,
-        },
-        isAuthorized: false,
-        canActivate: false,
-        needsAuth: false,
-        isOrphaned: true,
-      }));
+      .filter(auth => !(auth as ExtendedAuthData).siteId || !sites.find(site => site.id === (auth as ExtendedAuthData).siteId))
+      .map(auth => {
+        const extendedAuth = auth as ExtendedAuthData;
+        return ({
+          site: null,
+          authData: {
+            saleorApiUrl: extendedAuth.saleorApiUrl,
+            domain: extendedAuth.domain,
+            appId: extendedAuth.appId,
+            hasToken: !!extendedAuth.token,
+            hasJwks: !!extendedAuth.jwks,
+            siteId: extendedAuth.siteId,
+          },
+          isAuthorized: false,
+          canActivate: false,
+          needsAuth: false,
+          isOrphaned: true,
+        });
+      });
 
     // 统计信息
     const stats = {
@@ -99,8 +103,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         suspended: sites.filter(s => s.status === 'suspended').length,
       },
       auth: {
-        linked: allAuthData.filter(a => a.siteId).length,
-        unlinked: allAuthData.filter(a => !a.siteId).length,
+        linked: allAuthData.filter(a => (a as ExtendedAuthData).siteId).length,
+        unlinked: allAuthData.filter(a => !(a as ExtendedAuthData).siteId).length,
         authorized: overview.filter(item => item.isAuthorized).length,
       },
     };
@@ -111,7 +115,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    logger.error("站点认证概览API错误:", error);
+    logger.error("站点认证概览API错误: " + (error instanceof Error ? error.message : "未知错误"));
     return res.status(500).json({ error: "Internal server error" });
   }
 }
