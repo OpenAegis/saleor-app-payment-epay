@@ -299,18 +299,52 @@ export class TursoAPL implements APL {
 
   /**
    * 通过token查找认证数据（用于URL更新）
+   * 如果token不匹配，尝试通过app ID匹配
    */
-  async getByToken(token: string): Promise<ExtendedAuthData | undefined> {
+  async getByToken(token: string, appId?: string): Promise<ExtendedAuthData | undefined> {
     await this.initTable();
 
     try {
-      const result = await db
+      // 首先尝试通过token匹配
+      let result = await db
         .select()
         .from(sites)
         .where(eq(sites.token, token))
         .limit(1);
 
+      logger.info(`🔍 Token search result: ${result.length} rows found for token: ${token}`);
+
+      // 如果token匹配失败且提供了appId，尝试通过appId匹配
+      if (result.length === 0 && appId) {
+        logger.info(`🔄 Token not found, trying app ID: ${appId}`);
+        result = await db
+          .select()
+          .from(sites)
+          .where(eq(sites.appId, appId))
+          .limit(1);
+
+        logger.info(`🔍 App ID search result: ${result.length} rows found for app ID: ${appId}`);
+
+        // 如果通过appId找到了记录，更新token
+        if (result.length > 0) {
+          const site = result[0];
+          logger.info(`🔄 Updating token from ${site.token} to ${token}`);
+          
+          await db
+            .update(sites)
+            .set({
+              token: token,
+              updatedAt: new Date().toISOString(),
+            })
+            .where(eq(sites.id, site.id));
+
+          // 更新返回的数据
+          result[0] = { ...site, token: token };
+        }
+      }
+
       if (result.length === 0) {
+        logger.warn(`❌ No auth data found for token: ${token} or app ID: ${appId}`);
         return undefined;
       }
 

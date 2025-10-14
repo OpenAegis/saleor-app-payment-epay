@@ -29,8 +29,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(400).json({ error: "Missing saleor-api-url header" });
   }
 
-  // 简单解码JWT获取token（不验证签名，只提取payload）
+  // 简单解码JWT获取token和app ID（不验证签名，只提取payload）
   let tokenFromJWT: string;
+  let appIdFromJWT: string;
   try {
     const parts = authorizationHeader.split('.');
     if (parts.length !== 3) {
@@ -39,19 +40,20 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     
     const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString()) as any;
     tokenFromJWT = payload?.token;
+    appIdFromJWT = payload?.app;
     
     if (!tokenFromJWT) {
       return res.status(401).json({ error: "Invalid JWT: missing token" });
     }
-    logger.info(`Extracted token from JWT: ${tokenFromJWT}`);
+    logger.info(`Extracted from JWT - token: ${tokenFromJWT}, app: ${appIdFromJWT}`);
   } catch (error) {
     logger.error("Failed to decode JWT: " + (error instanceof Error ? error.message : "Unknown"));
     return res.status(401).json({ error: "Invalid JWT format" });
   }
 
-  // 通过token查找认证数据
+  // 通过token查找认证数据，如果找不到则尝试通过app ID查找
   const tursoAPL = saleorApp.apl as TursoAPL;
-  const existingAuthData = await tursoAPL.getByToken(tokenFromJWT);
+  const existingAuthData = await tursoAPL.getByToken(tokenFromJWT, appIdFromJWT);
 
   if (!existingAuthData) {
     logger.warn(`No auth data found for token: ${tokenFromJWT}`);
