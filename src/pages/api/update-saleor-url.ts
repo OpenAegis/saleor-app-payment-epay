@@ -1,7 +1,7 @@
-import { createProtectedHandler } from "@saleor/app-sdk/handlers/next";
-import { type NextApiRequest, type NextApiResponse } from "next";
+import { type NextApiResponse } from "next";
 import { saleorApp } from "../../saleor-app";
 import { createLogger } from "../../lib/logger";
+import { withSaleorAuth, type AuthenticatedRequest } from "../../lib/auth/saleor-auth-middleware";
 
 const logger = createLogger({ component: "UpdateSaleorUrlAPI" });
 
@@ -12,14 +12,13 @@ export const config = {
   },
 };
 
-export default createProtectedHandler(
-  async (req: NextApiRequest, res: NextApiResponse, { authData }) => {
-    logger.info("UpdateSaleorUrlAPI called with authData: " + JSON.stringify(authData));
-    logger.info("Request headers: " + JSON.stringify(req.headers));
+async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
+  logger.info("UpdateSaleorUrlAPI called with authData: " + JSON.stringify(req.authData));
+  logger.info("Request headers: " + JSON.stringify(req.headers));
 
-    const { saleorApiUrl: currentSaleorApiUrl } = authData;
+  const { saleorApiUrl: currentSaleorApiUrl } = req.authData;
 
-    switch (req.method) {
+  switch (req.method) {
       case "GET":
         try {
           // 返回当前的Saleor API URL
@@ -63,10 +62,10 @@ export default createProtectedHandler(
             // 如果没有找到现有数据，创建新的authData
             const newAuthData = {
               saleorApiUrl: saleorApiUrl,
-              domain: authData.domain || new URL(saleorApiUrl).hostname,
-              token: authData.token,
-              appId: authData.appId,
-              jwks: authData.jwks,
+              domain: req.authData.domain || new URL(saleorApiUrl).hostname,
+              token: req.authData.token,
+              appId: req.authData.appId,
+              jwks: req.authData.jwks,
             };
 
             // 保存新的authData
@@ -117,7 +116,7 @@ export default createProtectedHandler(
 
       default:
         return res.status(405).json({ error: "Method not allowed" });
-    }
-  },
-  saleorApp.apl,
-);
+  }
+}
+
+export default withSaleorAuth(handler);
