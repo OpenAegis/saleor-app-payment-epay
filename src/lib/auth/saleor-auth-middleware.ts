@@ -78,8 +78,8 @@ export function withSaleorAuth(handler: AuthenticatedHandler) {
         
         // 尝试解析JWT token获取内部token
         try {
-          const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-          logger.info("JWT payload token: " + payload.token);
+          const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString()) as any;
+          logger.info("JWT payload token: " + (payload.token || "not found"));
           
           // 如果JWT中的token字段匹配APL中存储的token
           if (payload.token && authData.token === payload.token) {
