@@ -72,62 +72,6 @@ const ConfigPage: NextPage = () => {
   }, [token]);
 
 
-  const saveSaleorApiUrl = async () => {
-    if (!saleorApiUrl) {
-      await appBridge?.dispatch({
-        type: "notification",
-        payload: {
-          title: "保存失败",
-          text: "请输入Saleor API URL",
-          status: "error",
-          actionId: "saleor-url",
-        },
-      });
-      return;
-    }
-
-    try {
-      const response = await authenticatedFetch("/api/update-saleor-url", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ saleorApiUrl }),
-      });
-
-      if (response.ok) {
-        await response.json();
-        await appBridge?.dispatch({
-          type: "notification",
-          payload: {
-            title: "URL已保存",
-            text: "Saleor API URL已成功保存",
-            status: "success",
-            actionId: "saleor-url",
-          },
-        });
-        setIsPlaceholderUrl(false);
-      } else {
-        const errorData = await response.json();
-        const errorMessage =
-          errorData && typeof errorData === "object" && "error" in errorData
-            ? String(errorData.error)
-            : "Failed to save Saleor API URL";
-        throw new Error(errorMessage);
-      }
-    } catch (error) {
-      console.error("保存Saleor API URL时出错:", error);
-      await appBridge?.dispatch({
-        type: "notification",
-        payload: {
-          title: "保存失败",
-          text: error instanceof Error ? error.message : "保存Saleor API URL时出错",
-          status: "error",
-          actionId: "saleor-url",
-        },
-      });
-    }
-  };
 
   if (loading) {
     return (
@@ -157,18 +101,19 @@ const ConfigPage: NextPage = () => {
           <Input
             label="Saleor API URL"
             value={saleorApiUrl}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSaleorApiUrl(e.target.value)}
+            readOnly
             placeholder="https://your-saleor-instance.com/graphql/"
-            helperText={isPlaceholderUrl ? "请输入您的Saleor实例URL" : "当前配置的Saleor实例URL"}
+            helperText={isPlaceholderUrl ? "系统将自动检测并更新为正确的Saleor实例URL" : "当前配置的Saleor实例URL（自动检测）"}
           />
-          {isPlaceholderUrl && (
-            <Box padding={2} backgroundColor="warning1" borderRadius={4}>
-              <p>注意：当前使用的是占位符URL，请输入您的实际Saleor实例URL</p>
+          {isPlaceholderUrl ? (
+            <Box padding={2} backgroundColor="info1" borderRadius={4}>
+              <p>ℹ️ 系统会自动从请求头检测您的Saleor实例URL并更新配置</p>
+            </Box>
+          ) : (
+            <Box padding={2} backgroundColor="success1" borderRadius={4}>
+              <p>✅ Saleor API URL已自动配置完成</p>
             </Box>
           )}
-          <Box display="flex" gap={2}>
-            <Button onClick={() => void saveSaleorApiUrl()}>保存Saleor URL</Button>
-          </Box>
         </Box>
 
         {/* 支付通道管理 */}

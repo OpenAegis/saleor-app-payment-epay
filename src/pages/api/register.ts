@@ -7,20 +7,14 @@ const logger = createLogger({ component: "RegisterAPI" });
 
 /**
  * 修正Saleor API URL
- * 如果URL是localhost，使用占位符URL
+ * 保持原始URL，让自动检测机制在后续处理
  */
 function correctSaleorApiUrl(saleorApiUrl: string, _saleorDomain: string | undefined): string {
   try {
-    // 检查是否为localhost URL
-    const url = new URL(saleorApiUrl);
-    if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
-      logger.info("检测到localhost URL: " + saleorApiUrl + ", 使用占位符URL");
-
-      // 使用占位符URL，稍后在应用设置中手动配置
-      const placeholderUrl = "https://your-saleor-instance.com/graphql/";
-      logger.info("使用占位符URL: " + placeholderUrl);
-      return placeholderUrl;
-    }
+    // 验证URL格式是否正确
+    new URL(saleorApiUrl);
+    logger.info("使用原始Saleor API URL: " + saleorApiUrl);
+    return saleorApiUrl;
   } catch (error) {
     logger.error(
       "解析URL时出错: " +
@@ -28,10 +22,12 @@ function correctSaleorApiUrl(saleorApiUrl: string, _saleorDomain: string | undef
         ", 错误: " +
         (error instanceof Error ? error.message : "未知错误"),
     );
+    
+    // 如果URL格式错误，使用占位符URL
+    const placeholderUrl = "https://your-saleor-instance.com/graphql/";
+    logger.info("URL格式错误，使用占位符URL: " + placeholderUrl);
+    return placeholderUrl;
   }
-
-  // 如果不是localhost，返回原始URL
-  return saleorApiUrl;
 }
 
 /**
@@ -136,27 +132,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const correctedUrl = correctSaleorApiUrl(saleorApiUrl, saleorDomain as string | undefined);
     logger.info("修正saleorApiUrl: " + saleorApiUrl + " -> " + correctedUrl);
 
-    // 尝试获取App ID（使用修正后的URL）
-    let appId = await getAppId(correctedUrl, authToken);
+    // 尝试获取App ID（先尝试原始URL，如果失败再尝试修正后的URL）
+    let appId = await getAppId(saleorApiUrl, authToken);
+    if (!appId && correctedUrl !== saleorApiUrl) {
+      logger.info("使用原始URL获取App ID失败，尝试修正后的URL");
+      appId = await getAppId(correctedUrl, authToken);
+    }
     if (!appId) {
-      logger.warn(`无法获取App ID，使用默认ID。Saleor URL: ${correctedUrl}`);
+      logger.warn(`无法获取App ID，使用默认ID。原始URL: ${saleorApiUrl}, 修正URL: ${correctedUrl}`);
       // 使用默认ID，确保安装可以继续进行
       appId = "app-placeholder-id";
     }
 
-    // 尝试获取JWKS（使用修正后的URL）
-    let jwks = await fetchRemoteJwks(correctedUrl);
+    // 尝试获取JWKS（先尝试原始URL，如果失败再尝试修正后的URL）
+    let jwks = await fetchRemoteJwks(saleorApiUrl);
+    if (!jwks && correctedUrl !== saleorApiUrl) {
+      logger.info("使用原始URL获取JWKS失败，尝试修正后的URL");
+      jwks = await fetchRemoteJwks(correctedUrl);
+    }
     if (!jwks) {
       logger.warn("无法获取JWKS，使用默认JWKS");
       // 使用默认JWKS，确保安装可以继续进行
       jwks = "{}";
     }
 
-    // 构建authData（使用修正后的URL）
+    // 构建authData（优先使用原始URL，这样自动检测机制可以正常工作）
     const authData: AuthData = {
       domain: saleorDomain as string | undefined,
       token: authToken,
-      saleorApiUrl: correctedUrl, // 使用修正后的URL
+      saleorApiUrl: saleorApiUrl, // 使用原始URL，让自动检测机制处理
       appId,
       jwks,
     };

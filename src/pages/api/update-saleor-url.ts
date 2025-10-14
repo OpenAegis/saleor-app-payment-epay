@@ -1,4 +1,5 @@
 import { type NextApiResponse } from "next";
+import { SALEOR_API_URL_HEADER } from "@saleor/app-sdk/const";
 import { saleorApp } from "../../saleor-app";
 import { createLogger } from "../../lib/logger";
 import { withSaleorAuth, type AuthenticatedRequest } from "../../lib/auth/saleor-auth-middleware";
@@ -21,11 +22,36 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
   switch (req.method) {
       case "GET":
         try {
-          // 返回当前的Saleor API URL
+          // 直接使用请求头中的saleor-api-url作为真实URL，更新APL
+          const headerSaleorApiUrl = req.headers[SALEOR_API_URL_HEADER];
+          const realSaleorApiUrl = Array.isArray(headerSaleorApiUrl) ? headerSaleorApiUrl[0] : headerSaleorApiUrl;
+          
+          if (realSaleorApiUrl && currentSaleorApiUrl !== realSaleorApiUrl) {
+            logger.info(`Updating saleorApiUrl from ${currentSaleorApiUrl} to ${realSaleorApiUrl}`);
+            
+            // 更新认证数据中的URL
+            const updatedAuthData = {
+              ...req.authData,
+              saleorApiUrl: realSaleorApiUrl,
+            };
+            
+            // 保存新的认证数据
+            await saleorApp.apl.set(updatedAuthData);
+            
+            // 如果URL已更改，删除旧的记录
+            if (currentSaleorApiUrl && currentSaleorApiUrl !== realSaleorApiUrl) {
+              await saleorApp.apl.delete(currentSaleorApiUrl);
+            }
+            
+            logger.info("Saleor API URL automatically updated to: " + realSaleorApiUrl);
+          }
+          
+          // 返回更新后的Saleor API URL
+          const finalUrl = realSaleorApiUrl || currentSaleorApiUrl || "";
           return res.status(200).json({
-            saleorApiUrl: currentSaleorApiUrl || "",
-            isPlaceholder:
-              !currentSaleorApiUrl || currentSaleorApiUrl.includes("your-saleor-instance.com"),
+            saleorApiUrl: finalUrl,
+            isPlaceholder: !finalUrl || finalUrl.includes("your-saleor-instance.com"),
+            autoUpdated: realSaleorApiUrl && currentSaleorApiUrl !== realSaleorApiUrl,
           });
         } catch (error) {
           logger.error(
