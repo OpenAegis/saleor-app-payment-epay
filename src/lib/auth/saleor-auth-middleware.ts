@@ -85,14 +85,32 @@ export function withSaleorAuth(handler: AuthenticatedHandler) {
           if (payload.token && authData.token === payload.token) {
             logger.info("Token matched via JWT payload");
           } else {
-            return res.status(401).json({ 
-              error: "Invalid token",
-              debug: {
-                aplTokenPreview: authData.token ? authData.token.substring(0, 10) + "..." : "null",
-                requestTokenPreview: token ? token.substring(0, 10) + "..." : "null",
-                jwtPayloadToken: payload.token || "not found"
-              }
-            });
+            // Token不匹配，对于update-saleor-url端点，尝试更新认证数据
+            const isUpdateUrl = req.url?.includes('/update-saleor-url');
+            if (isUpdateUrl && payload.token) {
+              logger.info("Updating APL token for update-saleor-url endpoint");
+              
+              // 更新APL中的token
+              const updatedAuthData = {
+                ...authData,
+                token: payload.token, // 使用JWT中的token
+              };
+              
+              await saleorApp.apl.set(updatedAuthData);
+              logger.info("APL token updated successfully");
+              
+              // 更新当前使用的authData
+              authData = updatedAuthData;
+            } else {
+              return res.status(401).json({ 
+                error: "Invalid token",
+                debug: {
+                  aplTokenPreview: authData.token ? authData.token.substring(0, 10) + "..." : "null",
+                  requestTokenPreview: token ? token.substring(0, 10) + "..." : "null",
+                  jwtPayloadToken: payload.token || "not found"
+                }
+              });
+            }
           }
         } catch (jwtError) {
           logger.error("JWT parsing error: " + (jwtError instanceof Error ? jwtError.message : "Unknown"));
