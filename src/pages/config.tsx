@@ -43,20 +43,12 @@ const ConfigPage: NextPage = () => {
           setSaleorApiUrl(urlData.saleorApiUrl || "");
           setIsPlaceholderUrl(urlData.isPlaceholder || false);
         } else {
-          // 如果认证端点失败，尝试公开端点
-          const publicSaleorUrlResponse = await fetch("/api/update-saleor-url-public");
-          if (publicSaleorUrlResponse.ok) {
-            const urlData = (await publicSaleorUrlResponse.json()) as SaleorUrlResponse;
-            setSaleorApiUrl(urlData.saleorApiUrl || "");
-            setIsPlaceholderUrl(urlData.isPlaceholder || false);
-          } else {
-            const errorData = await saleorUrlResponse.json();
-            setAuthError(
-              errorData && typeof errorData === "object" && "error" in errorData
-                ? String(errorData.error)
-                : "获取Saleor URL失败",
-            );
-          }
+          const errorData = await saleorUrlResponse.json();
+          setAuthError(
+            errorData && typeof errorData === "object" && "error" in errorData
+              ? String(errorData.error)
+              : "获取Saleor URL失败",
+          );
         }
       } catch (error) {
         console.error("获取配置失败:", error);

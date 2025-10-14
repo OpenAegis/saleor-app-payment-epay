@@ -29,7 +29,7 @@ export class TursoAPL implements APL {
     if (this.initialized) return;
 
     try {
-      // 创建saleor_auth_data表，与sites表关联
+      // 首先创建基本的saleor_auth_data表（向后兼容）
       await tursoClient.execute(`
         CREATE TABLE IF NOT EXISTS ${this.tableName} (
           saleor_api_url TEXT PRIMARY KEY,
@@ -37,12 +37,23 @@ export class TursoAPL implements APL {
           token TEXT NOT NULL,
           app_id TEXT NOT NULL,
           jwks TEXT,
-          site_id TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-          FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE SET NULL
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
       `);
+
+      // 检查site_id列是否存在，如果不存在则添加
+      try {
+        await tursoClient.execute(`SELECT site_id FROM ${this.tableName} LIMIT 1`);
+        logger.info("✅ site_id column already exists");
+      } catch (columnError) {
+        // 列不存在，添加它
+        logger.info("🔄 Adding site_id column to existing table");
+        await tursoClient.execute(`
+          ALTER TABLE ${this.tableName} ADD COLUMN site_id TEXT
+        `);
+        logger.info("✅ site_id column added successfully");
+      }
 
       await tursoClient.execute(`
         CREATE INDEX IF NOT EXISTS auth_data_domain_idx ON ${this.tableName}(domain)
@@ -97,7 +108,7 @@ export class TursoAPL implements APL {
         token: row.token as string,
         appId: row.app_id as string,
         jwks: row.jwks ? (JSON.parse(row.jwks as string) as string) : undefined,
-        siteId: row.site_id as string | undefined,
+        siteId: (row.site_id as string | undefined) || undefined,
       };
 
       logger.info(`✅ TursoAPL: Successfully retrieved auth data for domain: ${authData.domain}`);
