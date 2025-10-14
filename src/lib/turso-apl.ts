@@ -51,48 +51,13 @@ export class TursoAPL implements APL {
     try {
       logger.info(`🔍 TursoAPL: Looking for auth data with URL: ${saleorApiUrl}`);
 
-      // 1. 首先尝试精确匹配
-      let result = await db
+      const result = await db
         .select()
         .from(sites)
         .where(eq(sites.saleorApiUrl, saleorApiUrl))
         .limit(1);
 
-      logger.info(`🔍 TursoAPL: Found ${result.length} rows for exact URL match: ${saleorApiUrl}`);
-
-      // 2. 如果精确匹配失败，尝试域名匹配（用于开发环境和生产环境URL转换）
-      if (result.length === 0) {
-        try {
-          const requestedDomain = new URL(saleorApiUrl).hostname;
-          const allSites = await db.select().from(sites);
-          
-          const domainMatched = allSites.find(site => {
-            try {
-              const siteDomain = new URL(site.saleorApiUrl).hostname;
-              return siteDomain === requestedDomain;
-            } catch {
-              return false;
-            }
-          });
-
-          if (domainMatched) {
-            logger.info(`🔄 TursoAPL: Found domain match, auto-updating URL mapping`);
-            // 自动更新URL映射
-            await db
-              .update(sites)
-              .set({
-                saleorApiUrl: saleorApiUrl,
-                updatedAt: new Date().toISOString(),
-              })
-              .where(eq(sites.id, domainMatched.id));
-
-            result = [{ ...domainMatched, saleorApiUrl: saleorApiUrl }];
-            logger.info(`✅ TursoAPL: Auto-updated URL from ${domainMatched.saleorApiUrl} to ${saleorApiUrl}`);
-          }
-        } catch (urlError) {
-          logger.warn(`Invalid URL format: ${saleorApiUrl}`);
-        }
-      }
+      logger.info(`🔍 TursoAPL: Found ${result.length} rows for URL: ${saleorApiUrl}`);
 
       if (result.length === 0) {
         // 查找所有记录，看看数据库中有什么
@@ -329,6 +294,43 @@ export class TursoAPL implements APL {
           (error instanceof Error ? error.message : "Unknown error"),
       );
       throw error;
+    }
+  }
+
+  /**
+   * 通过token查找认证数据（用于URL更新）
+   */
+  async getByToken(token: string): Promise<ExtendedAuthData | undefined> {
+    await this.initTable();
+
+    try {
+      const result = await db
+        .select()
+        .from(sites)
+        .where(eq(sites.token, token))
+        .limit(1);
+
+      if (result.length === 0) {
+        return undefined;
+      }
+
+      const site = result[0];
+      return {
+        saleorApiUrl: site.saleorApiUrl,
+        domain: site.domain,
+        token: site.token || "",
+        appId: site.appId || "",
+        jwks: site.jwks ? JSON.parse(site.jwks) as string : undefined,
+        siteId: site.id,
+        status: site.status,
+        notes: site.notes || undefined,
+      };
+    } catch (error) {
+      logger.error(
+        "❌ Failed to get auth data by token: " +
+          (error instanceof Error ? error.message : "Unknown error"),
+      );
+      return undefined;
     }
   }
 

@@ -1,9 +1,9 @@
-import { type NextApiResponse } from "next";
+import { type NextApiRequest, type NextApiResponse } from "next";
 import { SALEOR_API_URL_HEADER } from "@saleor/app-sdk/const";
 import { saleorApp } from "../../saleor-app";
 import { createLogger } from "../../lib/logger";
-import { withSaleorAuth, type AuthenticatedRequest } from "../../lib/auth/saleor-auth-middleware";
-import { type ExtendedAuthData } from "../../lib/turso-apl";
+import { type ExtendedAuthData, TursoAPL } from "../../lib/turso-apl";
+// import jwt from "jsonwebtoken";
 
 const logger = createLogger({ component: "UpdateSaleorUrlAPI" });
 
@@ -14,51 +14,96 @@ export const config = {
   },
 };
 
-async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
-  logger.info("UpdateSaleorUrlAPI called with authData: " + JSON.stringify(req.authData));
+async function handler(req: NextApiRequest, res: NextApiResponse) {
+  logger.info("UpdateSaleorUrlAPI called");
   logger.info("Request headers: " + JSON.stringify(req.headers));
 
-  const { saleorApiUrl: currentSaleorApiUrl } = req.authData;
+  const authorizationHeader = req.headers["authorization-bearer"] as string;
+  const requestedSaleorApiUrl = req.headers[SALEOR_API_URL_HEADER] as string;
+
+  if (!authorizationHeader) {
+    return res.status(401).json({ error: "Missing authorization-bearer header" });
+  }
+
+  if (!requestedSaleorApiUrl) {
+    return res.status(400).json({ error: "Missing saleor-api-url header" });
+  }
+
+  // 简单解码JWT获取token（不验证签名，只提取payload）
+  let tokenFromJWT: string;
+  try {
+    const parts = authorizationHeader.split('.');
+    if (parts.length !== 3) {
+      return res.status(401).json({ error: "Invalid JWT format" });
+    }
+    
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString()) as any;
+    tokenFromJWT = payload?.token;
+    
+    if (!tokenFromJWT) {
+      return res.status(401).json({ error: "Invalid JWT: missing token" });
+    }
+    logger.info(`Extracted token from JWT: ${tokenFromJWT}`);
+  } catch (error) {
+    logger.error("Failed to decode JWT: " + (error instanceof Error ? error.message : "Unknown"));
+    return res.status(401).json({ error: "Invalid JWT format" });
+  }
+
+  // 通过token查找认证数据
+  const tursoAPL = saleorApp.apl as TursoAPL;
+  const existingAuthData = await tursoAPL.getByToken(tokenFromJWT);
+
+  if (!existingAuthData) {
+    logger.warn(`No auth data found for token: ${tokenFromJWT}`);
+    return res.status(404).json({ 
+      error: "No authentication data found",
+      requestedUrl: requestedSaleorApiUrl
+    });
+  }
+
+  logger.info(`Found auth data for token, current URL: ${existingAuthData.saleorApiUrl}`);
 
   switch (req.method) {
       case "GET":
         try {
-          // 直接使用请求头中的saleor-api-url作为真实URL，更新APL
-          const headerSaleorApiUrl = req.headers[SALEOR_API_URL_HEADER];
-          const realSaleorApiUrl = Array.isArray(headerSaleorApiUrl) ? headerSaleorApiUrl[0] : headerSaleorApiUrl;
-          
-          if (realSaleorApiUrl && currentSaleorApiUrl !== realSaleorApiUrl) {
-            logger.info(`Updating saleorApiUrl from ${currentSaleorApiUrl} to ${realSaleorApiUrl}`);
+          // 检查是否需要更新URL
+          if (requestedSaleorApiUrl && existingAuthData.saleorApiUrl !== requestedSaleorApiUrl) {
+            logger.info(`Auto-updating saleorApiUrl from ${existingAuthData.saleorApiUrl} to ${requestedSaleorApiUrl}`);
             
             // 更新认证数据中的URL
             const updatedAuthData: ExtendedAuthData = {
-              ...req.authData,
-              saleorApiUrl: realSaleorApiUrl,
+              ...existingAuthData,
+              saleorApiUrl: requestedSaleorApiUrl,
             };
             
             // 保存新的认证数据
             await saleorApp.apl.set(updatedAuthData);
             
-            // 如果URL已更改，删除旧的记录
-            if (currentSaleorApiUrl && currentSaleorApiUrl !== realSaleorApiUrl) {
-              await saleorApp.apl.delete(currentSaleorApiUrl);
+            // 删除旧的记录
+            if (existingAuthData.saleorApiUrl !== requestedSaleorApiUrl) {
+              await saleorApp.apl.delete(existingAuthData.saleorApiUrl);
             }
             
-            logger.info("Saleor API URL automatically updated to: " + realSaleorApiUrl);
+            logger.info("Saleor API URL automatically updated to: " + requestedSaleorApiUrl);
+            
+            return res.status(200).json({
+              saleorApiUrl: requestedSaleorApiUrl,
+              isPlaceholder: !requestedSaleorApiUrl || requestedSaleorApiUrl.includes("your-saleor-instance.com"),
+              autoUpdated: true,
+            });
           }
           
-          // 返回更新后的Saleor API URL
-          const finalUrl = realSaleorApiUrl || currentSaleorApiUrl || "";
+          // 如果URL没有变化，直接返回现有URL
           return res.status(200).json({
-            saleorApiUrl: finalUrl,
-            isPlaceholder: !finalUrl || finalUrl.includes("your-saleor-instance.com"),
-            autoUpdated: realSaleorApiUrl && currentSaleorApiUrl !== realSaleorApiUrl,
+            saleorApiUrl: existingAuthData.saleorApiUrl,
+            isPlaceholder: !existingAuthData.saleorApiUrl || existingAuthData.saleorApiUrl.includes("your-saleor-instance.com"),
+            autoUpdated: false,
           });
         } catch (error) {
           logger.error(
-            "Error fetching Saleor URL: " + (error instanceof Error ? error.message : "未知错误"),
+            "Error updating Saleor URL: " + (error instanceof Error ? error.message : "未知错误"),
           );
-          return res.status(500).json({ error: "Failed to fetch Saleor URL" });
+          return res.status(500).json({ error: "Failed to update Saleor URL" });
         }
 
       case "POST":
@@ -81,33 +126,7 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
             return res.status(400).json({ error: "Invalid URL format" });
           }
 
-          // 获取当前的authData
-          const existingAuthData = await saleorApp.apl.get(currentSaleorApiUrl);
-
-          if (!existingAuthData) {
-            logger.warn("Auth data not found for URL: " + currentSaleorApiUrl);
-            // 如果没有找到现有数据，创建新的authData
-            const newAuthData = {
-              saleorApiUrl: saleorApiUrl,
-              domain: req.authData.domain || new URL(saleorApiUrl).hostname,
-              token: req.authData.token,
-              appId: req.authData.appId,
-              jwks: req.authData.jwks,
-            };
-
-            // 保存新的authData
-            await saleorApp.apl.set(newAuthData);
-
-            logger.info("New Saleor API URL created successfully: " + saleorApiUrl);
-
-            return res.status(200).json({
-              success: true,
-              message: "Saleor API URL created successfully",
-              saleorApiUrl: saleorApiUrl,
-            });
-          }
-
-          // 更新authData中的saleorApiUrl
+          // 更新认证数据中的URL
           const updatedAuthData: ExtendedAuthData = {
             ...existingAuthData,
             saleorApiUrl: saleorApiUrl,
@@ -116,15 +135,15 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
           // 保存更新后的authData
           await saleorApp.apl.set(updatedAuthData);
 
-          // 如果URL已更改，删除旧的记录
-          if (currentSaleorApiUrl && currentSaleorApiUrl !== saleorApiUrl) {
-            await saleorApp.apl.delete(currentSaleorApiUrl);
+          // 删除旧的记录
+          if (existingAuthData.saleorApiUrl !== saleorApiUrl) {
+            await saleorApp.apl.delete(existingAuthData.saleorApiUrl);
           }
 
           logger.info(
             "Saleor API URL updated successfully: " +
               JSON.stringify({
-                oldUrl: currentSaleorApiUrl,
+                oldUrl: existingAuthData.saleorApiUrl,
                 newUrl: saleorApiUrl,
               }),
           );
@@ -146,4 +165,4 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
   }
 }
 
-export default withSaleorAuth(handler);
+export default handler;
