@@ -38,7 +38,16 @@ export function withSaleorAuth(handler: AuthenticatedHandler) {
 
       if (!authData) {
         logger.warn("No auth data found for: " + saleorApiUrl);
-        return res.status(401).json({ error: "No authentication data found" });
+        
+        // 调试: 显示所有可用的认证数据
+        const allAuthData = await saleorApp.apl.getAll();
+        logger.info("Available auth data URLs: " + JSON.stringify(allAuthData.map(d => d.saleorApiUrl)));
+        
+        return res.status(401).json({ 
+          error: "No authentication data found",
+          requestedUrl: saleorApiUrl,
+          availableUrls: allAuthData.map(d => d.saleorApiUrl)
+        });
       }
 
       // 验证token (简单比较，实际应该验证JWT)
