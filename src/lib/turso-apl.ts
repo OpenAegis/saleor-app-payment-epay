@@ -97,26 +97,36 @@ export class TursoAPL implements APL {
       const jwksString = authData.jwks ? JSON.stringify(authData.jwks) : null;
       const extendedData = authData as ExtendedAuthData;
 
-      // 检查是否已存在相同的 saleorApiUrl 记录
-      const existing = await db
+      // 检查是否已存在相同的 saleorApiUrl 记录，或者相同的 siteId 记录
+      let existing = await db
         .select()
         .from(sites)
         .where(eq(sites.saleorApiUrl, authData.saleorApiUrl))
         .limit(1);
+
+      // 如果通过URL找不到，但是有siteId，尝试通过siteId查找
+      if (existing.length === 0 && extendedData.siteId) {
+        existing = await db
+          .select()
+          .from(sites)
+          .where(eq(sites.id, extendedData.siteId))
+          .limit(1);
+      }
 
       if (existing.length > 0) {
         // 更新现有记录
         await db
           .update(sites)
           .set({
+            saleorApiUrl: authData.saleorApiUrl, // 也更新URL
             token: authData.token || null,
             appId: authData.appId || null,
             jwks: jwksString,
             updatedAt: new Date().toISOString(),
           })
-          .where(eq(sites.saleorApiUrl, authData.saleorApiUrl));
+          .where(eq(sites.id, existing[0].id)); // 使用ID更新，更安全
         
-        logger.info(`✅ Auth data updated for API URL: ${authData.saleorApiUrl}`);
+        logger.info(`✅ Auth data updated for site ID: ${existing[0].id}, new URL: ${authData.saleorApiUrl}`);
       } else {
         // 创建新记录，只插入必要字段，让数据库处理默认值
         const siteId = extendedData.siteId || `site-${Date.now()}`;
