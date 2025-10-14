@@ -8,7 +8,17 @@ import { AppLayout } from "@/modules/ui/templates/AppLayout";
 
 interface SaleorUrlResponse {
   saleorApiUrl: string;
+  domain?: string;
   isPlaceholder: boolean;
+  autoUpdated: boolean;
+  changes?: {
+    urlChanged: boolean;
+    domainChanged: boolean;
+    oldUrl: string;
+    newUrl: string;
+    oldDomain: string;
+    newDomain: string;
+  };
 }
 
 interface SiteAuthResponse {
@@ -46,6 +56,7 @@ const ConfigPage: NextPage = () => {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [siteAuth, setSiteAuth] = useState<SiteAuthResponse | null>(null);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   // 页面加载时获取现有配置
   useEffect(() => {
@@ -71,12 +82,26 @@ const ConfigPage: NextPage = () => {
           console.error("Failed to fetch site auth status");
         }
 
-        // 获取Saleor API URL
+        // 获取Saleor API URL（同时自动同步domain）
         const saleorUrlResponse = await authenticatedFetch("/api/update-saleor-url");
         if (saleorUrlResponse.ok) {
           const urlData = (await saleorUrlResponse.json()) as SaleorUrlResponse;
           setSaleorApiUrl(urlData.saleorApiUrl || "");
           setIsPlaceholderUrl(urlData.isPlaceholder || false);
+          
+          // 显示自动同步信息
+          if (urlData.autoUpdated && urlData.changes) {
+            const messages = [];
+            if (urlData.changes.domainChanged) {
+              messages.push(`域名已自动同步: ${urlData.changes.oldDomain} → ${urlData.changes.newDomain}`);
+            }
+            if (urlData.changes.urlChanged) {
+              messages.push(`URL已自动更新: ${urlData.changes.oldUrl} → ${urlData.changes.newUrl}`);
+            }
+            if (messages.length > 0) {
+              setSyncMessage(messages.join("; "));
+            }
+          }
         } else {
           const errorData = await saleorUrlResponse.json();
           setAuthError(
@@ -137,6 +162,12 @@ const ConfigPage: NextPage = () => {
           </Box>
         )}
 
+        {syncMessage && (
+          <Box padding={2} backgroundColor="success1" borderRadius={4}>
+            <p>✅ {syncMessage}</p>
+          </Box>
+        )}
+
         {/* 站点授权状态 */}
         {siteAuth && (
           <Box display="flex" flexDirection="column" gap={2}>
@@ -150,15 +181,39 @@ const ConfigPage: NextPage = () => {
                 onClick={() => {
                   if (token) {
                     setLoading(true);
+                    setSyncMessage(null); // 清除之前的同步消息
                     void (async () => {
                       try {
+                        // 先刷新URL和domain（可能触发自动同步）
+                        const saleorUrlResponse = await authenticatedFetch("/api/update-saleor-url");
+                        if (saleorUrlResponse.ok) {
+                          const urlData = (await saleorUrlResponse.json()) as SaleorUrlResponse;
+                          setSaleorApiUrl(urlData.saleorApiUrl || "");
+                          setIsPlaceholderUrl(urlData.isPlaceholder || false);
+                          
+                          // 显示自动同步信息
+                          if (urlData.autoUpdated && urlData.changes) {
+                            const messages = [];
+                            if (urlData.changes.domainChanged) {
+                              messages.push(`域名已自动同步: ${urlData.changes.oldDomain} → ${urlData.changes.newDomain}`);
+                            }
+                            if (urlData.changes.urlChanged) {
+                              messages.push(`URL已自动更新: ${urlData.changes.oldUrl} → ${urlData.changes.newUrl}`);
+                            }
+                            if (messages.length > 0) {
+                              setSyncMessage(messages.join("; "));
+                            }
+                          }
+                        }
+                        
+                        // 然后刷新授权状态
                         const siteAuthResponse = await authenticatedFetch("/api/check-site-auth");
                         if (siteAuthResponse.ok) {
                           const authData = (await siteAuthResponse.json()) as SiteAuthResponse;
                           setSiteAuth(authData);
                         }
                       } catch (error) {
-                        console.error("Failed to refresh site auth status:", error);
+                        console.error("Failed to refresh status:", error);
                       } finally {
                         setLoading(false);
                       }
@@ -200,60 +255,6 @@ const ConfigPage: NextPage = () => {
                 </Box>
               )}
               
-              {/* 域名同步按钮 */}
-              {siteAuth.authData && (() => {
-                try {
-                  return siteAuth.authData.domain !== new URL(siteAuth.authData.saleorApiUrl).hostname;
-                } catch {
-                  return false;
-                }
-              })() && (
-                <Box marginTop={2} padding={2} backgroundColor="warning1" borderRadius={4}>
-                  <p><strong>⚠️ 检测到域名不匹配</strong></p>
-                  <p>当前域名: {siteAuth.authData.domain}</p>
-                  <p>URL域名: {(() => {
-                    try {
-                      return new URL(siteAuth.authData.saleorApiUrl).hostname;
-                    } catch {
-                      return "无法解析";
-                    }
-                  })()}</p>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="small"
-                    disabled={loading}
-                    onClick={async () => {
-                      if (token) {
-                        setLoading(true);
-                        try {
-                          const syncResponse = await authenticatedFetch("/api/sync-domain", {
-                            method: "POST"
-                          });
-                          if (syncResponse.ok) {
-                            // 刷新授权状态
-                            const siteAuthResponse = await authenticatedFetch("/api/check-site-auth");
-                            if (siteAuthResponse.ok) {
-                              const authData = (await siteAuthResponse.json()) as SiteAuthResponse;
-                              setSiteAuth(authData);
-                            }
-                            alert("域名已同步成功！");
-                          } else {
-                            alert("域名同步失败，请重试");
-                          }
-                        } catch (error) {
-                          console.error("Failed to sync domain:", error);
-                          alert("域名同步失败，请重试");
-                        } finally {
-                          setLoading(false);
-                        }
-                      }
-                    }}
-                  >
-                    🔄 同步域名
-                  </Button>
-                </Box>
-              )}
             </Box>
           </Box>
         )}

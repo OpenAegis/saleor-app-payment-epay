@@ -68,51 +68,76 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   switch (req.method) {
       case "GET":
         try {
-          // 检查是否需要更新URL
+          // 总是检查并更新domain（无论URL是否改变）
+          const requestedDomain = req.headers["saleor-domain"] as string;
+          let domainToUpdate = requestedDomain || existingAuthData.domain;
+          let urlToUpdate = existingAuthData.saleorApiUrl;
+          let urlChanged = false;
+          let domainChanged = false;
+          
+          // 检查URL是否需要更新
           if (requestedSaleorApiUrl && existingAuthData.saleorApiUrl !== requestedSaleorApiUrl) {
+            urlToUpdate = requestedSaleorApiUrl;
+            urlChanged = true;
             logger.info(`Auto-updating saleorApiUrl from ${existingAuthData.saleorApiUrl} to ${requestedSaleorApiUrl}`);
-            
-            // 从请求头中获取domain，如果没有则从URL中提取
-            const requestedDomain = req.headers["saleor-domain"] as string;
-            let domainToUpdate = requestedDomain || existingAuthData.domain;
-            
-            // 如果没有saleor-domain请求头，尝试从URL提取domain
-            if (!requestedDomain && requestedSaleorApiUrl) {
-              try {
-                domainToUpdate = new URL(requestedSaleorApiUrl).hostname;
-                logger.info(`🔄 Extracting domain from URL: ${requestedSaleorApiUrl} -> ${domainToUpdate}`);
-              } catch {
-                logger.warn(`Failed to extract domain from URL: ${requestedSaleorApiUrl}`);
+          }
+          
+          // 总是尝试从当前URL提取domain进行同步
+          if (requestedSaleorApiUrl) {
+            try {
+              const extractedDomain = new URL(requestedSaleorApiUrl).hostname;
+              if (extractedDomain !== existingAuthData.domain) {
+                domainToUpdate = extractedDomain;
+                domainChanged = true;
+                logger.info(`🔄 Auto-syncing domain from URL: ${requestedSaleorApiUrl} -> ${extractedDomain} (was: ${existingAuthData.domain})`);
               }
+            } catch {
+              logger.warn(`Failed to extract domain from URL: ${requestedSaleorApiUrl}`);
             }
-            
-            // 更新认证数据中的URL和domain
+          }
+          
+          // 如果URL或domain有变化，则更新认证数据
+          if (urlChanged || domainChanged) {
             const updatedAuthData: ExtendedAuthData = {
               ...existingAuthData,
-              saleorApiUrl: requestedSaleorApiUrl,
-              domain: domainToUpdate, // 更新domain
+              saleorApiUrl: urlToUpdate,
+              domain: domainToUpdate,
             };
             
             // 保存新的认证数据
             await saleorApp.apl.set(updatedAuthData);
             
-            // 删除旧的记录
-            if (existingAuthData.saleorApiUrl !== requestedSaleorApiUrl) {
+            // 如果URL改变，删除旧的记录
+            if (urlChanged) {
               await saleorApp.apl.delete(existingAuthData.saleorApiUrl);
             }
             
-            logger.info("Saleor API URL automatically updated to: " + requestedSaleorApiUrl);
+            const changeLog = [];
+            if (urlChanged) changeLog.push(`URL: ${existingAuthData.saleorApiUrl} -> ${urlToUpdate}`);
+            if (domainChanged) changeLog.push(`Domain: ${existingAuthData.domain} -> ${domainToUpdate}`);
+            
+            logger.info(`Auto-updated auth data: ${changeLog.join(", ")}`);
             
             return res.status(200).json({
-              saleorApiUrl: requestedSaleorApiUrl,
-              isPlaceholder: !requestedSaleorApiUrl || requestedSaleorApiUrl.includes("your-saleor-instance.com"),
+              saleorApiUrl: urlToUpdate,
+              domain: domainToUpdate,
+              isPlaceholder: !urlToUpdate || urlToUpdate.includes("your-saleor-instance.com"),
               autoUpdated: true,
+              changes: {
+                urlChanged,
+                domainChanged,
+                oldUrl: existingAuthData.saleorApiUrl,
+                newUrl: urlToUpdate,
+                oldDomain: existingAuthData.domain,
+                newDomain: domainToUpdate,
+              }
             });
           }
           
-          // 如果URL没有变化，直接返回现有URL
+          // 如果没有变化，直接返回现有数据
           return res.status(200).json({
             saleorApiUrl: existingAuthData.saleorApiUrl,
+            domain: existingAuthData.domain,
             isPlaceholder: !existingAuthData.saleorApiUrl || existingAuthData.saleorApiUrl.includes("your-saleor-instance.com"),
             autoUpdated: false,
           });
