@@ -9,16 +9,18 @@ const logger = createLogger({ component: "DiagnoseEpayConfigAPI" });
 
 /**
  * 诊断epay-config API - 检查epay-config逻辑
+ * 注意：此API仅用于开发和调试目的，生产环境中应禁用或添加身份验证
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   logger.info("DiagnoseEpayConfigAPI called");
 
   try {
-    // 获取所有认证数据
+    // 获取认证数据数量（不返回具体数据）
     const allAuthData = await saleorApp.apl.getAll();
-    logger.info(`Found ${allAuthData.length} auth records`);
+    const authDataCount = allAuthData.length;
+    logger.info(`Found ${authDataCount} auth records`);
 
-    if (allAuthData.length === 0) {
+    if (authDataCount === 0) {
       return res.status(404).json({ error: "No auth data found" });
     }
 
@@ -44,15 +46,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const configManager = new EpayConfigManager(settingsManager, saleorApiUrl);
       logger.info("Config manager created successfully");
 
-      // 尝试获取配置
+      // 尝试获取配置（不返回敏感配置信息）
       const config = await configManager.getConfig();
+      const hasConfig = !!config;
       logger.info("Config retrieved successfully");
 
       return res.status(200).json({
         success: true,
         message: "Epay config logic working",
-        config,
-        authData,
+        hasConfig,
       });
     } catch (clientError) {
       logger.error(
@@ -62,7 +64,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(500).json({
         error: "Failed to create client",
         details: clientError instanceof Error ? clientError.message : "Unknown error",
-        authData,
       });
     }
   } catch (error) {
