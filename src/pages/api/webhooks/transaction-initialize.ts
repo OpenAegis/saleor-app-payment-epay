@@ -6,6 +6,8 @@ import { createPrivateSettingsManager } from "@/modules/app-configuration/metada
 import { EpayConfigManager } from "@/modules/payment-app-configuration/epay-config-manager";
 import { type EpayConfigEntry } from "@/modules/payment-app-configuration/epay-config";
 import { siteManager } from "@/lib/managers/site-manager";
+import { channelManager } from "@/lib/managers/channel-manager";
+import { type Channel } from "@/lib/db/schema";
 import { createLogger } from "@/lib/logger";
 
 const logger = createLogger({ component: "TransactionInitializeWebhook" });
@@ -25,12 +27,18 @@ interface TransactionEvent {
       productName?: string;
     }>;
   };
+  data?: {
+    channelId?: string;
+    channelType?: string;
+    payType?: string;
+  };
 }
 
 // 获取支付配置的函数
 async function getEpayConfig(
   saleorApiUrl: string,
   token: string,
+  channelId?: string,
 ): Promise<{ config: EpayConfig | null; returnUrl: string | null }> {
   try {
     // 从Saleor的metadata中获取配置
@@ -38,8 +46,33 @@ async function getEpayConfig(
     const settingsManager = createPrivateSettingsManager(client);
     const configManager = new EpayConfigManager(settingsManager, saleorApiUrl);
 
-    // 获取配置（这里简化处理，实际应该根据channel等信息获取对应配置）
+    // 获取配置
     const config = await configManager.getConfig();
+
+    // 如果指定了通道ID，查找对应的配置
+    if (channelId) {
+      const channels = await channelManager.getAll();
+      const channel = channels.find((c: Channel) => c.id === channelId);
+
+      if (channel) {
+        // 根据通道关联的网关获取配置
+        const gatewayConfigs = config.configurations || [];
+        const gatewayConfig = gatewayConfigs.find((g: any) => g.id === channel.gatewayId) as
+          | EpayConfigEntry
+          | undefined;
+
+        if (gatewayConfig) {
+          return {
+            config: {
+              pid: gatewayConfig.pid,
+              key: gatewayConfig.key,
+              apiUrl: gatewayConfig.apiUrl,
+            },
+            returnUrl: gatewayConfig.returnUrl || null,
+          };
+        }
+      }
+    }
 
     // 获取第一个配置项作为默认配置
     if (config.configurations && config.configurations.length > 0) {
@@ -100,7 +133,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const { event } = req.body as { event: TransactionEvent };
-    const { action, transaction, sourceObject } = event;
+    const { action, transaction, sourceObject, data } = event;
 
     // 获取Saleor API信息
     const saleorApiUrl = req.headers["saleor-api-url"] as string;
@@ -125,7 +158,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // 获取支付配置
-    const { config: epayConfig, returnUrl } = await getEpayConfig(saleorApiUrl, authToken || "");
+    const { config: epayConfig, returnUrl } = await getEpayConfig(
+      saleorApiUrl,
+      authToken || "",
+      data?.channelId,
+    );
+
     if (!epayConfig) {
       return res.status(200).json({
         result: "CHARGE_FAILURE",
@@ -137,7 +175,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 根据前端传入的支付类型或默认值
     // 支持任何自定义的支付方式
-    const payType = action?.paymentMethodType || "alipay";
+    const payType = data?.payType || action?.paymentMethodType || "alipay";
 
     // 创建订单号（包含交易ID以便回调时识别）
     const orderNo = `ORDER-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${
