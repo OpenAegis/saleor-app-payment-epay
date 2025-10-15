@@ -44,6 +44,13 @@ export default createManifestHandler({
           targetUrl: `${apiBaseURL}/api/webhooks/transaction-process`,
           isActive: true,
         },
+        {
+          name: "Epay Notify",
+          syncEvents: [],
+          query: "subscription { event { __typename } }",
+          targetUrl: `${apiBaseURL}/api/webhooks/epay-notify`,
+          isActive: true,
+        },
       ],
       extensions: [],
     };
