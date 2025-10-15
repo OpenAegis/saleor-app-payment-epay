@@ -95,6 +95,17 @@ class LazyTursoAPL {
       };
     }
   }
+
+  // 添加getByToken方法以兼容update-saleor-url.ts中的调用
+  async getByToken(token: string, appId?: string) {
+    const apl = await this.initialize();
+    // 检查apl是否有getByToken方法
+    if ("getByToken" in apl && typeof apl.getByToken === "function") {
+      return apl.getByToken(token, appId);
+    }
+    // 如果没有getByToken方法，返回undefined
+    return undefined;
+  }
 }
 
 const lazyApl = new LazyTursoAPL();
