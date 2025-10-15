@@ -26,7 +26,7 @@ export default createManifestHandler({
       permissions: ["HANDLE_PAYMENTS", "MANAGE_ORDERS", "MANAGE_CHECKOUTS"],
       id: "saleor.app.epay",
       version: packageJson.version,
-      requiredSaleorVersion: ">=3.13",
+      requiredSaleorVersion: ">=3.13", // 确保这个值不会被转义
       about:
         "App that allows merchants using the Saleor e-commerce platform to accept online payments from customers using Epay as their payment processor.",
       author: "Epay Payment App",
