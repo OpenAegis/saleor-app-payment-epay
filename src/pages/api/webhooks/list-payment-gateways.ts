@@ -3,10 +3,10 @@ import { channelManager } from "../../../lib/managers/channel-manager";
 import { type Channel } from "../../../lib/db/schema";
 import { createLogger } from "../../../lib/logger";
 
-const logger = createLogger({ component: "PaymentGatewayWebhook" });
+const logger = createLogger({ component: "ListPaymentGatewaysWebhook" });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  logger.info("Payment gateway initialize webhook called");
+  logger.info("List payment gateways webhook called");
 
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -24,40 +24,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           (dbError instanceof Error ? dbError.message : "Unknown error"),
       );
       // 即使数据库连接失败，也返回空的支付方法列表而不是500错误
-      // 这样Saleor不会认为webhook失败，而是认为没有可用的支付方法
       enabledChannels = [];
     }
 
-    // 根据Saleor规范，PAYMENT_GATEWAY_INITIALIZE_SESSION webhook应该返回一个包含data字段的对象
-    // data字段应该包含实际的响应数据
-    const responseData = {
-      // 返回客户端需要的数据，例如客户端密钥等
-      clientKey: "epay-client-key",
-      environment: "LIVE",
-      // 可以包含其他需要的数据
-      gatewayId: "epay-payment-gateway",
-    };
+    // 将数据库中的支付通道转换为Saleor期望的格式
+    // 每个通道都作为一个独立的支付方法返回
+    const paymentGateways = enabledChannels.map((channel: Channel) => ({
+      id: channel.id, // 使用通道ID作为支付方法ID
+      name: channel.name, // 使用通道名称作为支付方法名称
+      currencies: ["CNY"], // 默认使用CNY货币
+      config: [], // Saleor应用不直接暴露配置信息
+    }));
 
-    const response = {
-      data: responseData,
-    };
+    // 根据Saleor规范，PAYMENT_LIST_GATEWAYS webhook应该直接返回支付网关列表
+    // 每个支付网关对象应该包含id, name, currencies, config字段
+    const response = paymentGateways;
 
-    logger.info("Successfully returning payment gateway initialization data");
+    logger.info(`Successfully returning ${paymentGateways.length} payment gateways`);
     return res.status(200).json(response);
   } catch (error) {
     logger.error(
-      "Unexpected error in payment gateway webhook: " +
+      "Unexpected error in list payment gateways webhook: " +
         (error instanceof Error ? error.message : "Unknown error"),
     );
     // 即使出现未预期的错误，也返回空的支付方法列表而不是500错误
-    const response = {
-      data: {
-        clientKey: "epay-client-key",
-        environment: "LIVE",
-        gatewayId: "epay-payment-gateway",
-      },
-    };
-    return res.status(200).json(response);
+    return res.status(200).json([]);
   }
 }
 
