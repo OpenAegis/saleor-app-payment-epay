@@ -26,6 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       errors: [],
     };
 
+    logger.info("Sending payment gateway response");
     return res.status(200).json(response);
   } catch (error) {
     logger.error(
