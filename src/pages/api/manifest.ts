@@ -47,8 +47,7 @@ export default createManifestHandler({
         {
           name: "List Payment Gateways",
           syncEvents: ["PAYMENT_LIST_GATEWAYS" as unknown as never],
-          query:
-            "subscription { event { __typename ... on PaymentListGateways { checkout { id } currency } } }",
+          query: "subscription { event { __typename ... on PaymentListGateways { __typename } } }",
           targetUrl: `${apiBaseURL}/api/webhooks/list-payment-gateways`,
           isActive: true,
         },
