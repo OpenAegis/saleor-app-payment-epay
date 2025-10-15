@@ -60,6 +60,12 @@ const ConfigPage: NextPage = () => {
   const [siteName, setSiteName] = useState<string>("");
   const [savingSiteName, setSavingSiteName] = useState(false);
 
+  // 支付通道状态
+  const [channels, setChannels] = useState<{ configurationName: string; icon: string | null }[]>(
+    [],
+  );
+  const [channelsLoading, setChannelsLoading] = useState(false);
+
   // 页面加载时获取现有配置
   useEffect(() => {
     const fetchConfig = async () => {
@@ -94,12 +100,14 @@ const ConfigPage: NextPage = () => {
           const urlData = (await saleorUrlResponse.json()) as SaleorUrlResponse;
           setSaleorApiUrl(urlData.saleorApiUrl || "");
           setIsPlaceholderUrl(urlData.isPlaceholder || false);
-          
+
           // 显示自动同步信息
           if (urlData.autoUpdated && urlData.changes) {
             const messages = [];
             if (urlData.changes.domainChanged) {
-              messages.push(`域名已自动同步: ${urlData.changes.oldDomain} → ${urlData.changes.newDomain}`);
+              messages.push(
+                `域名已自动同步: ${urlData.changes.oldDomain} → ${urlData.changes.newDomain}`,
+              );
             }
             if (urlData.changes.urlChanged) {
               messages.push(`URL已自动更新: ${urlData.changes.oldUrl} → ${urlData.changes.newUrl}`);
@@ -129,8 +137,6 @@ const ConfigPage: NextPage = () => {
     }
   }, [token]);
 
-
-
   if (loading) {
     return (
       <AppLayout title="">
@@ -143,11 +149,16 @@ const ConfigPage: NextPage = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "approved": return "success1";
-      case "pending": return "warning1";
-      case "rejected": return "critical1";
-      case "suspended": return "default2";
-      default: return "default2";
+      case "approved":
+        return "success1";
+      case "pending":
+        return "warning1";
+      case "rejected":
+        return "critical1";
+      case "suspended":
+        return "default2";
+      default:
+        return "default2";
     }
   };
 
@@ -227,27 +238,33 @@ const ConfigPage: NextPage = () => {
                     void (async () => {
                       try {
                         // 先刷新URL和domain（可能触发自动同步）
-                        const saleorUrlResponse = await authenticatedFetch("/api/update-saleor-url");
+                        const saleorUrlResponse = await authenticatedFetch(
+                          "/api/update-saleor-url",
+                        );
                         if (saleorUrlResponse.ok) {
                           const urlData = (await saleorUrlResponse.json()) as SaleorUrlResponse;
                           setSaleorApiUrl(urlData.saleorApiUrl || "");
                           setIsPlaceholderUrl(urlData.isPlaceholder || false);
-                          
+
                           // 显示自动同步信息
                           if (urlData.autoUpdated && urlData.changes) {
                             const messages = [];
                             if (urlData.changes.domainChanged) {
-                              messages.push(`域名已自动同步: ${urlData.changes.oldDomain} → ${urlData.changes.newDomain}`);
+                              messages.push(
+                                `域名已自动同步: ${urlData.changes.oldDomain} → ${urlData.changes.newDomain}`,
+                              );
                             }
                             if (urlData.changes.urlChanged) {
-                              messages.push(`URL已自动更新: ${urlData.changes.oldUrl} → ${urlData.changes.newUrl}`);
+                              messages.push(
+                                `URL已自动更新: ${urlData.changes.oldUrl} → ${urlData.changes.newUrl}`,
+                              );
                             }
                             if (messages.length > 0) {
                               setSyncMessage(messages.join("; "));
                             }
                           }
                         }
-                        
+
                         // 然后刷新授权状态
                         const siteAuthResponse = await authenticatedFetch("/api/check-site-auth");
                         if (siteAuthResponse.ok) {
@@ -270,31 +287,47 @@ const ConfigPage: NextPage = () => {
                 {loading ? "刷新中..." : "🔄 刷新状态"}
               </Button>
             </Box>
-            <Box padding={3} backgroundColor={siteAuth.isAuthorized ? "success1" : getStatusColor(siteAuth.status)} borderRadius={4}>
+            <Box
+              padding={3}
+              backgroundColor={siteAuth.isAuthorized ? "success1" : getStatusColor(siteAuth.status)}
+              borderRadius={4}
+            >
               <h4 style={{ margin: "0 0 8px 0" }}>
                 {siteAuth.isAuthorized ? "🔐 已授权" : "🔒 未授权"}
               </h4>
               <p style={{ margin: "0 0 8px 0" }}>{siteAuth.message}</p>
-              
+
               {siteAuth.site && (
                 <Box display="flex" flexDirection="column" gap={1} marginTop={2}>
-                  <div><strong>站点域名:</strong> {siteAuth.site.domain}</div>
-                  <div><strong>站点名称:</strong> {siteAuth.site.name}</div>
-                  <div><strong>状态:</strong> {siteAuth.site.status}</div>
-                  <div><strong>申请时间:</strong> {formatDate(siteAuth.site.requestedAt)}</div>
+                  <div>
+                    <strong>站点域名:</strong> {siteAuth.site.domain}
+                  </div>
+                  <div>
+                    <strong>站点名称:</strong> {siteAuth.site.name}
+                  </div>
+                  <div>
+                    <strong>状态:</strong> {siteAuth.site.status}
+                  </div>
+                  <div>
+                    <strong>申请时间:</strong> {formatDate(siteAuth.site.requestedAt)}
+                  </div>
                   {siteAuth.site.approvedAt && (
-                    <div><strong>批准时间:</strong> {formatDate(siteAuth.site.approvedAt)}</div>
+                    <div>
+                      <strong>批准时间:</strong> {formatDate(siteAuth.site.approvedAt)}
+                    </div>
                   )}
                   {siteAuth.site.approvedBy && (
-                    <div><strong>批准人:</strong> {siteAuth.site.approvedBy}</div>
+                    <div>
+                      <strong>批准人:</strong> {siteAuth.site.approvedBy}
+                    </div>
                   )}
                   {siteAuth.site.notes && (
-                    <div><strong>备注:</strong> {siteAuth.site.notes}</div>
+                    <div>
+                      <strong>备注:</strong> {siteAuth.site.notes}
+                    </div>
                   )}
                 </Box>
               )}
-              
-              
             </Box>
           </Box>
         )}
@@ -307,7 +340,11 @@ const ConfigPage: NextPage = () => {
             value={saleorApiUrl}
             readOnly
             placeholder="https://your-saleor-instance.com/graphql/"
-            helperText={isPlaceholderUrl ? "系统将自动检测并更新为正确的Saleor实例URL" : "当前配置的Saleor实例URL（自动检测）"}
+            helperText={
+              isPlaceholderUrl
+                ? "系统将自动检测并更新为正确的Saleor实例URL"
+                : "当前配置的Saleor实例URL（自动检测）"
+            }
           />
           {isPlaceholderUrl ? (
             <Box padding={2} backgroundColor="info1" borderRadius={4}>
@@ -354,10 +391,10 @@ const ConfigPage: NextPage = () => {
         {/* 支付通道管理 */}
         <Box display="flex" flexDirection="column" gap={2}>
           <h3>支付通道管理</h3>
-          
+
           <Box display="flex" flexDirection="column" gap={2} marginTop={2}>
             <h4>当前可用支付通道</h4>
-            
+
             {/* TODO: 添加通道列表和排序功能 */}
             <Box padding={3} backgroundColor="default2" borderRadius={4}>
               <p>功能开发中：支付通道排序和启用/禁用控制</p>
