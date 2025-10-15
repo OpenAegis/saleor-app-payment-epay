@@ -417,7 +417,9 @@ const ConfigPage: NextPage = () => {
             <p>此应用支持彩虹易支付集成。</p>
             <p>支付配置由Saleor商店管理员在Saleor管理界面中进行配置。</p>
             <p>支付通道管理由插件管理员在专用管理面板中进行配置。</p>
-            <p><strong>注意：</strong>此Saleor应用只能查看支付方式，不能修改支付配置。</p>
+            <p>
+              <strong>注意：</strong>此Saleor应用只能查看支付方式，不能修改支付配置。
+            </p>
           </Box>
         </Box>
       </Box>

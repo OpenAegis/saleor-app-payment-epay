@@ -9,9 +9,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // 获取所有启用的支付通道
     const enabledGateways = await gatewayManager.getEnabled();
-    
+
     // 将数据库中的支付通道转换为Saleor期望的格式
-    const paymentMethods = enabledGateways.map(gateway => ({
+    const paymentMethods = enabledGateways.map((gateway) => ({
       id: gateway.id,
       name: gateway.name,
       currencies: ["CNY"], // 默认使用CNY货币
