@@ -1,9 +1,8 @@
 import { type NextApiRequest, type NextApiResponse } from "next";
-import { SALEOR_API_URL_HEADER } from "@saleor/app-sdk/const";
 import { siteManager } from "../../lib/managers/site-manager";
 import { createLogger } from "../../lib/logger";
 import { saleorApp } from "../../saleor-app";
-import { type ExtendedAuthData, TursoAPL } from "../../lib/turso-apl";
+import type { TursoAPL } from "../../lib/turso-apl";
 
 const logger = createLogger({ component: "CheckSiteAuthAPI" });
 
@@ -12,6 +11,34 @@ export const config = {
     externalResolver: true,
   },
 };
+
+/**
+ * 从Authorization头提取token
+ */
+function extractTokenFromAuthorizationHeader(authorizationHeader: string): string | null {
+  if (!authorizationHeader) return null;
+
+  // 支持两种格式:
+  // 1. "Bearer <token>"
+  // 2. 直接是JWT token (用于向后兼容)
+  if (authorizationHeader.startsWith("Bearer ")) {
+    return authorizationHeader.substring(7); // 移除 "Bearer " 前缀
+  }
+
+  // 检查是否是JWT格式 (向后兼容)
+  const parts = authorizationHeader.split(".");
+  if (parts.length === 3) {
+    return authorizationHeader; // 直接返回JWT
+  }
+
+  return null;
+}
+
+interface JWTPayload {
+  token?: string;
+  app?: string;
+  [key: string]: unknown;
+}
 
 /**
  * 检查当前站点的授权状态
@@ -25,37 +52,37 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     logger.info("CheckSiteAuth API called");
     logger.info("Request headers: " + JSON.stringify(req.headers));
 
-    const authorizationHeader = req.headers["authorization-bearer"] as string;
-    const saleorApiUrl = req.headers[SALEOR_API_URL_HEADER] as string;
+    // 支持两种头格式: authorization-bearer (旧格式) 和 authorization (标准格式)
+    const authorizationBearerHeader = req.headers["authorization-bearer"] as string;
+    const authorizationHeader = req.headers["authorization"] as string;
+
+    // 优先使用标准的authorization头
+    const authHeader = authorizationHeader || authorizationBearerHeader;
+
+    if (!authHeader) {
+      return res.status(401).json({ error: "Missing authorization header" });
+    }
+
     const saleorDomain = req.headers["saleor-domain"] as string;
 
-    if (!authorizationHeader) {
-      return res.status(401).json({ error: "Missing authorization-bearer header" });
+    // 提取token
+    const tokenFromJWT = extractTokenFromAuthorizationHeader(authHeader);
+    if (!tokenFromJWT) {
+      return res.status(401).json({ error: "Invalid authorization header format" });
     }
 
-    if (!saleorApiUrl) {
-      return res.status(400).json({ error: "Missing saleor-api-url header" });
-    }
-
-    // 从JWT获取token和app ID
-    let tokenFromJWT: string;
-    let appIdFromJWT: string;
+    // 从JWT获取app ID (如果有的话)
+    let appIdFromJWT: string | undefined;
     try {
-      const parts = authorizationHeader.split('.');
-      if (parts.length !== 3) {
-        return res.status(401).json({ error: "Invalid JWT format" });
-      }
-      
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString()) as any;
-      tokenFromJWT = payload?.token;
-      appIdFromJWT = payload?.app;
-      
-      if (!tokenFromJWT) {
-        return res.status(401).json({ error: "Invalid JWT: missing token" });
+      const parts = tokenFromJWT.split(".");
+      if (parts.length === 3) {
+        const payload = JSON.parse(Buffer.from(parts[1], "base64").toString()) as JWTPayload;
+        appIdFromJWT = payload?.app;
       }
     } catch (error) {
-      logger.error("Failed to decode JWT: " + (error instanceof Error ? error.message : "Unknown"));
-      return res.status(401).json({ error: "Invalid JWT format" });
+      logger.warn(
+        "Failed to decode JWT payload: " + (error instanceof Error ? error.message : "Unknown"),
+      );
     }
 
     // 获取认证数据
@@ -63,16 +90,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const authData = await tursoAPL.getByToken(tokenFromJWT, appIdFromJWT);
 
     if (!authData) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: "No authentication data found",
         isAuthorized: false,
-        status: "not_found"
+        status: "not_found",
       });
     }
 
     // 获取站点信息
     const domain = saleorDomain || authData.domain;
-    const clientIP = req.headers['x-forwarded-for'] as string || req.headers['x-real-ip'] as string;
+    const clientIP =
+      (req.headers["x-forwarded-for"] as string) || (req.headers["x-real-ip"] as string);
 
     let site = null;
     if (domain) {
@@ -84,17 +112,19 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     const response = {
       isAuthorized,
-      site: site ? {
-        id: site.id,
-        domain: site.domain,
-        name: site.name,
-        status: site.status,
-        requestedAt: site.requestedAt,
-        approvedAt: site.approvedAt,
-        approvedBy: site.approvedBy,
-        notes: site.notes,
-        lastActiveAt: site.lastActiveAt,
-      } : null,
+      site: site
+        ? {
+            id: site.id,
+            domain: site.domain,
+            name: site.name,
+            status: site.status,
+            requestedAt: site.requestedAt,
+            approvedAt: site.approvedAt,
+            approvedBy: site.approvedBy,
+            notes: site.notes,
+            lastActiveAt: site.lastActiveAt,
+          }
+        : null,
       authData: {
         saleorApiUrl: authData.saleorApiUrl,
         domain: authData.domain,
@@ -104,17 +134,18 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         siteId: authData.siteId,
       },
       status: site ? site.status : "no_site",
-      message: getStatusMessage(isAuthorized, site?.status)
+      message: getStatusMessage(isAuthorized, site?.status),
     };
 
     return res.status(200).json(response);
-
   } catch (error) {
-    logger.error("Error checking site auth: " + (error instanceof Error ? error.message : "Unknown error"));
-    return res.status(500).json({ 
+    logger.error(
+      "Error checking site auth: " + (error instanceof Error ? error.message : "Unknown error"),
+    );
+    return res.status(500).json({
       error: "Failed to check site authorization",
       isAuthorized: false,
-      status: "error"
+      status: "error",
     });
   }
 }
