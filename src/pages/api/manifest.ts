@@ -37,6 +37,13 @@ export default createManifestHandler({
       supportUrl: `${apiBaseURL}/support`,
       webhooks: [
         {
+          name: "List Payment Gateways",
+          syncEvents: ["PAYMENT_LIST_GATEWAYS" as unknown as never],
+          query: "subscription { event { __typename ... on PaymentListGateways { __typename } } }",
+          targetUrl: `${apiBaseURL}/api/webhooks/list-payment-gateways`,
+          isActive: true,
+        },
+        {
           name: "Transaction Initialize",
           syncEvents: ["TRANSACTION_INITIALIZE_SESSION"],
           query:
