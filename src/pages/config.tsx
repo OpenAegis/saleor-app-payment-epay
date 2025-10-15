@@ -395,10 +395,32 @@ const ConfigPage: NextPage = () => {
           <Box display="flex" flexDirection="column" gap={2} marginTop={2}>
             <h4>当前可用支付通道</h4>
 
-            {/* TODO: 添加通道列表和排序功能 */}
-            <Box padding={3} backgroundColor="default2" borderRadius={4}>
-              <p>功能开发中：支付通道排序和启用/禁用控制</p>
-            </Box>
+            {channelsLoading ? (
+              <Box padding={3} backgroundColor="default2" borderRadius={4}>
+                <p>正在加载支付通道...</p>
+              </Box>
+            ) : channels.length > 0 ? (
+              channels.map((channel, index) => (
+                <Box padding={3} backgroundColor="default2" borderRadius={4} key={index}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {channel.icon && (
+                      <img
+                        src={channel.icon}
+                        alt={channel.configurationName}
+                        style={{ width: "24px", height: "24px", borderRadius: "4px" }}
+                      />
+                    )}
+                    <span>
+                      <strong>通道名称:</strong> {channel.configurationName}
+                    </span>
+                  </div>
+                </Box>
+              ))
+            ) : (
+              <Box padding={3} backgroundColor="default2" borderRadius={4}>
+                <p>暂无可用支付通道，请联系插件管理员配置</p>
+              </Box>
+            )}
           </Box>
         </Box>
       </Box>
