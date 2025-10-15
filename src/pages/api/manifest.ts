@@ -3,21 +3,18 @@ import type { AppManifest } from "@saleor/app-sdk/types";
 
 import packageJson from "../../../package.json";
 import { env } from "../../../src/lib/env.mjs";
+import { createLogger } from "../../../src/lib/logger";
+
+const logger = createLogger({ component: "ManifestAPI" });
 
 export default createManifestHandler({
-  async manifestFactory({ appBaseUrl, request }) {
-    // 记录manifest请求信息用于调试
-    console.log("Manifest请求信息:", {
-      appBaseUrl,
-      headers: request?.headers,
-      query: request?.query,
-      url: request?.url,
-    });
+  async manifestFactory({ appBaseUrl, request: _request }) {
+    logger.info("Manifest request received");
 
     // 优先使用环境变量APP_API_BASE_URL，然后使用Saleor App SDK提供的appBaseUrl
     const apiBaseURL = env.APP_API_BASE_URL ?? appBaseUrl;
 
-    console.log("使用的API基础URL:", apiBaseURL);
+    logger.info("Using API base URL: " + apiBaseURL);
 
     const manifest: AppManifest = {
       name: packageJson.name,
