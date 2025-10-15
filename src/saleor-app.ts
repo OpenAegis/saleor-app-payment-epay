@@ -1,5 +1,6 @@
 import { SaleorApp } from "@saleor/app-sdk/saleor-app";
-import { TursoAPL } from "./lib/turso-apl";
+import { type AuthData } from "@saleor/app-sdk/APL";
+import { TursoAPL, type ExtendedAuthData } from "./lib/turso-apl";
 import { createLogger } from "./lib/logger";
 
 const logger = createLogger({ component: "SaleorApp" });
@@ -8,33 +9,96 @@ const logger = createLogger({ component: "SaleorApp" });
  * 使用 TursoAPL 将认证数据存储在 Turso 数据库中
  * 这样可以在多个实例间共享认证数据，且与业务数据统一管理
  */
-const getApl = async () => {
-  try {
-    const apl = new TursoAPL();
-    // 检查APL是否配置正确
-    const configured = await apl.isConfigured();
-    if (configured.configured) {
-      logger.info("✅ Using Turso APL");
-      return apl;
-    } else {
-      logger.error(
-        "❌ Turso APL not configured: " + (configured.error?.message || "Unknown error"),
-      );
-      throw new Error(
-        "Turso APL not configured: " + (configured.error?.message || "Unknown error"),
-      );
-    }
-  } catch (error) {
-    logger.error(
-      "❌ Error initializing Turso APL: " +
-        (error instanceof Error ? error.message : "Unknown error"),
-    );
-    throw error;
-  }
-};
+class LazyTursoAPL {
+  private apl: TursoAPL | null = null;
+  private initPromise: Promise<TursoAPL> | null = null;
 
-const apl = await getApl();
+  private async initialize(): Promise<TursoAPL> {
+    if (this.apl) {
+      return this.apl;
+    }
+
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+
+    this.initPromise = this.createAPL();
+    this.apl = await this.initPromise;
+    return this.apl;
+  }
+
+  private async createAPL(): Promise<TursoAPL> {
+    try {
+      const apl = new TursoAPL();
+      // 检查APL是否配置正确
+      const configured = await apl.isConfigured();
+      if (configured.configured) {
+        logger.info("✅ Using Turso APL");
+        return apl;
+      } else {
+        logger.error(
+          "❌ Turso APL not configured: " + (configured.error?.message || "Unknown error"),
+        );
+        throw new Error(
+          "Turso APL not configured: " + (configured.error?.message || "Unknown error"),
+        );
+      }
+    } catch (error) {
+      logger.error(
+        "❌ Error initializing Turso APL: " +
+          (error instanceof Error ? error.message : "Unknown error"),
+      );
+      throw error;
+    }
+  }
+
+  async get(saleorApiUrl: string) {
+    const apl = await this.initialize();
+    return apl.get(saleorApiUrl);
+  }
+
+  async set(authData: AuthData | ExtendedAuthData) {
+    const apl = await this.initialize();
+    return apl.set(authData);
+  }
+
+  async delete(saleorApiUrl: string) {
+    const apl = await this.initialize();
+    return apl.delete(saleorApiUrl);
+  }
+
+  async getAll() {
+    const apl = await this.initialize();
+    return apl.getAll();
+  }
+
+  async isReady() {
+    try {
+      const apl = await this.initialize();
+      return await apl.isReady();
+    } catch (error) {
+      return {
+        ready: false,
+        error: error instanceof Error ? error : new Error("Unknown error"),
+      };
+    }
+  }
+
+  async isConfigured() {
+    try {
+      const apl = await this.initialize();
+      return await apl.isConfigured();
+    } catch (error) {
+      return {
+        configured: false,
+        error: error instanceof Error ? error : new Error("Unknown error"),
+      };
+    }
+  }
+}
+
+const lazyApl = new LazyTursoAPL();
 
 export const saleorApp = new SaleorApp({
-  apl,
+  apl: lazyApl,
 });

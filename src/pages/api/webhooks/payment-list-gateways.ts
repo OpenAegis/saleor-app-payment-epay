@@ -27,18 +27,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     console.log("Payment methods to return:", paymentMethods);
 
-    // 根据Saleor文档，PAYMENT_GATEWAY_INITIALIZE_SESSION webhook应该返回一个包含data字段的对象
-    // 这个data字段会被直接返回给storefront
-    const response = {
-      data: {
-        // 返回支付方法列表，符合Saleor新API的要求
-        paymentMethodsResponse: {
-          paymentMethods,
-        },
-        // 可以添加其他需要的配置信息
-        clientKey: "epay-client-key",
-        environment: "LIVE",
+    // 根据GitHub Issue #12016，PAYMENT_GATEWAY_INITIALIZE_SESSION webhook应该返回一个包含data字段的对象
+    // data字段应该包含实际的响应数据
+    const responseData = {
+      paymentMethodsResponse: {
+        paymentMethods,
       },
+      clientKey: "epay-client-key",
+      environment: "LIVE",
+    };
+
+    const response = {
+      data: responseData,
     };
 
     console.log("Response to send:", JSON.stringify(response, null, 2));
