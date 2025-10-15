@@ -46,22 +46,6 @@ interface SiteAuthResponse {
   message: string;
 }
 
-// 定义支付通道接口
-interface PaymentChannel {
-  id: string;
-  name: string;
-  description: string;
-  epayUrl: string;
-  epayPid: string;
-  icon: string;
-  enabled: boolean;
-  priority: number;
-}
-
-interface GatewaysResponse {
-  gateways: PaymentChannel[];
-}
-
 interface ErrorResponse {
   error?: string;
 }
@@ -79,10 +63,6 @@ const ConfigPage: NextPage = () => {
   const [siteName, setSiteName] = useState<string>("");
   const [savingSiteName, setSavingSiteName] = useState(false);
 
-  // 支付通道状态
-  const [channels, setChannels] = useState<PaymentChannel[]>([]);
-  const [channelsLoading, setChannelsLoading] = useState(false);
-
   // 页面加载时获取现有配置
   useEffect(() => {
     const fetchConfig = async () => {
@@ -96,14 +76,11 @@ const ConfigPage: NextPage = () => {
           console.log("诊断信息:", diagnoseData);
         }
 
-        // 获取支付通道信息
-        await fetchPaymentChannels();
-
         // 获取站点授权状态
         const siteAuthResponse = await fetch("/api/check-site-auth", {
           headers: {
             "saleor-api-url": saleorApiUrl || "",
-            "authorization": `Bearer ${token}`,
+            authorization: `Bearer ${token}`,
           },
         });
         if (siteAuthResponse.ok) {
@@ -121,7 +98,7 @@ const ConfigPage: NextPage = () => {
         const saleorUrlResponse = await fetch("/api/update-saleor-url", {
           headers: {
             "saleor-api-url": saleorApiUrl || "",
-            "authorization": `Bearer ${token}`,
+            authorization: `Bearer ${token}`,
           },
         });
         if (saleorUrlResponse.ok) {
@@ -164,24 +141,6 @@ const ConfigPage: NextPage = () => {
       void fetchConfig();
     }
   }, [token, saleorApiUrl]);
-
-  // 获取支付通道信息
-  const fetchPaymentChannels = async () => {
-    setChannelsLoading(true);
-    try {
-      const response = await fetch("/api/admin/gateways");
-      if (response.ok) {
-        const data = (await response.json()) as GatewaysResponse;
-        setChannels(data.gateways || []);
-      } else {
-        console.error("Failed to fetch payment channels");
-      }
-    } catch (error) {
-      console.error("Error fetching payment channels:", error);
-    } finally {
-      setChannelsLoading(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -451,39 +410,13 @@ const ConfigPage: NextPage = () => {
           </Box>
         )}
 
-        {/* 支付通道管理 */}
+        {/* 支付配置说明 */}
         <Box display="flex" flexDirection="column" gap={2}>
-          <h3>支付通道管理</h3>
-
-          <Box display="flex" flexDirection="column" gap={2} marginTop={2}>
-            <h4>当前可用支付通道</h4>
-
-            {channelsLoading ? (
-              <Box padding={3} backgroundColor="default2" borderRadius={4}>
-                <p>正在加载支付通道...</p>
-              </Box>
-            ) : channels.length > 0 ? (
-              channels.map((channel) => (
-                <Box padding={3} backgroundColor="default2" borderRadius={4} key={channel.id}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    {channel.icon && (
-                      <img
-                        src={channel.icon}
-                        alt={channel.name}
-                        style={{ width: "24px", height: "24px", borderRadius: "4px" }}
-                      />
-                    )}
-                    <span>
-                      <strong>通道名称:</strong> {channel.name}
-                    </span>
-                  </div>
-                </Box>
-              ))
-            ) : (
-              <Box padding={3} backgroundColor="default2" borderRadius={4}>
-                <p>暂无可用支付通道，请联系插件管理员配置</p>
-              </Box>
-            )}
+          <h3>支付配置说明</h3>
+          <Box padding={3} backgroundColor="default2" borderRadius={4}>
+            <p>此应用支持彩虹易支付集成。</p>
+            <p>支付配置由Saleor商店管理员在Saleor管理界面中进行配置。</p>
+            <p>支付通道管理由插件管理员在专用管理面板中进行配置。</p>
           </Box>
         </Box>
       </Box>
