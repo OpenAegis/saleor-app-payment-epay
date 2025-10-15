@@ -26,7 +26,7 @@ export default createManifestHandler({
       permissions: ["HANDLE_PAYMENTS", "MANAGE_ORDERS", "MANAGE_CHECKOUTS"],
       id: "saleor.app.epay",
       version: packageJson.version,
-      requiredSaleorVersion: ">=3.13", // 确保这个值不会被转义
+      requiredSaleorVersion: "3.13",
       about:
         "App that allows merchants using the Saleor e-commerce platform to accept online payments from customers using Epay as their payment processor.",
       author: "Epay Payment App",
@@ -43,7 +43,7 @@ export default createManifestHandler({
           name: "Payment Gateway Initialize",
           syncEvents: ["PAYMENT_GATEWAY_INITIALIZE_SESSION"],
           query:
-            "subscription { event { ... on PaymentGatewayInitializeSession { id amount data } } }",
+            "subscription { event { __typename ... on PaymentGatewayInitializeSession { id amount data } } }",
           targetUrl: `${apiBaseURL}/api/webhooks/payment-list-gateways`,
           isActive: true,
         },
@@ -51,7 +51,7 @@ export default createManifestHandler({
           name: "Transaction Initialize",
           syncEvents: ["TRANSACTION_INITIALIZE_SESSION"],
           query:
-            "subscription { event { ... on TransactionInitializeSession { action { amount, currency, actionType }, data, transaction { id } } } }",
+            "subscription { event { __typename ... on TransactionInitializeSession { action { amount, currency, actionType }, data, transaction { id } } } }",
           targetUrl: `${apiBaseURL}/api/webhooks/transaction-initialize`,
           isActive: true,
         },
@@ -59,7 +59,7 @@ export default createManifestHandler({
           name: "Transaction Process",
           syncEvents: ["TRANSACTION_PROCESS_SESSION"],
           query:
-            "subscription { event { ... on TransactionProcessSession { action { amount, currency, actionType }, data, transaction { id } } } }",
+            "subscription { event { __typename ... on TransactionProcessSession { action { amount, currency, actionType }, data, transaction { id } } } }",
           targetUrl: `${apiBaseURL}/api/webhooks/transaction-process`,
           isActive: true,
         },
