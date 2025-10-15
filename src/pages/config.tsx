@@ -1,4 +1,4 @@
-import { useAppBridge, withAuthorization, useAuthenticatedFetch } from "@saleor/app-sdk/app-bridge";
+import { useAppBridge, withAuthorization } from "@saleor/app-sdk/app-bridge";
 import { useState, useEffect } from "react";
 import { Box, Input, Button } from "@saleor/macaw-ui";
 import { type NextPage } from "next";
@@ -46,12 +46,31 @@ interface SiteAuthResponse {
   message: string;
 }
 
-const ConfigPage: NextPage = () => {
-  const { appBridgeState, appBridge } = useAppBridge();
-  const { token } = appBridgeState ?? {};
-  const authenticatedFetch = useAuthenticatedFetch();
+// 定义支付通道接口
+interface PaymentChannel {
+  id: string;
+  name: string;
+  description: string;
+  epayUrl: string;
+  epayPid: string;
+  icon: string;
+  enabled: boolean;
+  priority: number;
+}
 
-  const [saleorApiUrl, setSaleorApiUrl] = useState<string>("");
+interface GatewaysResponse {
+  gateways: PaymentChannel[];
+}
+
+interface ErrorResponse {
+  error?: string;
+}
+
+const ConfigPage: NextPage = () => {
+  const { appBridgeState } = useAppBridge();
+  const { token, saleorApiUrl } = appBridgeState ?? {};
+
+  const [saleorApiUrlState, setSaleorApiUrlState] = useState<string>("");
   const [isPlaceholderUrl, setIsPlaceholderUrl] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -61,9 +80,7 @@ const ConfigPage: NextPage = () => {
   const [savingSiteName, setSavingSiteName] = useState(false);
 
   // 支付通道状态
-  const [channels, setChannels] = useState<{ configurationName: string; icon: string | null }[]>(
-    [],
-  );
+  const [channels, setChannels] = useState<PaymentChannel[]>([]);
   const [channelsLoading, setChannelsLoading] = useState(false);
 
   // 页面加载时获取现有配置
@@ -79,10 +96,16 @@ const ConfigPage: NextPage = () => {
           console.log("诊断信息:", diagnoseData);
         }
 
-        // 支付配置由插件超级管理员管理，这里不需要获取
+        // 获取支付通道信息
+        await fetchPaymentChannels();
 
         // 获取站点授权状态
-        const siteAuthResponse = await authenticatedFetch("/api/check-site-auth");
+        const siteAuthResponse = await fetch("/api/check-site-auth", {
+          headers: {
+            "saleor-api-url": saleorApiUrl || "",
+            "authorization": `Bearer ${token}`,
+          },
+        });
         if (siteAuthResponse.ok) {
           const authData = (await siteAuthResponse.json()) as SiteAuthResponse;
           setSiteAuth(authData);
@@ -95,10 +118,15 @@ const ConfigPage: NextPage = () => {
         }
 
         // 获取Saleor API URL（同时自动同步domain）
-        const saleorUrlResponse = await authenticatedFetch("/api/update-saleor-url");
+        const saleorUrlResponse = await fetch("/api/update-saleor-url", {
+          headers: {
+            "saleor-api-url": saleorApiUrl || "",
+            "authorization": `Bearer ${token}`,
+          },
+        });
         if (saleorUrlResponse.ok) {
           const urlData = (await saleorUrlResponse.json()) as SaleorUrlResponse;
-          setSaleorApiUrl(urlData.saleorApiUrl || "");
+          setSaleorApiUrlState(urlData.saleorApiUrl || "");
           setIsPlaceholderUrl(urlData.isPlaceholder || false);
 
           // 显示自动同步信息
@@ -132,10 +160,28 @@ const ConfigPage: NextPage = () => {
       }
     };
 
-    if (token) {
+    if (token && saleorApiUrl) {
       void fetchConfig();
     }
-  }, [token]);
+  }, [token, saleorApiUrl]);
+
+  // 获取支付通道信息
+  const fetchPaymentChannels = async () => {
+    setChannelsLoading(true);
+    try {
+      const response = await fetch("/api/admin/gateways");
+      if (response.ok) {
+        const data = (await response.json()) as GatewaysResponse;
+        setChannels(data.gateways || []);
+      } else {
+        console.error("Failed to fetch payment channels");
+      }
+    } catch (error) {
+      console.error("Error fetching payment channels:", error);
+    } finally {
+      setChannelsLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -172,10 +218,12 @@ const ConfigPage: NextPage = () => {
 
     setSavingSiteName(true);
     try {
-      const response = await authenticatedFetch("/api/update-site-name", {
+      const response = await fetch("/api/update-site-name", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
+          "saleor-api-url": saleorApiUrl || "",
+          "authorization": `Bearer ${token}`,
         },
         body: JSON.stringify({
           siteName: siteName.trim(),
@@ -184,7 +232,12 @@ const ConfigPage: NextPage = () => {
 
       if (response.ok) {
         // 刷新站点授权状态以获取最新数据
-        const siteAuthResponse = await authenticatedFetch("/api/check-site-auth");
+        const siteAuthResponse = await fetch("/api/check-site-auth", {
+          headers: {
+            "saleor-api-url": saleorApiUrl || "",
+            "authorization": `Bearer ${token}`,
+          },
+        });
         if (siteAuthResponse.ok) {
           const authData = (await siteAuthResponse.json()) as SiteAuthResponse;
           setSiteAuth(authData);
@@ -193,7 +246,7 @@ const ConfigPage: NextPage = () => {
         setSyncMessage("站点名称已成功更新");
       } else {
         const error = await response.json();
-        setAuthError(`更新站点名称失败: ${error.error || "未知错误"}`);
+        setAuthError(`更新站点名称失败: ${(error as ErrorResponse).error || "未知错误"}`);
       }
     } catch (error) {
       console.error("Failed to update site name:", error);
@@ -238,12 +291,15 @@ const ConfigPage: NextPage = () => {
                     void (async () => {
                       try {
                         // 先刷新URL和domain（可能触发自动同步）
-                        const saleorUrlResponse = await authenticatedFetch(
-                          "/api/update-saleor-url",
-                        );
+                        const saleorUrlResponse = await fetch("/api/update-saleor-url", {
+                          headers: {
+                            "saleor-api-url": saleorApiUrl || "",
+                            "authorization": `Bearer ${token}`,
+                          },
+                        });
                         if (saleorUrlResponse.ok) {
                           const urlData = (await saleorUrlResponse.json()) as SaleorUrlResponse;
-                          setSaleorApiUrl(urlData.saleorApiUrl || "");
+                          setSaleorApiUrlState(urlData.saleorApiUrl || "");
                           setIsPlaceholderUrl(urlData.isPlaceholder || false);
 
                           // 显示自动同步信息
@@ -266,7 +322,12 @@ const ConfigPage: NextPage = () => {
                         }
 
                         // 然后刷新授权状态
-                        const siteAuthResponse = await authenticatedFetch("/api/check-site-auth");
+                        const siteAuthResponse = await fetch("/api/check-site-auth", {
+                          headers: {
+                            "saleor-api-url": saleorApiUrl || "",
+                            "authorization": `Bearer ${token}`,
+                          },
+                        });
                         if (siteAuthResponse.ok) {
                           const authData = (await siteAuthResponse.json()) as SiteAuthResponse;
                           setSiteAuth(authData);
@@ -337,7 +398,7 @@ const ConfigPage: NextPage = () => {
           <h3>Saleor API URL配置</h3>
           <Input
             label="Saleor API URL"
-            value={saleorApiUrl}
+            value={saleorApiUrlState}
             readOnly
             placeholder="https://your-saleor-instance.com/graphql/"
             helperText={
@@ -375,14 +436,16 @@ const ConfigPage: NextPage = () => {
                 type="button"
                 variant="primary"
                 disabled={savingSiteName || !siteName.trim() || siteName === siteAuth.site.name}
-                onClick={handleSiteNameUpdate}
+                onClick={() => {
+                  void handleSiteNameUpdate();
+                }}
               >
                 {savingSiteName ? "保存中..." : "保存"}
               </Button>
             </Box>
             {siteName !== siteAuth.site.name && siteName.trim() && (
               <Box padding={2} backgroundColor="warning1" borderRadius={4}>
-                <p>⚠️ 站点名称已修改，请点击"保存"按钮保存更改</p>
+                <p>⚠️ 站点名称已修改，请点击&#34;保存&#34;按钮保存更改</p>
               </Box>
             )}
           </Box>
@@ -400,18 +463,18 @@ const ConfigPage: NextPage = () => {
                 <p>正在加载支付通道...</p>
               </Box>
             ) : channels.length > 0 ? (
-              channels.map((channel, index) => (
-                <Box padding={3} backgroundColor="default2" borderRadius={4} key={index}>
+              channels.map((channel) => (
+                <Box padding={3} backgroundColor="default2" borderRadius={4} key={channel.id}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     {channel.icon && (
                       <img
                         src={channel.icon}
-                        alt={channel.configurationName}
+                        alt={channel.name}
                         style={{ width: "24px", height: "24px", borderRadius: "4px" }}
                       />
                     )}
                     <span>
-                      <strong>通道名称:</strong> {channel.configurationName}
+                      <strong>通道名称:</strong> {channel.name}
                     </span>
                   </div>
                 </Box>
