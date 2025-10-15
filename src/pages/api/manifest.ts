@@ -43,7 +43,7 @@ export default createManifestHandler({
           name: "Payment Gateway Initialize",
           syncEvents: ["PAYMENT_GATEWAY_INITIALIZE_SESSION"],
           query:
-            "subscription { event { __typename ... on PaymentGatewayInitializeSession { id amount data } } }",
+            "subscription { event { __typename ... on PaymentGatewayInitializeSession { amount data } } }",
           targetUrl: `${apiBaseURL}/api/webhooks/payment-list-gateways`,
           isActive: true,
         },
