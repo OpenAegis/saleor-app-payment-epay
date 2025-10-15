@@ -29,6 +29,13 @@ export default createManifestHandler({
       requiredSaleorVersion: ">=3.13",
       webhooks: [
         {
+          name: "Payment List Gateways",
+          syncEvents: ["PAYMENT_LIST_GATEWAYS" as unknown as never],
+          query: "subscription { event { ... on PaymentListGateways { checkout { id } } } }",
+          targetUrl: `${apiBaseURL}/api/webhooks/payment-list-gateways`,
+          isActive: true,
+        },
+        {
           name: "Transaction Initialize",
           syncEvents: ["TRANSACTION_INITIALIZE_SESSION"],
           query:
