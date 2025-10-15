@@ -2,6 +2,11 @@ import { type NextApiRequest, type NextApiResponse } from "next";
 import { channelManager } from "../../../lib/managers/channel-manager";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  console.log("Payment gateway initialize webhook called");
+  console.log("Request method:", req.method);
+  console.log("Request headers:", req.headers);
+  console.log("Request body:", req.body);
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -9,6 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // 获取所有启用的支付通道
     const enabledChannels = await channelManager.getEnabled();
+    console.log("Enabled channels:", enabledChannels);
 
     // 将数据库中的支付通道转换为Saleor期望的格式
     // 每个通道都作为一个独立的支付方法返回
@@ -18,6 +24,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       currencies: ["CNY"], // 默认使用CNY货币
       config: [], // Saleor应用不直接暴露配置信息
     }));
+
+    console.log("Payment methods to return:", paymentMethods);
 
     // 根据Saleor文档，PAYMENT_GATEWAY_INITIALIZE_SESSION webhook应该返回一个包含data字段的对象
     // 这个data字段会被直接返回给storefront
@@ -33,6 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     };
 
+    console.log("Response to send:", JSON.stringify(response, null, 2));
     return res.status(200).json(response);
   } catch (error) {
     console.error("获取支付通道时出错:", error);
