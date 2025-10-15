@@ -27,11 +27,23 @@ export default createManifestHandler({
       id: "saleor.app.epay",
       version: packageJson.version,
       requiredSaleorVersion: ">=3.13",
+      about:
+        "App that allows merchants using the Saleor e-commerce platform to accept online payments from customers using Epay as their payment processor.",
+      author: "Epay Payment App",
+      brand: {
+        logo: {
+          default: `${apiBaseURL}/logo.png`,
+        },
+      },
+      dataPrivacyUrl: `${apiBaseURL}/privacy`,
+      homepageUrl: "https://github.com/your-org/saleor-app-payment-epay",
+      supportUrl: `${apiBaseURL}/support`,
       webhooks: [
         {
-          name: "Payment List Gateways",
-          syncEvents: ["PAYMENT_LIST_GATEWAYS" as unknown as never],
-          query: "subscription { event { ... on PaymentListGateways { checkout { id } } } }",
+          name: "Payment Gateway Initialize",
+          syncEvents: ["PAYMENT_GATEWAY_INITIALIZE_SESSION"],
+          query:
+            "subscription { event { ... on PaymentGatewayInitializeSession { sourceObject { ... on Checkout { id } ... on Order { id } } } } }",
           targetUrl: `${apiBaseURL}/api/webhooks/payment-list-gateways`,
           isActive: true,
         },
@@ -49,13 +61,6 @@ export default createManifestHandler({
           query:
             "subscription { event { ... on TransactionProcessSession { action { amount, currency, actionType }, transaction { id, pspReference }, sourceObject { ... on Checkout { id }, ... on Order { id } } } } }",
           targetUrl: `${apiBaseURL}/api/webhooks/transaction-process`,
-          isActive: true,
-        },
-        {
-          name: "Epay Notify",
-          syncEvents: [],
-          query: "subscription { event { __typename } }",
-          targetUrl: `${apiBaseURL}/api/webhooks/epay-notify`,
           isActive: true,
         },
       ],
