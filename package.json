@@ -48,6 +48,7 @@
     "modern-errors-serialize": "6.1.1",
     "next": "^14.2.0",
     "pino": "10.0.0",
+    "pino-pretty": "13.1.2",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-hook-form": "^7.64.0",
