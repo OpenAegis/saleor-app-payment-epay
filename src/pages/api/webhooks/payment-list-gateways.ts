@@ -1,5 +1,5 @@
 import { type NextApiRequest, type NextApiResponse } from "next";
-import { gatewayManager } from "../../../lib/managers/gateway-manager";
+import { channelManager } from "../../../lib/managers/channel-manager";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
@@ -8,12 +8,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // 获取所有启用的支付通道
-    const enabledGateways = await gatewayManager.getEnabled();
+    const enabledChannels = await channelManager.getEnabled();
 
     // 将数据库中的支付通道转换为Saleor期望的格式
-    const paymentMethods = enabledGateways.map((gateway) => ({
-      id: gateway.id,
-      name: gateway.name,
+    // 每个通道都作为一个独立的支付方法返回
+    const paymentMethods = enabledChannels.map((channel) => ({
+      id: channel.id, // 使用通道ID作为支付方法ID
+      name: channel.name, // 使用通道名称作为支付方法名称
       currencies: ["CNY"], // 默认使用CNY货币
       config: [], // Saleor应用不直接暴露配置信息
     }));
