@@ -50,6 +50,25 @@ interface ErrorResponse {
   error?: string;
 }
 
+// 添加通道接口
+interface Channel {
+  id: string;
+  gatewayId: string;
+  name: string;
+  description: string | null;
+  type: string;
+  icon: string | null;
+  enabled: boolean;
+  priority: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 添加通道响应接口
+interface ChannelsResponse {
+  channels: Channel[];
+}
+
 const ConfigPage: NextPage = () => {
   const { appBridgeState } = useAppBridge();
   const { token, saleorApiUrl } = appBridgeState ?? {};
@@ -62,6 +81,7 @@ const ConfigPage: NextPage = () => {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [siteName, setSiteName] = useState<string>("");
   const [savingSiteName, setSavingSiteName] = useState(false);
+  const [channels, setChannels] = useState<Channel[]>([]); // 添加通道状态
 
   // 页面加载时获取现有配置
   useEffect(() => {
@@ -128,6 +148,15 @@ const ConfigPage: NextPage = () => {
               ? String(errorData.error)
               : "获取Saleor URL失败",
           );
+        }
+
+        // 获取启用的支付通道列表
+        const channelsResponse = await fetch("/api/public/channels");
+        if (channelsResponse.ok) {
+          const channelsData = (await channelsResponse.json()) as ChannelsResponse;
+          setChannels(channelsData.channels || []);
+        } else {
+          console.error("Failed to fetch channels");
         }
       } catch (error) {
         console.error("获取配置失败:", error);
@@ -295,6 +324,13 @@ const ConfigPage: NextPage = () => {
                             setSiteName(authData.site.name || "");
                           }
                         }
+
+                        // 刷新通道列表
+                        const channelsResponse = await fetch("/api/public/channels");
+                        if (channelsResponse.ok) {
+                          const channelsData = (await channelsResponse.json()) as ChannelsResponse;
+                          setChannels(channelsData.channels || []);
+                        }
                       } catch (error) {
                         console.error("Failed to refresh status:", error);
                       } finally {
@@ -410,17 +446,50 @@ const ConfigPage: NextPage = () => {
           </Box>
         )}
 
-        {/* 支付配置说明 */}
+        {/* 支付通道列表预览 */}
         <Box display="flex" flexDirection="column" gap={2}>
-          <h3>支付配置说明</h3>
-          <Box padding={3} backgroundColor="default2" borderRadius={4}>
-            <p>此应用支持彩虹易支付集成。</p>
-            <p>支付配置由Saleor商店管理员在Saleor管理界面中进行配置。</p>
-            <p>支付通道管理由插件管理员在专用管理面板中进行配置。</p>
-            <p>
-              <strong>注意：</strong>此Saleor应用只能查看支付方式，不能修改支付配置。
-            </p>
-          </Box>
+          <h3>支付通道列表</h3>
+          {channels.length > 0 ? (
+            <Box display="flex" flexDirection="column" gap={2}>
+              {channels.map((channel) => (
+                <Box
+                  key={channel.id}
+                  padding={3}
+                  backgroundColor="default2"
+                  borderRadius={4}
+                  display="flex"
+                  justifyContent="space-between"
+                  alignItems="center"
+                >
+                  <Box>
+                    <div>
+                      <strong>{channel.name}</strong>
+                    </div>
+                    {channel.description && (
+                      <div style={{ marginTop: "4px", fontSize: "14px", color: "#666" }}>
+                        {channel.description}
+                      </div>
+                    )}
+                    <div style={{ marginTop: "4px", fontSize: "12px", color: "#999" }}>
+                      类型: {channel.type}
+                    </div>
+                  </Box>
+                  <Box
+                    padding={1}
+                    backgroundColor={channel.enabled ? "success1" : "critical1"}
+                    borderRadius={2}
+                    fontSize={1}
+                  >
+                    {channel.enabled ? "启用" : "禁用"}
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          ) : (
+            <Box padding={3} backgroundColor="default2" borderRadius={4}>
+              <p>暂无可用的支付通道</p>
+            </Box>
+          )}
         </Box>
       </Box>
     </AppLayout>
