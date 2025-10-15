@@ -112,6 +112,11 @@ export class TursoAPL implements APL {
         existing = await db.select().from(sites).where(eq(sites.id, extendedData.siteId)).limit(1);
       }
 
+      // 如果通过URL和siteId都找不到，但是有appId，尝试通过appId查找
+      if (existing.length === 0 && authData.appId) {
+        existing = await db.select().from(sites).where(eq(sites.appId, authData.appId)).limit(1);
+      }
+
       if (existing.length > 0) {
         // 更新现有记录，包括从URL中提取的domain
         let domainToUpdate = authData.domain;
