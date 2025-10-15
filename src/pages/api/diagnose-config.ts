@@ -1,16 +1,26 @@
 import { type NextApiRequest, type NextApiResponse } from "next";
 import { saleorApp } from "../../saleor-app";
 import { createLogger } from "../../lib/logger";
+import { env } from "../../lib/env.mjs";
 
 const logger = createLogger({ component: "DiagnoseConfigAPI" });
 
 /**
  * 诊断配置 API - 检查当前配置和认证状态
- * 注意：此API仅用于开发和调试目的，生产环境中应禁用或添加身份验证
+ * 注意：此API仅用于开发和调试目的，在生产环境中需要通过环境变量启用
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  // 检查是否启用了诊断接口（通过环境变量控制）
+  const diagnosticsEnabled = env.CI === "true";
+  if (!diagnosticsEnabled) {
+    return res.status(403).json({
+      error: "Forbidden",
+      message: "Diagnostics API is disabled. Only available in CI/test environment.",
+    });
   }
 
   try {
@@ -24,17 +34,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const allAuthData = await saleorApp.apl.getAll();
     const authDataCount = allAuthData.length;
     logger.info(`找到 ${authDataCount} 条认证数据`);
-
-    // 检查表结构（不返回敏感信息）
-    try {
-      const { tursoClient } = await import("../../lib/db/turso-client");
-      await tursoClient.execute("PRAGMA table_info(saleor_auth_data)");
-      logger.info("Auth table structure check completed");
-    } catch (error) {
-      logger.error(
-        "检查表结构时出错: " + (error instanceof Error ? error.message : "Unknown error"),
-      );
-    }
 
     return res.status(200).json({
       success: true,

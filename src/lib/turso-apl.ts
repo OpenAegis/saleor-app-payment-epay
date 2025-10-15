@@ -339,7 +339,7 @@ export class TursoAPL implements APL {
         "🔍 Token search result: " +
           result.length +
           " rows found for token: " +
-          token.substring(0, 10) +
+          (token ? "***" : "empty") +
           "...",
       );
 
@@ -356,7 +356,11 @@ export class TursoAPL implements APL {
         if (result.length > 0) {
           const site = result[0];
           logger.info(
-            "🔄 Updating token from " + site.token + " to " + token.substring(0, 10) + "...",
+            "🔄 Updating token from " +
+              (site.token ? "***" : "empty") +
+              " to " +
+              (token ? "***" : "empty") +
+              "...",
           );
 
           await db

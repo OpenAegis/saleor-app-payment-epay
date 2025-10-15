@@ -116,8 +116,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     logger.info("Register请求开始");
     logger.info("请求方法: " + req.method);
     logger.info("请求URL: " + req.url);
-    logger.info("请求头信息: " + JSON.stringify(req.headers));
-    logger.info("请求参数: " + JSON.stringify(req.body));
+    logger.info(
+      "请求头信息: " +
+        JSON.stringify({
+          "saleor-domain": req.headers["saleor-domain"],
+          "saleor-api-url": req.headers["saleor-api-url"] ? "***" : undefined,
+          "x-forwarded-for": req.headers["x-forwarded-for"],
+          "x-real-ip": req.headers["x-real-ip"],
+        }),
+    );
+    logger.info("请求参数: " + JSON.stringify(req.body ? { auth_token: "***" } : {}));
 
     if (!saleorApiUrl) {
       logger.error("saleorApiUrl不存在于请求头中");
@@ -131,7 +139,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 修正saleorApiUrl
     const correctedUrl = correctSaleorApiUrl(saleorApiUrl, saleorDomain as string | undefined);
-    logger.info("修正saleorApiUrl: " + saleorApiUrl + " -> " + correctedUrl);
+    logger.info(
+      "修正saleorApiUrl: " +
+        (saleorApiUrl ? "***" : "未提供") +
+        " -> " +
+        (correctedUrl ? "***" : "未提供"),
+    );
 
     // 尝试获取App ID（先尝试原始URL，如果失败再尝试修正后的URL）
     let appId = await getAppId(saleorApiUrl, authToken);
@@ -206,7 +219,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     logger.info(
       "准备保存authData: " +
-        JSON.stringify({ ...authData, token: "***", siteId: site?.id || "未关联" }),
+        JSON.stringify({
+          domain: saleorDomain,
+          saleorApiUrl: "***",
+          appId,
+          siteId: site?.id || "未关联",
+        }),
     );
 
     // 检查APL是否已配置
