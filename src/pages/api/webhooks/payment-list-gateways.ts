@@ -18,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             currencies: ["CNY"],
             config: [],
           },
-        ]
+        ],
       },
       // 可以添加其他需要的配置信息
       clientKey: "epay-client-key",
