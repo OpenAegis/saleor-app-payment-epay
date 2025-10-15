@@ -23,7 +23,7 @@ export default createManifestHandler({
       name: packageJson.name,
       tokenTargetUrl: `${apiBaseURL}/api/register`,
       appUrl: `${apiBaseURL}/config`,
-      permissions: ["HANDLE_PAYMENTS"],
+      permissions: ["HANDLE_PAYMENTS", "MANAGE_ORDERS", "MANAGE_CHECKOUTS"],
       id: "saleor.app.epay",
       version: packageJson.version,
       requiredSaleorVersion: ">=3.13",
@@ -43,7 +43,7 @@ export default createManifestHandler({
           name: "Payment Gateway Initialize",
           syncEvents: ["PAYMENT_GATEWAY_INITIALIZE_SESSION"],
           query:
-            "subscription { event { ... on PaymentGatewayInitializeSession { sourceObject { ... on Checkout { id } ... on Order { id } } } } }",
+            "subscription { event { ... on PaymentGatewayInitializeSession { id amount data } } }",
           targetUrl: `${apiBaseURL}/api/webhooks/payment-list-gateways`,
           isActive: true,
         },
@@ -51,7 +51,7 @@ export default createManifestHandler({
           name: "Transaction Initialize",
           syncEvents: ["TRANSACTION_INITIALIZE_SESSION"],
           query:
-            "subscription { event { ... on TransactionInitializeSession { action { amount, currency, actionType }, transaction { id, pspReference }, sourceObject { ... on Checkout { id, email, totalPrice { gross { amount, currency } } }, ... on Order { id, userEmail, total { gross { amount, currency } } } } } } }",
+            "subscription { event { ... on TransactionInitializeSession { action { amount, currency, actionType }, data, transaction { id } } } }",
           targetUrl: `${apiBaseURL}/api/webhooks/transaction-initialize`,
           isActive: true,
         },
@@ -59,7 +59,7 @@ export default createManifestHandler({
           name: "Transaction Process",
           syncEvents: ["TRANSACTION_PROCESS_SESSION"],
           query:
-            "subscription { event { ... on TransactionProcessSession { action { amount, currency, actionType }, transaction { id, pspReference }, sourceObject { ... on Checkout { id }, ... on Order { id } } } } }",
+            "subscription { event { ... on TransactionProcessSession { action { amount, currency, actionType }, data, transaction { id } } } }",
           targetUrl: `${apiBaseURL}/api/webhooks/transaction-process`,
           isActive: true,
         },

@@ -11,19 +11,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     logger.info("Payment gateway initialize event received");
 
-    // 返回支付网关信息
+    // 根据Saleor文档，PAYMENT_GATEWAY_INITIALIZE_SESSION webhook应该返回一个包含data字段的对象
+    // 这个data字段会被直接返回给storefront
     const response = {
       data: {
-        paymentMethodsResponse: {
-          id: "epay",
-          name: "彩虹易支付",
-          currencies: ["CNY"],
-          config: [],
-        },
+        // 返回支付方法列表，符合Saleor新API的要求
+        paymentMethods: [
+          {
+            id: "epay",
+            name: "彩虹易支付",
+            currencies: ["CNY"],
+            config: [],
+          },
+        ],
+        // 可以添加其他需要的配置信息
         clientKey: "epay-client-key",
         environment: "LIVE",
       },
-      errors: [],
     };
 
     logger.info("Sending payment gateway response");
@@ -36,11 +40,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
     return res.status(500).json({
       data: {
-        paymentMethodsResponse: null,
+        paymentMethods: [],
         clientKey: null,
         environment: null,
       },
-      errors: [{ message: "Internal server error" }],
     });
   }
 }
