@@ -9,6 +9,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   logger.info("List payment gateways webhook called");
 
   if (req.method !== "POST") {
+    logger.warn("Method not allowed: %s", req.method || "undefined");
     return res.status(405).json({ error: "Method not allowed" });
   }
 
@@ -20,8 +21,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       logger.info(`Found ${enabledChannels.length} enabled channels`);
     } catch (dbError) {
       logger.error(
-        "Database connection error: " +
-          (dbError instanceof Error ? dbError.message : "Unknown error"),
+        "Database connection error: %s",
+        dbError instanceof Error ? dbError.message : "Unknown error",
       );
       // 即使数据库连接失败，也返回空的支付方法列表而不是500错误
       enabledChannels = [];
@@ -40,12 +41,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 每个支付网关对象应该包含id, name, currencies, config字段
     const response = paymentGateways;
 
+    logger.info("Returning payment gateways: %s", JSON.stringify(response));
+
     logger.info(`Successfully returning ${paymentGateways.length} payment gateways`);
     return res.status(200).json(response);
   } catch (error) {
     logger.error(
-      "Unexpected error in list payment gateways webhook: " +
-        (error instanceof Error ? error.message : "Unknown error"),
+      "Unexpected error in list payment gateways webhook: %s",
+      error instanceof Error ? error.message : "Unknown error",
     );
     // 即使出现未预期的错误，也返回空的支付方法列表而不是500错误
     return res.status(200).json([]);
