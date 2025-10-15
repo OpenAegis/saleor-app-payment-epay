@@ -2,6 +2,7 @@ import { type NextApiRequest, type NextApiResponse } from "next";
 import { channelManager } from "../../../lib/managers/channel-manager";
 import { type Channel } from "../../../lib/db/schema";
 import { createLogger } from "../../../lib/logger";
+import { env } from "../../../lib/env.mjs";
 
 const logger = createLogger({ component: "ListPaymentGatewaysWebhook" });
 
@@ -30,12 +31,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 将数据库中的支付通道转换为Saleor期望的格式
     // 每个通道都作为一个独立的支付方法返回
-    const paymentGateways = enabledChannels.map((channel: Channel) => ({
-      id: channel.id, // 使用通道ID作为支付方法ID
-      name: channel.name, // 使用通道名称作为支付方法名称
-      currencies: ["CNY"], // 默认使用CNY货币
-      config: [], // Saleor应用不直接暴露配置信息
-    }));
+    const paymentGateways = enabledChannels.map((channel: Channel) => {
+      // 构建图标URL配置
+      const config = [];
+      if (channel.icon) {
+        const iconValue = channel.icon.toString();
+        config.push({
+          field: "iconUrl",
+          value: iconValue.startsWith("http") ? iconValue : `${env.APP_URL}${iconValue}`,
+        });
+      }
+
+      return {
+        id: channel.id, // 使用通道ID作为支付方法ID
+        name: channel.name, // 使用通道名称作为支付方法名称
+        currencies: ["CNY"], // 默认使用CNY货币
+        config: config, // 包含图标URL的配置信息
+      };
+    });
 
     // 根据Saleor规范，PAYMENT_LIST_GATEWAYS webhook应该直接返回支付网关列表
     // 每个支付网关对象应该包含id, name, currencies, config字段
