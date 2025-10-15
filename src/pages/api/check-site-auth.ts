@@ -67,6 +67,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     // 提取token
     const tokenFromJWT = extractTokenFromAuthorizationHeader(authHeader);
+    logger.info(`Extracted token: ${tokenFromJWT ? "[REDACTED]" : "null"}`);
     if (!tokenFromJWT) {
       return res.status(401).json({ error: "Invalid authorization header format" });
     }
@@ -78,6 +79,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       if (parts.length === 3) {
         const payload = JSON.parse(Buffer.from(parts[1], "base64").toString()) as JWTPayload;
         appIdFromJWT = payload?.app;
+        logger.info(`Extracted app ID from JWT: ${appIdFromJWT}`);
       }
     } catch (error) {
       logger.warn(
@@ -87,15 +89,19 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     // 获取认证数据
     const tursoAPL = saleorApp.apl as TursoAPL;
+    logger.info(`Searching for auth data with token: [REDACTED] and app ID: ${appIdFromJWT}`);
     const authData = await tursoAPL.getByToken(tokenFromJWT, appIdFromJWT);
 
     if (!authData) {
+      logger.warn(`No auth data found for token: [REDACTED] or app ID: ${appIdFromJWT}`);
       return res.status(404).json({
         error: "No authentication data found",
         isAuthorized: false,
         status: "not_found",
       });
     }
+
+    logger.info(`Found auth data for domain: ${authData.domain}`);
 
     // 获取站点信息
     const domain = saleorDomain || authData.domain;
