@@ -1,5 +1,4 @@
 import { type NextApiRequest, type NextApiResponse } from "next";
-import { type AuthData } from "@saleor/app-sdk/APL";
 import { saleorApp } from "../../saleor-app";
 import { createLogger } from "../../lib/logger";
 import { siteManager } from "../../lib/managers/site-manager";
@@ -24,7 +23,7 @@ function correctSaleorApiUrl(saleorApiUrl: string, _saleorDomain: string | undef
         ", 错误: " +
         (error instanceof Error ? error.message : "未知错误"),
     );
-    
+
     // 如果URL格式错误，使用占位符URL
     const placeholderUrl = "https://your-saleor-instance.com/graphql/";
     logger.info("URL格式错误，使用占位符URL: " + placeholderUrl);
@@ -165,19 +164,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         domain: saleorDomain as string,
         name: "", // 默认站点名称为空，让用户在config页面自定义
         saleorApiUrl: saleorApiUrl,
-        clientIP: req.headers['x-forwarded-for'] as string || req.headers['x-real-ip'] as string || null,
+        clientIP:
+          (req.headers["x-forwarded-for"] as string) ||
+          (req.headers["x-real-ip"] as string) ||
+          null,
         appId,
       });
       logger.info(`站点注册成功: ${site.id}`);
     } catch (siteError) {
-      // 如果站点已存在，获取现有站点
-      if (siteError instanceof Error && siteError.message.includes('已经注册过了')) {
+      // 如果站点已存在，获取现有站点并更新appId
+      if (siteError instanceof Error && siteError.message.includes("已经注册过了")) {
         site = await siteManager.getByDomain(saleorDomain as string);
         if (site) {
           logger.info(`使用现有站点: ${site.id}`);
+          // 更新现有站点的appId
+          const updatedSite = await siteManager.update(site.id, { appId });
+          if (updatedSite) {
+            site = updatedSite;
+            logger.info(`更新现有站点的appId: ${site.id}`);
+          }
         }
       } else {
-        logger.warn("站点注册失败，但继续安装流程: " + (siteError instanceof Error ? siteError.message : "未知错误"));
+        logger.warn(
+          "站点注册失败，但继续安装流程: " +
+            (siteError instanceof Error ? siteError.message : "未知错误"),
+        );
         // 不中断安装流程，继续创建认证数据
         site = null;
       }
@@ -193,7 +204,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       siteId: site?.id, // 如果站点注册成功则关联站点ID
     };
 
-    logger.info("准备保存authData: " + JSON.stringify({ ...authData, token: "***", siteId: site?.id || "未关联" }));
+    logger.info(
+      "准备保存authData: " +
+        JSON.stringify({ ...authData, token: "***", siteId: site?.id || "未关联" }),
+    );
 
     // 检查APL是否已配置
     try {
