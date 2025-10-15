@@ -10,14 +10,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const response = {
     data: {
       // 返回支付方法列表，符合Saleor新API的要求
-      paymentMethods: [
-        {
-          id: "epay",
-          name: "彩虹易支付",
-          currencies: ["CNY"],
-          config: [],
-        },
-      ],
+      paymentMethodsResponse: {
+        paymentMethods: [
+          {
+            id: "epay",
+            name: "彩虹易支付",
+            currencies: ["CNY"],
+            config: [],
+          },
+        ]
+      },
       // 可以添加其他需要的配置信息
       clientKey: "epay-client-key",
       environment: "LIVE",
