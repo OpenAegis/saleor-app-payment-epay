@@ -125,19 +125,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 验证必要参数
     if (!saleorApiUrl || !authToken) {
       logger.warn("缺少必要的Saleor API信息");
-      return res.status(400).json({
-        result: "CHARGE_FAILURE",
-        message: "缺少必要的Saleor API信息",
-      });
+      return res.status(200).json({
+      result: "CHARGE_FAILURE",
+      message: "缺少必要的Saleor API信息",
+    });
     }
 
     // 检查站点授权
     const isSiteAuthorized = await checkSiteAuthorization(saleorApiUrl);
     if (!isSiteAuthorized) {
-      return res.status(403).json({
-        result: "CHARGE_FAILURE",
-        message: "站点未授权使用支付功能",
-      });
+      return res.status(200).json({
+      result: "CHARGE_FAILURE",
+      message: "站点未授权使用支付功能",
+    });
     }
 
     // 获取支付配置
@@ -166,23 +166,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (result.status === 1 && result.trade_status === "TRADE_SUCCESS") {
       return res.status(200).json({
         result: "CHARGE_SUCCESS",
-        amount: action.amount,
+        amount: parseFloat(action.amount),
+        pspReference: result.trade_no || result.out_trade_no,
         data: {
-          epayTradeNo: result.trade_no,
-          epayOrderNo: result.out_trade_no,
+          paymentDetailsResponse: {
+            epayTradeNo: result.trade_no,
+            epayOrderNo: result.out_trade_no,
+          },
         },
       });
     }
 
     if (result.status === 0 || result.trade_status === "TRADE_CLOSED") {
       return res.status(200).json({
-        result: "CHARGE_FAILURE",
-        message: result.msg || "支付失败或已关闭",
-      });
+      result: "CHARGE_FAILURE",
+      amount: parseFloat(action.amount),
+      message: result.msg || "支付失败或已关闭",
+    });
     }
 
     return res.status(200).json({
-      result: "CHARGE_PENDING",
+      result: "CHARGE_REQUEST",
+      amount: parseFloat(action.amount),
       message: result.msg || "支付处理中",
     });
   } catch (error) {
