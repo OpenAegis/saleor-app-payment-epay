@@ -117,6 +117,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { event } = req.body as { event: TransactionProcessEvent };
     const parsedData = parseEventData(event.data);
     const { action, transaction } = event;
+    const amountValue = parseFloat(action.amount) || 0;
 
     // 获取Saleor API信息
     const saleorApiUrl = req.headers["saleor-api-url"] as string;
@@ -127,6 +128,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       logger.warn("缺少必要的Saleor API信息");
       return res.status(200).json({
       result: "CHARGE_FAILURE",
+      amount: amountValue,
       message: "缺少必要的Saleor API信息",
     });
     }
@@ -136,6 +138,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!isSiteAuthorized) {
       return res.status(200).json({
       result: "CHARGE_FAILURE",
+      amount: amountValue,
       message: "站点未授权使用支付功能",
     });
     }
@@ -145,6 +148,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!epayConfig) {
       return res.status(200).json({
         result: "CHARGE_FAILURE",
+        amount: amountValue,
         message: "支付配置未找到，请在后台配置支付参数",
       });
     }
@@ -166,7 +170,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (result.status === 1 && result.trade_status === "TRADE_SUCCESS") {
       return res.status(200).json({
         result: "CHARGE_SUCCESS",
-        amount: parseFloat(action.amount),
+        amount: amountValue,
         pspReference: result.trade_no || result.out_trade_no,
         data: {
           paymentDetailsResponse: {
@@ -180,14 +184,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (result.status === 0 || result.trade_status === "TRADE_CLOSED") {
       return res.status(200).json({
       result: "CHARGE_FAILURE",
-      amount: parseFloat(action.amount),
+      amount: amountValue,
       message: result.msg || "支付失败或已关闭",
     });
     }
 
     return res.status(200).json({
       result: "CHARGE_REQUEST",
-      amount: parseFloat(action.amount),
+      amount: amountValue,
       message: result.msg || "支付处理中",
     });
   } catch (error) {
@@ -201,6 +205,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const message = error instanceof Error ? error.message : "未知错误";
     return res.status(200).json({
       result: "CHARGE_FAILURE",
+      amount: amountValue,
       message,
     });
   }

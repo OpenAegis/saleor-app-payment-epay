@@ -143,6 +143,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
     const { event } = req.body as { event: TransactionEvent };
     const { action, transaction, sourceObject, data } = event;
+    const amountValue = parseFloat(action.amount) || 0;
 
     // 获取Saleor API信息
     const saleorApiUrl = req.headers["saleor-api-url"] as string;
@@ -153,6 +154,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       logger.warn("缺少必要的Saleor API信息");
       return res.status(200).json({
       result: "CHARGE_FAILURE",
+      amount: amountValue,
       message: "缺少必要的Saleor API信息",
     });
     }
@@ -162,6 +164,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!isSiteAuthorized) {
       return res.status(200).json({
       result: "CHARGE_FAILURE",
+      amount: amountValue,
       message: "站点未授权使用支付功能",
     });
     }
@@ -176,6 +179,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!epayConfig) {
       return res.status(200).json({
         result: "CHARGE_FAILURE",
+        amount: amountValue,
         message: "支付配置未找到，请在后台配置支付参数",
       });
     }
@@ -204,7 +208,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 创建彩虹易支付订单
     const result = await epayClient.createOrder({
-      amount: parseFloat(action.amount),
+      amount: amountValue,
       orderNo,
       notifyUrl: `${env.APP_URL}/api/webhooks/epay-notify`,
       returnUrl: returnUrl || `${env.APP_URL}/checkout/success`, // 使用配置的返回地址或默认地址
@@ -217,7 +221,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // 返回支付链接或二维码
       return res.status(200).json({
         result: "CHARGE_ACTION_REQUIRED",
-        amount: parseFloat(action.amount),
+        amount: amountValue,
         externalUrl: result.payUrl || undefined,
         data: {
           paymentResponse: {
@@ -233,7 +237,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({
       result: "CHARGE_FAILURE",
-      amount: parseFloat(action.amount),
+      amount: amountValue,
       message: result.msg || "创建支付订单失败",
     });
   } catch (error) {
@@ -247,6 +251,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const message = error instanceof Error ? error.message : "未知错误";
     return res.status(200).json({
       result: "CHARGE_FAILURE",
+      amount: amountValue,
       message,
     });
   }
