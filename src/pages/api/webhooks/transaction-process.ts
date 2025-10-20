@@ -18,7 +18,28 @@ interface TransactionProcessEvent {
     id: string;
   };
   // Carry-over data from initialize step. We expect provider reference here.
-  data?: Record<string, any>;
+  data?: unknown;
+}
+
+function parseEventData(raw: unknown): Record<string, any> {
+  if (!raw) {
+    return {};
+  }
+
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw) as Record<string, any>;
+    } catch (err) {
+      logger.warn({ raw }, "Failed to parse transaction event data as JSON string");
+      return {};
+    }
+  }
+
+  if (typeof raw === "object") {
+    return raw as Record<string, any>;
+  }
+
+  return {};
 }
 
 // 获取支付配置的函数
@@ -94,7 +115,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       userAgent: req.headers["user-agent"],
     }, "Process webhook called");
     const { event } = req.body as { event: TransactionProcessEvent };
-    const { action, transaction, data } = event;
+    const parsedData = parseEventData(event.data);
+    const { action, transaction } = event;
 
     // 获取Saleor API信息
     const saleorApiUrl = req.headers["saleor-api-url"] as string;
@@ -129,11 +151,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const epayClient = createEpayClient(epayConfig);
 
-    // Prefer provider order id from initialize data; fallback to transaction.id
-    const providerRef = (data && (data["epayOrderNo"] || data["pspReference"] || data["externalId"])) || transaction.id;
+    const epayOrderNo = parsedData["epayOrderNo"] || parsedData["pspReference"] || parsedData["externalId"];
+    const saleorOrderNo = parsedData["saleorOrderNo"];
 
-    // 查询时按 trade_no 查询；如你使用 out_trade_no，可将 useOutTradeNo 设为 true
-    const result = await epayClient.queryOrder(providerRef, false);
+    let result = await epayClient.queryOrder(epayOrderNo || transaction.id, !epayOrderNo);
+
+    if (!(result.status === 1 && result.trade_status === "TRADE_SUCCESS") && saleorOrderNo) {
+      const fallback = await epayClient.queryOrder(saleorOrderNo, true);
+      if (fallback.status !== undefined) {
+        result = fallback;
+      }
+    }
 
     if (result.status === 1 && result.trade_status === "TRADE_SUCCESS") {
       return res.status(200).json({
@@ -141,19 +169,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         amount: action.amount,
         data: {
           epayTradeNo: result.trade_no,
+          epayOrderNo: result.out_trade_no,
         },
       });
-    } else if (result.status === 0 || result.trade_status === "TRADE_CLOSED") {
+    }
+
+    if (result.status === 0 || result.trade_status === "TRADE_CLOSED") {
       return res.status(200).json({
         result: "CHARGE_FAILURE",
-        message: "支付失败或已关闭",
-      });
-    } else {
-      return res.status(200).json({
-        result: "CHARGE_PENDING",
-        message: "支付处理中",
+        message: result.msg || "支付失败或已关闭",
       });
     }
+
+    return res.status(200).json({
+      result: "CHARGE_PENDING",
+      message: result.msg || "支付处理中",
+    });
   } catch (error) {
     logger.error(
       {
