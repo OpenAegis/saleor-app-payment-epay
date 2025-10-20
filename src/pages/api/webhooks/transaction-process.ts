@@ -17,6 +17,8 @@ interface TransactionProcessEvent {
   transaction: {
     id: string;
   };
+  // Carry-over data from initialize step. We expect provider reference here.
+  data?: Record<string, any>;
 }
 
 // 获取支付配置的函数
@@ -86,7 +88,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const { event } = req.body as { event: TransactionProcessEvent };
-    const { action, transaction } = event;
+    const { action, transaction, data } = event;
 
     // 获取Saleor API信息
     const saleorApiUrl = req.headers["saleor-api-url"] as string;
@@ -121,8 +123,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const epayClient = createEpayClient(epayConfig);
 
-    // 查询订单状态
-    const result = await epayClient.queryOrder(transaction.id);
+    // Prefer provider order id from initialize data; fallback to transaction.id
+    const providerRef = (data && (data["epayOrderNo"] || data["pspReference"] || data["externalId"])) || transaction.id;
+
+    const result = await epayClient.queryOrder(providerRef);
 
     if (result.status === 1 && result.trade_status === "TRADE_SUCCESS") {
       return res.status(200).json({
