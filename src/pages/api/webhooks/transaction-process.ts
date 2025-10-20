@@ -87,6 +87,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    logger.info({
+      path: "/api/webhooks/transaction-process",
+      method: req.method,
+      saleorApiUrl: req.headers["saleor-api-url"],
+      userAgent: req.headers["user-agent"],
+    }, "Process webhook called");
     const { event } = req.body as { event: TransactionProcessEvent };
     const { action, transaction, data } = event;
 
