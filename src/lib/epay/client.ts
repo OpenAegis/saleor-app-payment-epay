@@ -126,9 +126,10 @@ export class EpayClient {
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
         return {
           code: 0,
-          msg: `HTTP Error: ${response.status}`,
+          msg: `HTTP Error: ${response.status} - ${errorText}`,
         };
       }
 
@@ -143,9 +144,13 @@ export class EpayClient {
         type: result.type,
       };
     } catch (error) {
+      // 记录详细的错误信息
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      // const errorStack = error instanceof Error ? error.stack : undefined;
+
       return {
         code: 0,
-        msg: error instanceof Error ? error.message : "Unknown error",
+        msg: `创建订单失败: ${errorMessage}`,
       };
     }
   }
@@ -198,9 +203,10 @@ export class EpayClient {
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
         return {
           status: 0,
-          msg: `HTTP Error: ${response.status}`,
+          msg: `HTTP Error: ${response.status} - ${errorText}`,
         };
       }
 
@@ -216,9 +222,13 @@ export class EpayClient {
         type: result.type,
       };
     } catch (error) {
+      // 记录详细的错误信息
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      // const errorStack = error instanceof Error ? error.stack : undefined;
+
       return {
         status: 0,
-        msg: error instanceof Error ? error.message : "Unknown error",
+        msg: `查询订单失败: ${errorMessage}`,
       };
     }
   }
@@ -241,12 +251,24 @@ export class EpayClient {
       const response = await fetch(`${this.config.apiUrl}/api.php?${params.toString()}`);
 
       if (!response.ok) {
-        throw new Error(`HTTP Error: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`HTTP Error: ${response.status} - ${errorText}`);
       }
 
-      return (await response.json()) as MerchantInfoResponse;
+      const result = await response.json();
+
+      // 验证响应数据
+      if (!result || typeof result !== "object") {
+        throw new Error("无效的响应数据格式");
+      }
+
+      return result as MerchantInfoResponse;
     } catch (error) {
-      throw error;
+      // 记录详细的错误信息
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      // const errorStack = error instanceof Error ? error.stack : undefined;
+
+      throw new Error(`查询商户信息失败: ${errorMessage}`);
     }
   }
 }

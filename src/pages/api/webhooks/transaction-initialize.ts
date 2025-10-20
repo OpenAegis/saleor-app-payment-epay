@@ -132,12 +132,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    logger.info({
-      path: "/api/webhooks/transaction-initialize",
-      method: req.method,
-      saleorApiUrl: req.headers["saleor-api-url"],
-      userAgent: req.headers["user-agent"],
-    }, "Initialize webhook called");
+    logger.info(
+      {
+        path: "/api/webhooks/transaction-initialize",
+        method: req.method,
+        saleorApiUrl: req.headers["saleor-api-url"],
+        userAgent: req.headers["user-agent"],
+      },
+      "Initialize webhook called",
+    );
     const { event } = req.body as { event: TransactionEvent };
     const { action, transaction, sourceObject, data } = event;
 
@@ -180,8 +183,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const epayClient = createEpayClient(epayConfig);
 
     // 根据前端传入的支付类型或默认值
-    // 支持任何自定义的支付方式
+    // 支持更多标准支付方式
+    const supportedPayTypes = ["alipay", "wxpay", "qqpay", "bank", "jdpay"];
     const payType = data?.payType || action?.paymentMethodType || "alipay";
+
+    // 如果传入的支付方式不在标准列表中，但仍需要支持（插件扩展的支付方式）
+    // 保持原样，因为项目要求支持自定义支付方式
+    // 这里仅记录日志，不阻止使用自定义支付方式
+    if (!supportedPayTypes.includes(payType)) {
+      logger.info(`使用自定义支付方式: ${payType ? payType : "unknown"}`);
+    }
 
     // 创建订单号（包含交易ID以便回调时识别）
     const orderNo = `ORDER-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${
