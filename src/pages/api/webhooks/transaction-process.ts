@@ -126,7 +126,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Prefer provider order id from initialize data; fallback to transaction.id
     const providerRef = (data && (data["epayOrderNo"] || data["pspReference"] || data["externalId"])) || transaction.id;
 
-    const result = await epayClient.queryOrder(providerRef);
+    // 查询时按 trade_no 查询；如你使用 out_trade_no，可将 useOutTradeNo 设为 true
+    const result = await epayClient.queryOrder(providerRef, false);
 
     if (result.status === 1 && result.trade_status === "TRADE_SUCCESS") {
       return res.status(200).json({

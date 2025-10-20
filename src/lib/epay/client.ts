@@ -120,6 +120,7 @@ export class EpayClient {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
         },
         body: new URLSearchParams(requestData).toString(),
       });
@@ -172,11 +173,17 @@ export class EpayClient {
   }
 
   // 查询订单状态
-  async queryOrder(tradeNo: string): Promise<EpayQueryResult> {
-    const requestData = {
+  async queryOrder(tradeNoOrOutTradeNo: string, useOutTradeNo = false): Promise<EpayQueryResult> {
+    // 参考 v2 demo：查询接口需要 act=order，并支持 trade_no 或 out_trade_no
+    const requestData: Record<string, string> = {
       pid: this.config.pid,
-      trade_no: tradeNo,
+      act: "order",
     };
+    if (useOutTradeNo) {
+      requestData.out_trade_no = tradeNoOrOutTradeNo;
+    } else {
+      requestData.trade_no = tradeNoOrOutTradeNo;
+    }
 
     const sign = this.generateSign(requestData);
     const params = new URLSearchParams({
@@ -186,7 +193,9 @@ export class EpayClient {
     });
 
     try {
-      const response = await fetch(`${this.config.apiUrl}/api.php?${params.toString()}`);
+      const response = await fetch(`${this.config.apiUrl}/api.php?${params.toString()}`, {
+        headers: { Accept: "application/json" },
+      });
 
       if (!response.ok) {
         return {
