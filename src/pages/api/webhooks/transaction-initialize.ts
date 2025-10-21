@@ -146,7 +146,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 验证请求体结构
     if (!req.body) {
-      logger.error("Request body is empty");
+      logger.error({ requestBody: req.body }, "Request body is empty");
       return res.status(400).json({
         result: "CHARGE_FAILURE",
         amount: 0,
@@ -165,7 +165,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // 直接格式: TransactionEvent
       event = body as TransactionEvent;
     } else {
-      logger.error("Invalid request body structure", { body });
+      logger.error({ body }, "Invalid request body structure");
       return res.status(400).json({
         result: "CHARGE_FAILURE",
         amount: 0,
@@ -175,7 +175,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 验证 event 结构
     if (!event.action || !event.transaction) {
-      logger.error("Missing required event properties", { event });
+      logger.error({ event }, "Missing required event properties");
       return res.status(400).json({
         result: "CHARGE_FAILURE",
         amount: 0,
