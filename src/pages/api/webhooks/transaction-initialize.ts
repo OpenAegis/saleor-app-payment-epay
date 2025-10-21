@@ -199,9 +199,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const saleorApiUrl = req.headers["saleor-api-url"] as string;
     const authToken = req.headers["authorization"]?.replace("Bearer ", "");
 
+    // 记录详细的请求头信息用于调试
+    logger.info({
+      saleorApiUrl,
+      hasAuthToken: !!authToken,
+      authTokenLength: authToken?.length || 0,
+      allHeaders: Object.keys(req.headers),
+      authorization: req.headers["authorization"] ? "present" : "missing"
+    }, "Checking Saleor API credentials");
+
     // 验证必要参数
     if (!saleorApiUrl || !authToken) {
-      logger.warn("缺少必要的Saleor API信息");
+      logger.warn({
+        saleorApiUrl: saleorApiUrl || "missing",
+        hasAuthToken: !!authToken,
+        authTokenLength: authToken?.length || 0
+      }, "缺少必要的Saleor API信息");
       return res.status(200).json({
       result: "CHARGE_FAILURE",
       amount: amountValue,
