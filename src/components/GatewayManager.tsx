@@ -6,6 +6,7 @@ export function GatewayManager() {
   const [gateways, setGateways] = useState<Gateway[]>([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [editingGateway, setEditingGateway] = useState<Gateway | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -36,31 +37,86 @@ export function GatewayManager() {
     setLoading(true);
 
     try {
+      if (editingGateway) {
+        // 编辑现有渠道
+        const res = await fetch("/api/admin/gateways", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: editingGateway.id, ...formData }),
+        });
+
+        if (res.ok) {
+          resetForm();
+          await fetchGateways();
+        }
+      } else {
+        // 创建新渠道
+        const res = await fetch("/api/admin/gateways", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formData),
+        });
+
+        if (res.ok) {
+          resetForm();
+          await fetchGateways();
+        }
+      }
+    } catch (error) {
+      console.error("Failed to save gateway:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      description: "",
+      epayUrl: "",
+      epayPid: "",
+      epayKey: "",
+      apiVersion: "v1" as "v1" | "v2",
+      signType: "MD5" as "MD5" | "RSA",
+      icon: "",
+      priority: 0,
+    });
+    setShowForm(false);
+    setEditingGateway(null);
+  };
+
+  const handleEdit = (gateway: Gateway) => {
+    setEditingGateway(gateway);
+    setFormData({
+      name: gateway.name,
+      description: gateway.description || "",
+      epayUrl: gateway.epayUrl,
+      epayPid: gateway.epayPid,
+      epayKey: gateway.epayKey,
+      apiVersion: (gateway.apiVersion as "v1" | "v2") || "v1",
+      signType: (gateway.signType as "MD5" | "RSA") || "MD5",
+      icon: gateway.icon || "",
+      priority: gateway.priority,
+    });
+    setShowForm(true);
+  };
+
+  const handleToggleEnabled = async (gateway: Gateway) => {
+    try {
       const res = await fetch("/api/admin/gateways", {
-        method: "POST",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ 
+          id: gateway.id, 
+          enabled: !gateway.enabled 
+        }),
       });
 
       if (res.ok) {
-        setFormData({
-          name: "",
-          description: "",
-          epayUrl: "",
-          epayPid: "",
-          epayKey: "",
-          apiVersion: "v1" as "v1" | "v2",
-          signType: "MD5" as "MD5" | "RSA",
-          icon: "",
-          priority: 0,
-        });
-        setShowForm(false);
         await fetchGateways();
       }
     } catch (error) {
-      console.error("Failed to create gateway:", error);
-    } finally {
-      setLoading(false);
+      console.error("Failed to toggle gateway:", error);
     }
   };
 
@@ -128,7 +184,7 @@ export function GatewayManager() {
           borderRadius={4}
           backgroundColor="default2"
         >
-          <Text size={5}>添加新渠道</Text>
+          <Text size={5}>{editingGateway ? "编辑渠道" : "添加新渠道"}</Text>
           
           <Box display="grid" __gridTemplateColumns="1fr 1fr" gap={3}>
             <Box>
@@ -263,9 +319,9 @@ export function GatewayManager() {
 
           <Box display="flex" gap={2}>
             <Button type="submit" disabled={loading}>
-              {loading ? "创建中..." : "创建渠道"}
+              {loading ? (editingGateway ? "保存中..." : "创建中...") : (editingGateway ? "保存渠道" : "创建渠道")}
             </Button>
-            <Button type="button" onClick={() => setShowForm(false)}>
+            <Button type="button" onClick={resetForm}>
               取消
             </Button>
           </Box>
@@ -337,8 +393,16 @@ export function GatewayManager() {
                 <Button
                   variant={gateway.enabled ? "primary" : "secondary"}
                   size="small"
+                  onClick={() => handleToggleEnabled(gateway)}
                 >
                   {gateway.enabled ? "已启用" : "已禁用"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => handleEdit(gateway)}
+                >
+                  编辑
                 </Button>
                 <Button
                   variant="tertiary"

@@ -8,6 +8,7 @@ export function ChannelManager() {
   const [gateways, setGateways] = useState<Gateway[]>([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -56,30 +57,88 @@ export function ChannelManager() {
         priority: formData.priority,
       };
 
+      if (editingChannel) {
+        // 编辑现有通道
+        const res = await fetch("/api/admin/channels", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: editingChannel.id, ...submitData }),
+        });
+
+        if (res.ok) {
+          resetForm();
+          await fetchChannels();
+        }
+      } else {
+        // 创建新通道
+        const res = await fetch("/api/admin/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(submitData),
+        });
+
+        if (res.ok) {
+          resetForm();
+          await fetchChannels();
+        }
+      }
+    } catch (error) {
+      console.error("Failed to save channel:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      description: "",
+      gatewayId: "",
+      type: "alipay",
+      customType: "",
+      useCustomType: false,
+      icon: "",
+      priority: 0,
+    });
+    setShowForm(false);
+    setEditingChannel(null);
+  };
+
+  const handleEdit = (channel: Channel) => {
+    setEditingChannel(channel);
+    
+    // 检查是否是自定义类型
+    const isCustomType = !["alipay", "wxpay", "qqpay", "bank", "jdpay", "paypal"].includes(channel.type);
+    
+    setFormData({
+      name: channel.name,
+      description: channel.description || "",
+      gatewayId: channel.gatewayId,
+      type: isCustomType ? "alipay" : channel.type,
+      customType: isCustomType ? channel.type : "",
+      useCustomType: isCustomType,
+      icon: channel.icon || "",
+      priority: channel.priority,
+    });
+    setShowForm(true);
+  };
+
+  const handleToggleEnabled = async (channel: Channel) => {
+    try {
       const res = await fetch("/api/admin/channels", {
-        method: "POST",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(submitData),
+        body: JSON.stringify({ 
+          id: channel.id, 
+          enabled: !channel.enabled 
+        }),
       });
 
       if (res.ok) {
-        setFormData({
-          name: "",
-          description: "",
-          gatewayId: "",
-          type: "alipay",
-          customType: "",
-          useCustomType: false,
-          icon: "",
-          priority: 0,
-        });
-        setShowForm(false);
         await fetchChannels();
       }
     } catch (error) {
-      console.error("Failed to create channel:", error);
-    } finally {
-      setLoading(false);
+      console.error("Failed to toggle channel:", error);
     }
   };
 
@@ -147,7 +206,7 @@ export function ChannelManager() {
           borderRadius={4}
           backgroundColor="default2"
         >
-          <Text size={5}>添加新通道</Text>
+          <Text size={5}>{editingChannel ? "编辑通道" : "添加新通道"}</Text>
           
           <Box display="grid" __gridTemplateColumns="1fr 1fr" gap={3}>
             <Box>
@@ -265,9 +324,9 @@ export function ChannelManager() {
 
           <Box display="flex" gap={2}>
             <Button type="submit" disabled={loading}>
-              {loading ? "创建中..." : "创建通道"}
+              {loading ? (editingChannel ? "保存中..." : "创建中...") : (editingChannel ? "保存通道" : "创建通道")}
             </Button>
-            <Button type="button" onClick={() => setShowForm(false)}>
+            <Button type="button" onClick={resetForm}>
               取消
             </Button>
           </Box>
@@ -325,14 +384,23 @@ export function ChannelManager() {
               <Box display="flex" gap={2}>
                 <Button
                   type="button"
-                  size="medium"
-                  variant={channel.enabled ? "secondary" : "tertiary"}
+                  size="small"
+                  variant={channel.enabled ? "primary" : "secondary"}
+                  onClick={() => handleToggleEnabled(channel)}
                 >
                   {channel.enabled ? "已启用" : "已禁用"}
                 </Button>
                 <Button
                   type="button"
-                  size="medium"
+                  size="small"
+                  variant="secondary"
+                  onClick={() => handleEdit(channel)}
+                >
+                  编辑
+                </Button>
+                <Button
+                  type="button"
+                  size="small"
                   variant="tertiary"
                   onClick={() => handleDelete(channel.id)}
                 >
