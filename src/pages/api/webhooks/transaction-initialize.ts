@@ -3,7 +3,8 @@ import { createEpayClient, type EpayConfig } from "@/lib/epay/client";
 import { env } from "@/lib/env.mjs";
 import { siteManager } from "@/lib/managers/site-manager";
 import { gatewayManager } from "@/lib/managers/gateway-manager";
-import { type Gateway } from "@/lib/db/schema";
+import { channelManager } from "@/lib/managers/channel-manager";
+import { type Gateway, type Channel } from "@/lib/db/schema";
 import { createLogger } from "@/lib/logger";
 
 const logger = createLogger({ component: "TransactionInitializeWebhook" });
@@ -34,73 +35,101 @@ interface TransactionEvent {
 
 // 获取支付配置的函数
 async function getEpayConfig(
-  gatewayId?: string,
+  channelIdFromRequest?: string,
 ): Promise<{ config: EpayConfig | null; returnUrl: string | null }> {
   try {
     logger.info({
-      gatewayId: gatewayId || "none"
+      channelIdFromRequest: channelIdFromRequest || "none"
     }, "开始从本地数据库获取支付配置");
 
-    // 如果指定了网关ID，直接查找
-    if (gatewayId) {
-      // 从 gatewayId 中提取真实的 ID
-      // gatewayId 格式: "app:saleor.app.epay:qoc0ue4mzu8u4jfdflp3jn"
-      // 我们需要最后一部分: "qoc0ue4mzu8u4jfdflp3jn"
-      const realGatewayId = gatewayId.split(':').pop();
+    // 如果指定了通道ID，需要通过两步查找：channels -> gateways
+    if (channelIdFromRequest) {
+      // 从请求的 gatewayId 中提取通道 ID
+      // 格式: "app:saleor.app.epay:qoc0ue4mzu8u4jfdflp3jn"
+      // 最后一部分是通道ID: "qoc0ue4mzu8u4jfdflp3jn"
+      const channelId = channelIdFromRequest.split(':').pop();
       
       logger.info({
-        originalGatewayId: gatewayId,
-        extractedGatewayId: realGatewayId
-      }, "提取网关ID");
+        originalChannelId: channelIdFromRequest,
+        extractedChannelId: channelId
+      }, "提取通道ID");
       
-      if (realGatewayId) {
-        const gateway = await gatewayManager.get(realGatewayId);
+      if (channelId) {
+        // 第一步：从 channels 表查找对应的 gatewayId
+        const channel = await channelManager.get(channelId);
         
-        if (gateway && gateway.enabled) {
-          logger.info({
-            gatewayId: gateway.id,
-            gatewayName: gateway.name,
-            hasPid: !!gateway.epayPid,
-            hasKey: !!gateway.epayKey,
-            hasUrl: !!gateway.epayUrl
-          }, "找到指定网关配置");
+        logger.info({
+          channelId,
+          found: !!channel,
+          enabled: channel?.enabled,
+          gatewayId: channel?.gatewayId
+        }, "查找通道信息");
+        
+        if (channel && channel.enabled) {
+          // 第二步：从 gateways 表查找实际的配置
+          const gateway = await gatewayManager.get(channel.gatewayId);
           
-          return {
-            config: {
-              pid: gateway.epayPid,
-              key: gateway.epayKey,
-              apiUrl: gateway.epayUrl,
-            },
-            returnUrl: null, // 目前数据库结构中没有 returnUrl 字段
-          };
+          logger.info({
+            gatewayId: channel.gatewayId,
+            gatewayFound: !!gateway,
+            gatewayEnabled: gateway?.enabled,
+            gatewayName: gateway?.name
+          }, "查找网关配置");
+          
+          if (gateway && gateway.enabled) {
+            logger.info({
+              channelId: channel.id,
+              channelName: channel.name,
+              gatewayId: gateway.id,
+              gatewayName: gateway.name,
+              hasPid: !!gateway.epayPid,
+              hasKey: !!gateway.epayKey,
+              hasUrl: !!gateway.epayUrl
+            }, "找到完整的支付配置");
+            
+            return {
+              config: {
+                pid: gateway.epayPid,
+                key: gateway.epayKey,
+                apiUrl: gateway.epayUrl,
+              },
+              returnUrl: null, // 目前数据库结构中没有 returnUrl 字段
+            };
+          } else {
+            logger.warn({
+              gatewayId: channel.gatewayId,
+              gatewayFound: !!gateway,
+              gatewayEnabled: gateway?.enabled
+            }, "通道关联的网关未找到或未启用");
+          }
         } else {
           logger.warn({
-            gatewayId: realGatewayId,
-            found: !!gateway,
-            enabled: gateway?.enabled
-          }, "指定网关未找到或未启用");
+            channelId,
+            found: !!channel,
+            enabled: channel?.enabled
+          }, "指定通道未找到或未启用");
         }
       }
     }
 
-    // 获取第一个启用的网关作为默认配置
+    // 回退方案：获取第一个启用的网关作为默认配置
     const enabledGateways = await gatewayManager.getEnabled();
     
     logger.info({
       enabledGatewaysCount: enabledGateways.length,
       gatewayIds: enabledGateways.map((g: Gateway) => g.id)
-    }, "获取启用的网关列表");
+    }, "获取启用的网关列表作为回退方案");
 
     if (enabledGateways.length > 0) {
       const firstGateway = enabledGateways[0];
       logger.info({
-        usingDefaultGateway: true,
+        usingFallbackGateway: true,
         gatewayId: firstGateway.id,
         gatewayName: firstGateway.name,
         hasPid: !!firstGateway.epayPid,
         hasKey: !!firstGateway.epayKey,
         hasUrl: !!firstGateway.epayUrl
-      }, "使用默认网关配置");
+      }, "使用回退网关配置");
       
       return {
         config: {
