@@ -280,9 +280,9 @@ export class EpayClient {
     signString: string;
     sign: string;
   } {
-    const filteredParams = Object.keys(params)
+    const filteredParams: Record<string, string> = Object.keys(params)
       .filter((k) => k !== "sign" && k !== "sign_type" && params[k])
-      .reduce((acc, k) => ({ ...acc, [k]: params[k] }), {});
+      .reduce((acc, k) => ({ ...acc, [k]: params[k] }), {} as Record<string, string>);
     
     const sortedParams = Object.keys(filteredParams)
       .sort()
