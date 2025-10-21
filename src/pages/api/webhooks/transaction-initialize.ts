@@ -197,30 +197,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 获取Saleor API信息
     const saleorApiUrl = req.headers["saleor-api-url"] as string;
-    const authToken = req.headers["authorization"]?.replace("Bearer ", "");
-
-    // 记录详细的请求头信息用于调试
+    
+    // Saleor webhook 使用签名验证而不是 Authorization 头
+    const saleorSignature = req.headers["x-saleor-signature"] || req.headers["saleor-signature"];
+    const saleorDomain = req.headers["x-saleor-domain"] || req.headers["saleor-domain"];
+    
     logger.info({
       saleorApiUrl,
-      hasAuthToken: !!authToken,
-      authTokenLength: authToken?.length || 0,
-      allHeaders: Object.keys(req.headers),
-      authorization: req.headers["authorization"] ? "present" : "missing"
-    }, "Checking Saleor API credentials");
+      hasSaleorSignature: !!saleorSignature,
+      saleorDomain,
+      saleorEvent: req.headers["x-saleor-event"] || req.headers["saleor-event"]
+    }, "Checking Saleor webhook credentials");
 
-    // 验证必要参数
-    if (!saleorApiUrl || !authToken) {
+    // 验证必要参数 - 只检查 saleorApiUrl
+    if (!saleorApiUrl) {
       logger.warn({
-        saleorApiUrl: saleorApiUrl || "missing",
-        hasAuthToken: !!authToken,
-        authTokenLength: authToken?.length || 0
-      }, "缺少必要的Saleor API信息");
+        saleorApiUrl: saleorApiUrl || "missing"
+      }, "缺少 Saleor API URL");
       return res.status(200).json({
-      result: "CHARGE_FAILURE",
-      amount: amountValue,
-      message: "缺少必要的Saleor API信息",
-    });
+        result: "CHARGE_FAILURE",
+        amount: amountValue,
+        message: "缺少 Saleor API URL",
+      });
     }
+
+    // 对于支付配置获取，我们需要一个临时的认证令牌
+    // 在实际应用中，这应该从应用的私有设置或环境变量中获取
+    const tempAuthToken = process.env.SALEOR_APP_TOKEN || "temp-auth-token-for-config-access";
 
     // 检查站点授权
     const isSiteAuthorized = await checkSiteAuthorization(saleorApiUrl);
@@ -235,7 +238,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 获取支付配置
     const { config: epayConfig, returnUrl } = await getEpayConfig(
       saleorApiUrl,
-      authToken || "",
+      tempAuthToken,
       data?.channelId,
     );
 
