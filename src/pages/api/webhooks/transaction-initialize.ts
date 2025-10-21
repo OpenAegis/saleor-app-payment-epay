@@ -311,6 +311,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const epayClient = createEpayClient(epayConfig);
 
+    // 测试签名生成（调试用）
+    const testParams = {
+      pid: epayConfig.pid,
+      type: "alipay",
+      out_trade_no: "TEST-123",
+      money: "1.00",
+      name: "测试商品"
+    };
+    const signTest = epayClient.testSignGeneration(testParams);
+    logger.info({
+      signTest
+    }, "签名生成测试");
+
     // 根据前端传入的支付类型或默认值
     // 支持更多标准支付方式
     const supportedPayTypes = ["alipay", "wxpay", "qqpay", "bank", "jdpay"];
