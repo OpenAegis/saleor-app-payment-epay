@@ -27,6 +27,8 @@ interface TransactionEvent {
     channelId?: string;
     channelType?: string;
     payType?: string;
+    gatewayId?: string;
+    paymentMethodId?: string;
   };
 }
 
