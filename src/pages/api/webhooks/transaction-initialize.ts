@@ -41,6 +41,12 @@ async function getEpayConfig(
   channelId?: string,
 ): Promise<{ config: EpayConfig | null; returnUrl: string | null }> {
   try {
+    logger.info({
+      saleorApiUrl,
+      hasToken: !!token,
+      channelId: channelId || "none"
+    }, "开始获取支付配置");
+
     // 从Saleor的metadata中获取配置
     const client = createServerClient(saleorApiUrl, token);
     const settingsManager = createPrivateSettingsManager(client);
@@ -48,20 +54,50 @@ async function getEpayConfig(
 
     // 获取配置
     const config = await configManager.getConfig();
+    
+    logger.info({
+      hasConfig: !!config,
+      configType: typeof config,
+      configKeys: config ? Object.keys(config) : [],
+      configurationsLength: config?.configurations?.length || 0
+    }, "从 metadata 获取配置结果");
 
     // 如果指定了通道ID，查找对应的配置
     if (channelId) {
+      logger.info({ channelId }, "查找通道配置");
       const channels = await channelManager.getAll();
+      logger.info({
+        channelsCount: channels.length,
+        channelIds: channels.map((c: Channel) => c.id)
+      }, "获取所有通道");
+      
       const channel = channels.find((c: Channel) => c.id === channelId);
+      logger.info({
+        foundChannel: !!channel,
+        channelGatewayId: channel?.gatewayId
+      }, "查找指定通道结果");
 
       if (channel) {
         // 根据通道关联的网关获取配置
         const gatewayConfigs = config.configurations || [];
+        logger.info({
+          gatewayConfigsCount: gatewayConfigs.length,
+          gatewayConfigIds: gatewayConfigs.map((g: any) => g.id),
+          lookingForGatewayId: channel.gatewayId
+        }, "查找网关配置");
+        
         const gatewayConfig = gatewayConfigs.find((g: any) => g.id === channel.gatewayId) as
           | EpayConfigEntry
           | undefined;
 
         if (gatewayConfig) {
+          logger.info({
+            foundGatewayConfig: true,
+            hasPid: !!gatewayConfig.pid,
+            hasKey: !!gatewayConfig.key,
+            hasApiUrl: !!gatewayConfig.apiUrl
+          }, "找到网关配置");
+          
           return {
             config: {
               pid: gatewayConfig.pid,
@@ -70,6 +106,11 @@ async function getEpayConfig(
             },
             returnUrl: gatewayConfig.returnUrl || null,
           };
+        } else {
+          logger.warn({
+            channelGatewayId: channel.gatewayId,
+            availableGatewayIds: gatewayConfigs.map((g: any) => g.id)
+          }, "未找到匹配的网关配置");
         }
       }
     }
@@ -77,6 +118,14 @@ async function getEpayConfig(
     // 获取第一个配置项作为默认配置
     if (config.configurations && config.configurations.length > 0) {
       const firstConfig = config.configurations[0] as EpayConfigEntry;
+      logger.info({
+        usingDefaultConfig: true,
+        hasPid: !!firstConfig.pid,
+        hasKey: !!firstConfig.key,
+        hasApiUrl: !!firstConfig.apiUrl,
+        configId: firstConfig.id
+      }, "使用默认配置");
+      
       return {
         config: {
           pid: firstConfig.pid,
@@ -85,13 +134,21 @@ async function getEpayConfig(
         },
         returnUrl: firstConfig.returnUrl || null,
       };
+    } else {
+      logger.warn({
+        hasConfigurations: !!config.configurations,
+        configurationsLength: config.configurations?.length || 0
+      }, "没有找到任何配置项");
     }
   } catch (error) {
-    console.error("从Saleor metadata获取支付配置失败:", error);
+    logger.error({
+      error: error instanceof Error ? error.message : "未知错误",
+      stack: error instanceof Error ? error.stack : undefined
+    }, "从Saleor metadata获取支付配置失败");
   }
 
   // 不再回退到环境变量配置
-  console.warn("支付配置未找到，请在后台配置支付参数");
+  logger.warn("支付配置未找到，请在后台配置支付参数");
   return { config: null, returnUrl: null };
 }
 
