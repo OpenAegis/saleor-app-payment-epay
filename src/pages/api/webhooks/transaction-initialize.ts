@@ -344,6 +344,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 获取商品名称（从订单信息中）
     const productName = sourceObject?.lines?.[0]?.productName || "订单支付";
 
+    // 获取客户端 IP 地址
+    const clientIp = req.headers['x-forwarded-for'] as string || 
+                     req.headers['x-real-ip'] as string || 
+                     req.connection.remoteAddress || 
+                     req.socket.remoteAddress || 
+                     '127.0.0.1';
+
     // 创建彩虹易支付订单
     const result = await epayClient.createOrder({
       amount: amountValue,
@@ -353,6 +360,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       payType, // 直接使用传入的支付类型，支持自定义
       productName,
       productDesc: `订单号: ${sourceObject?.number || "未知"}`,
+      clientIp: Array.isArray(clientIp) ? clientIp[0] : clientIp.split(',')[0].trim(), // 处理多重代理的情况
     });
     logger.info(
       {

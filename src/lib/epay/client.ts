@@ -115,114 +115,72 @@ export class EpayClient {
     requestData.sign_type = "MD5";
 
     try {
-      // 尝试不同的可能端点
-      const possibleEndpoints = [
-        `${this.config.apiUrl}/submit.php`,
-        `${this.config.apiUrl}/mapi.php`,
-        `${this.config.apiUrl}/api.php`,
-        `${this.config.apiUrl.replace(/\/$/, '')}/submit.php`, // 确保去掉末尾斜杠
-      ];
-
-      let lastError: Error | null = null;
+      // 使用 v1 API 的 mapi.php 端点
+      const apiEndpoint = `${this.config.apiUrl}/mapi.php`;
       
-      for (const apiEndpoint of possibleEndpoints) {
-        try {
-          console.log('[EpayClient] 尝试端点', {
-            endpoint: apiEndpoint,
-            pid: this.config.pid,
-            amount: params.amount,
-            orderNo: params.orderNo,
-            payType: params.payType,
-            signPreview: sign.substring(0, 8) + '...'
-          });
+      console.log('[EpayClient] 使用 v1 API 发起支付请求', {
+        endpoint: apiEndpoint,
+        pid: this.config.pid,
+        amount: params.amount,
+        orderNo: params.orderNo,
+        payType: params.payType,
+        hasClientIp: !!params.clientIp,
+        signPreview: sign.substring(0, 8) + '...'
+      });
 
-          // 发起请求
-          const response = await fetch(apiEndpoint, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded",
-              "Accept": "application/json, text/plain, */*",
-              "User-Agent": "Saleor-Epay-Client/1.0"
-            },
-            body: new URLSearchParams(requestData).toString(),
-          });
+      // 发起请求
+      const response = await fetch(apiEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Accept": "application/json, text/plain, */*",
+          "User-Agent": "Saleor-Epay-Client/1.0"
+        },
+        body: new URLSearchParams(requestData).toString(),
+      });
 
-          console.log('[EpayClient] API 响应状态', {
-            endpoint: apiEndpoint,
-            status: response.status,
-            statusText: response.statusText,
-            contentType: response.headers.get('content-type'),
-            headers: Object.fromEntries(response.headers.entries())
-          });
+      console.log('[EpayClient] API 响应状态', {
+        status: response.status,
+        statusText: response.statusText,
+        contentType: response.headers.get('content-type')
+      });
 
-          const responseText = await response.text();
-          console.log('[EpayClient] API 原始响应', {
-            endpoint: apiEndpoint,
-            responseLength: responseText.length,
-            responsePreview: responseText.substring(0, 300),
-            isHtml: responseText.trim().startsWith('<'),
-            isJson: responseText.trim().startsWith('{') || responseText.trim().startsWith('[')
-          });
-
-          // 如果返回 HTML，记录但继续尝试其他端点
-          if (responseText.trim().startsWith('<')) {
-            console.log('[EpayClient] 端点返回 HTML，可能是错误页面', {
-              endpoint: apiEndpoint,
-              htmlSnippet: responseText.substring(0, 100)
-            });
-            continue;
-          }
-
-          // 尝试解析 JSON
-          let result: SubmitResponse;
-          try {
-            result = JSON.parse(responseText) as SubmitResponse;
-          } catch (parseError) {
-            console.log('[EpayClient] JSON 解析失败，尝试下一个端点', {
-              endpoint: apiEndpoint,
-              parseError: parseError instanceof Error ? parseError.message : 'Unknown parse error',
-              responseText: responseText.substring(0, 200)
-            });
-            continue;
-          }
-
-          // 成功解析 JSON，返回结果
-          console.log('[EpayClient] 成功解析响应', {
-            endpoint: apiEndpoint,
-            code: result.code,
-            msg: result.msg,
-            hasPayUrl: !!result.payurl,
-            hasQrcode: !!result.qrcode
-          });
-
-          return {
-            code: result.code || 0,
-            msg: result.msg || "",
-            payUrl: result.payurl,
-            tradeNo: result.trade_no,
-            qrcode: result.qrcode,
-            type: result.type,
-          };
-
-        } catch (endpointError) {
-          lastError = endpointError instanceof Error ? endpointError : new Error('Unknown endpoint error');
-          console.log('[EpayClient] 端点请求失败', {
-            endpoint: apiEndpoint,
-            error: lastError.message
-          });
-          continue;
-        }
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log('[EpayClient] HTTP 错误响应', {
+          status: response.status,
+          errorText: errorText.substring(0, 500)
+        });
+        return {
+          code: 0,
+          msg: `HTTP Error: ${response.status} - ${errorText}`,
+        };
       }
 
-      // 所有端点都失败了
-      console.error('[EpayClient] 所有端点都失败', {
-        triedEndpoints: possibleEndpoints,
-        lastError: lastError?.message
+      const responseText = await response.text();
+      console.log('[EpayClient] API 原始响应', {
+        responseLength: responseText.length,
+        responsePreview: responseText.substring(0, 200),
+        isJson: responseText.trim().startsWith('{') || responseText.trim().startsWith('[')
+      });
+
+      // 解析 JSON 响应
+      const result = JSON.parse(responseText) as SubmitResponse;
+
+      console.log('[EpayClient] 解析后的响应', {
+        code: result.code,
+        msg: result.msg,
+        hasPayUrl: !!result.payurl,
+        hasQrcode: !!result.qrcode
       });
 
       return {
-        code: 0,
-        msg: `所有 API 端点都失败: ${lastError?.message || '未知错误'}`,
+        code: result.code || 0,
+        msg: result.msg || "",
+        payUrl: result.payurl,
+        tradeNo: result.trade_no,
+        qrcode: result.qrcode,
+        type: result.type,
       };
 
     } catch (error) {
