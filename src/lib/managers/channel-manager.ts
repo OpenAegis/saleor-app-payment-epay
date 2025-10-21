@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db } from "../db/turso-client";
-import { channels, type Channel, type NewChannel } from "../db/schema";
+import { channels, gateways, type Channel, type NewChannel } from "../db/schema";
 import { randomId } from "../random-id";
 
 /**
@@ -45,13 +45,30 @@ export class ChannelManager {
   }
 
   /**
-   * 获取启用的渠道
+   * 获取启用的渠道（同时检查关联的网关也必须启用）
    */
   async getEnabled(): Promise<Channel[]> {
     const result = await db
-      .select()
+      .select({
+        id: channels.id,
+        gatewayId: channels.gatewayId,
+        name: channels.name,
+        description: channels.description,
+        type: channels.type,
+        icon: channels.icon,
+        enabled: channels.enabled,
+        priority: channels.priority,
+        createdAt: channels.createdAt,
+        updatedAt: channels.updatedAt,
+      })
       .from(channels)
-      .where(eq(channels.enabled, true))
+      .innerJoin(gateways, eq(channels.gatewayId, gateways.id))
+      .where(
+        and(
+          eq(channels.enabled, true),
+          eq(gateways.enabled, true)
+        )
+      )
       .orderBy(channels.priority, channels.createdAt);
     
     return result;
