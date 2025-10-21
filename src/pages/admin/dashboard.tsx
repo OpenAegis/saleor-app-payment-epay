@@ -46,6 +46,28 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleInitDatabase = async () => {
+    if (!confirm("确定要初始化/更新数据库结构吗？这个操作是安全的，会自动检测需要添加的字段。")) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/admin/init-database", {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (response.ok) {
+        alert("数据库初始化成功！新的字段已添加。");
+      } else {
+        const error = await response.text();
+        alert(`数据库初始化失败: ${error}`);
+      }
+    } catch (error) {
+      alert(`数据库初始化失败: ${error}`);
+    }
+  };
+
   if (loading) {
     return (
       <Box
@@ -75,15 +97,26 @@ export default function AdminDashboard() {
           <Text size={6} fontWeight="bold">
             多渠道支付管理后台
           </Text>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              void handleLogout();
-            }}
-            size="medium"
-          >
-            退出登录
-          </Button>
+          <Box display="flex" gap={2}>
+            <Button
+              variant="tertiary"
+              onClick={() => {
+                void handleInitDatabase();
+              }}
+              size="medium"
+            >
+              初始化数据库
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                void handleLogout();
+              }}
+              size="medium"
+            >
+              退出登录
+            </Button>
+          </Box>
         </Box>
       </Box>
 

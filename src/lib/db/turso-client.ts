@@ -36,6 +36,8 @@ export async function initializeDatabase() {
         epay_url TEXT NOT NULL,
         epay_pid TEXT NOT NULL,
         epay_key TEXT NOT NULL,
+        api_version TEXT NOT NULL DEFAULT 'v1',
+        sign_type TEXT NOT NULL DEFAULT 'MD5',
         icon TEXT,
         enabled INTEGER NOT NULL DEFAULT 1,
         priority INTEGER NOT NULL DEFAULT 0,
@@ -119,9 +121,45 @@ export async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS domain_whitelist_pattern_idx ON domain_whitelist(domain_pattern)
     `);
 
+    // 数据库迁移：添加新的 API 版本字段
+    await migrateApiVersionFields();
+
     console.log("✅ 数据库表初始化成功");
   } catch (error) {
     console.error("❌ 数据库初始化失败:", error);
     throw error;
+  }
+}
+
+/**
+ * 数据库迁移：为 gateways 表添加 API 版本字段
+ */
+async function migrateApiVersionFields() {
+  try {
+    // 检查 api_version 列是否存在
+    const columns = await tursoClient.execute(`PRAGMA table_info(gateways)`);
+    const hasApiVersion = columns.rows.some(row => row.name === 'api_version');
+    const hasSignType = columns.rows.some(row => row.name === 'sign_type');
+
+    if (!hasApiVersion) {
+      await tursoClient.execute(`
+        ALTER TABLE gateways ADD COLUMN api_version TEXT NOT NULL DEFAULT 'v1'
+      `);
+      console.log("✅ 添加 api_version 字段");
+    }
+
+    if (!hasSignType) {
+      await tursoClient.execute(`
+        ALTER TABLE gateways ADD COLUMN sign_type TEXT NOT NULL DEFAULT 'MD5'
+      `);
+      console.log("✅ 添加 sign_type 字段");
+    }
+
+    if (hasApiVersion && hasSignType) {
+      console.log("ℹ️ API 版本字段已存在，跳过迁移");
+    }
+  } catch (error) {
+    console.error("❌ API 版本字段迁移失败:", error);
+    // 不抛出错误，避免影响整个初始化过程
   }
 }
