@@ -131,6 +131,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  let amountValue = 0;
   try {
     logger.info(
       {
@@ -143,7 +144,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
     const { event } = req.body as { event: TransactionEvent };
     const { action, transaction, sourceObject, data } = event;
-    const amountValue = parseFloat(action.amount) || 0;
+    amountValue = parseFloat(action.amount) || 0;
 
     // 获取Saleor API信息
     const saleorApiUrl = req.headers["saleor-api-url"] as string;

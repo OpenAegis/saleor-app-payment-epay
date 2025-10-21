@@ -107,6 +107,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  let amountValue = 0;
   try {
     logger.info({
       path: "/api/webhooks/transaction-process",
@@ -117,6 +118,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { event } = req.body as { event: TransactionProcessEvent };
     const parsedData = parseEventData(event.data);
     const { action, transaction } = event;
+    amountValue = parseFloat(action.amount) || 0;
     const amountValue = parseFloat(action.amount) || 0;
 
     // 获取Saleor API信息
