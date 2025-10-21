@@ -1,13 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { createEpayClient, type EpayConfig } from "@/lib/epay/client";
 import { env } from "@/lib/env.mjs";
-import { createServerClient } from "@/lib/create-graphq-client";
-import { createPrivateSettingsManager } from "@/modules/app-configuration/metadata-manager";
-import { EpayConfigManager } from "@/modules/payment-app-configuration/epay-config-manager";
-import { type EpayConfigEntry } from "@/modules/payment-app-configuration/epay-config";
 import { siteManager } from "@/lib/managers/site-manager";
-import { channelManager } from "@/lib/managers/channel-manager";
-import { type Channel } from "@/lib/db/schema";
+import { gatewayManager } from "@/lib/managers/gateway-manager";
+import { type Gateway } from "@/lib/db/schema";
 import { createLogger } from "@/lib/logger";
 
 const logger = createLogger({ component: "TransactionInitializeWebhook" });
@@ -36,119 +32,92 @@ interface TransactionEvent {
 
 // 获取支付配置的函数
 async function getEpayConfig(
-  saleorApiUrl: string,
-  token: string,
-  channelId?: string,
+  gatewayId?: string,
 ): Promise<{ config: EpayConfig | null; returnUrl: string | null }> {
   try {
     logger.info({
-      saleorApiUrl,
-      hasToken: !!token,
-      channelId: channelId || "none"
-    }, "开始获取支付配置");
+      gatewayId: gatewayId || "none"
+    }, "开始从本地数据库获取支付配置");
 
-    // 从Saleor的metadata中获取配置
-    const client = createServerClient(saleorApiUrl, token);
-    const settingsManager = createPrivateSettingsManager(client);
-    const configManager = new EpayConfigManager(settingsManager, saleorApiUrl);
-
-    // 获取配置
-    const config = await configManager.getConfig();
-    
-    logger.info({
-      hasConfig: !!config,
-      configType: typeof config,
-      configKeys: config ? Object.keys(config) : [],
-      configurationsLength: config?.configurations?.length || 0
-    }, "从 metadata 获取配置结果");
-
-    // 如果指定了通道ID，查找对应的配置
-    if (channelId) {
-      logger.info({ channelId }, "查找通道配置");
-      const channels = await channelManager.getAll();
-      logger.info({
-        channelsCount: channels.length,
-        channelIds: channels.map((c: Channel) => c.id)
-      }, "获取所有通道");
+    // 如果指定了网关ID，直接查找
+    if (gatewayId) {
+      // 从 gatewayId 中提取真实的 ID
+      // gatewayId 格式: "app:saleor.app.epay:qoc0ue4mzu8u4jfdflp3jn"
+      // 我们需要最后一部分: "qoc0ue4mzu8u4jfdflp3jn"
+      const realGatewayId = gatewayId.split(':').pop();
       
-      const channel = channels.find((c: Channel) => c.id === channelId);
       logger.info({
-        foundChannel: !!channel,
-        channelGatewayId: channel?.gatewayId
-      }, "查找指定通道结果");
-
-      if (channel) {
-        // 根据通道关联的网关获取配置
-        const gatewayConfigs = config.configurations || [];
-        logger.info({
-          gatewayConfigsCount: gatewayConfigs.length,
-          gatewayConfigIds: gatewayConfigs.map((g: any) => g.configurationId || g.id),
-          lookingForGatewayId: channel.gatewayId
-        }, "查找网关配置");
+        originalGatewayId: gatewayId,
+        extractedGatewayId: realGatewayId
+      }, "提取网关ID");
+      
+      if (realGatewayId) {
+        const gateway = await gatewayManager.get(realGatewayId);
         
-        const gatewayConfig = gatewayConfigs.find((g: any) => 
-          g.configurationId === channel.gatewayId || g.id === channel.gatewayId
-        ) as | EpayConfigEntry | undefined;
-
-        if (gatewayConfig) {
+        if (gateway && gateway.enabled) {
           logger.info({
-            foundGatewayConfig: true,
-            hasPid: !!gatewayConfig.pid,
-            hasKey: !!gatewayConfig.key,
-            hasApiUrl: !!gatewayConfig.apiUrl
-          }, "找到网关配置");
+            gatewayId: gateway.id,
+            gatewayName: gateway.name,
+            hasPid: !!gateway.epayPid,
+            hasKey: !!gateway.epayKey,
+            hasUrl: !!gateway.epayUrl
+          }, "找到指定网关配置");
           
           return {
             config: {
-              pid: gatewayConfig.pid,
-              key: gatewayConfig.key,
-              apiUrl: gatewayConfig.apiUrl,
+              pid: gateway.epayPid,
+              key: gateway.epayKey,
+              apiUrl: gateway.epayUrl,
             },
-            returnUrl: gatewayConfig.returnUrl || null,
+            returnUrl: null, // 目前数据库结构中没有 returnUrl 字段
           };
         } else {
           logger.warn({
-            channelGatewayId: channel.gatewayId,
-            availableGatewayIds: gatewayConfigs.map((g: any) => g.configurationId || g.id)
-          }, "未找到匹配的网关配置");
+            gatewayId: realGatewayId,
+            found: !!gateway,
+            enabled: gateway?.enabled
+          }, "指定网关未找到或未启用");
         }
       }
     }
 
-    // 获取第一个配置项作为默认配置
-    if (config.configurations && config.configurations.length > 0) {
-      const firstConfig = config.configurations[0] as EpayConfigEntry;
+    // 获取第一个启用的网关作为默认配置
+    const enabledGateways = await gatewayManager.getEnabled();
+    
+    logger.info({
+      enabledGatewaysCount: enabledGateways.length,
+      gatewayIds: enabledGateways.map((g: Gateway) => g.id)
+    }, "获取启用的网关列表");
+
+    if (enabledGateways.length > 0) {
+      const firstGateway = enabledGateways[0];
       logger.info({
-        usingDefaultConfig: true,
-        hasPid: !!firstConfig.pid,
-        hasKey: !!firstConfig.key,
-        hasApiUrl: !!firstConfig.apiUrl,
-        configurationId: firstConfig.configurationId,
-        configurationName: firstConfig.configurationName
-      }, "使用默认配置");
+        usingDefaultGateway: true,
+        gatewayId: firstGateway.id,
+        gatewayName: firstGateway.name,
+        hasPid: !!firstGateway.epayPid,
+        hasKey: !!firstGateway.epayKey,
+        hasUrl: !!firstGateway.epayUrl
+      }, "使用默认网关配置");
       
       return {
         config: {
-          pid: firstConfig.pid,
-          key: firstConfig.key,
-          apiUrl: firstConfig.apiUrl,
+          pid: firstGateway.epayPid,
+          key: firstGateway.epayKey,
+          apiUrl: firstGateway.epayUrl,
         },
-        returnUrl: firstConfig.returnUrl || null,
+        returnUrl: null,
       };
     } else {
-      logger.warn({
-        hasConfigurations: !!config.configurations,
-        configurationsLength: config.configurations?.length || 0
-      }, "没有找到任何配置项");
+      logger.warn("没有找到任何启用的网关配置");
     }
   } catch (error) {
     logger.error({
       error: error instanceof Error ? error.message : "未知错误",
       stack: error instanceof Error ? error.stack : undefined
-    }, "从Saleor metadata获取支付配置失败");
+    }, "从本地数据库获取支付配置失败");
   }
 
-  // 不再回退到环境变量配置
   logger.warn("支付配置未找到，请在后台配置支付参数");
   return { config: null, returnUrl: null };
 }
@@ -279,10 +248,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // 对于支付配置获取，我们需要一个临时的认证令牌
-    // 在实际应用中，这应该从应用的私有设置或环境变量中获取
-    const tempAuthToken = process.env.SALEOR_APP_TOKEN || "temp-auth-token-for-config-access";
-
     // 检查站点授权
     const isSiteAuthorized = await checkSiteAuthorization(saleorApiUrl);
     if (!isSiteAuthorized) {
@@ -293,12 +258,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     }
 
-    // 获取支付配置
-    const { config: epayConfig, returnUrl } = await getEpayConfig(
-      saleorApiUrl,
-      tempAuthToken,
-      data?.channelId,
-    );
+    // 获取支付配置 - 使用请求中的 gatewayId
+    const requestGatewayId = data?.gatewayId || data?.paymentMethodId;
+    const { config: epayConfig, returnUrl } = await getEpayConfig(requestGatewayId);
 
     if (!epayConfig) {
       return res.status(200).json({
