@@ -139,10 +139,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         method: req.method,
         saleorApiUrl: req.headers["saleor-api-url"],
         userAgent: req.headers["user-agent"],
+        requestBody: req.body,
       },
       "Initialize webhook called",
     );
-    const { event } = req.body as { event: TransactionEvent };
+
+    // 验证请求体结构
+    if (!req.body) {
+      logger.error("Request body is empty");
+      return res.status(400).json({
+        result: "CHARGE_FAILURE",
+        amount: 0,
+        message: "Request body is empty",
+      });
+    }
+
+    // 检查 event 属性是否存在
+    const body = req.body;
+    let event: TransactionEvent;
+    
+    if (body.event) {
+      // 标准格式: { event: TransactionEvent }
+      event = body.event;
+    } else if (body.action && body.transaction) {
+      // 直接格式: TransactionEvent
+      event = body as TransactionEvent;
+    } else {
+      logger.error("Invalid request body structure", { body });
+      return res.status(400).json({
+        result: "CHARGE_FAILURE",
+        amount: 0,
+        message: "Invalid request body structure",
+      });
+    }
+
+    // 验证 event 结构
+    if (!event.action || !event.transaction) {
+      logger.error("Missing required event properties", { event });
+      return res.status(400).json({
+        result: "CHARGE_FAILURE",
+        amount: 0,
+        message: "Missing required event properties",
+      });
+    }
+
     const { action, transaction, sourceObject, data } = event;
     amountValue = parseFloat(action.amount) || 0;
     logger.info(
@@ -282,6 +322,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       {
         error: error instanceof Error ? error.message : "未知错误",
         stack: error instanceof Error ? error.stack : undefined,
+        requestBody: req.body,
+        headers: {
+          'saleor-api-url': req.headers["saleor-api-url"],
+          'user-agent': req.headers["user-agent"],
+          'content-type': req.headers["content-type"],
+        }
       },
       "Transaction initialize error",
     );
