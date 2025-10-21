@@ -12,6 +12,8 @@ export function GatewayManager() {
     epayUrl: "",
     epayPid: "",
     epayKey: "",
+    apiVersion: "v1" as "v1" | "v2",
+    signType: "MD5" as "MD5" | "RSA",
     icon: "",
     priority: 0,
   });
@@ -47,6 +49,8 @@ export function GatewayManager() {
           epayUrl: "",
           epayPid: "",
           epayKey: "",
+          apiVersion: "v1" as "v1" | "v2",
+          signType: "MD5" as "MD5" | "RSA",
           icon: "",
           priority: 0,
         });
@@ -192,6 +196,49 @@ export function GatewayManager() {
 
           <Box display="grid" __gridTemplateColumns="1fr 1fr" gap={3}>
             <Box>
+              <Text size={3}>API 版本 *</Text>
+              <select
+                value={formData.apiVersion}
+                onChange={(e) => {
+                  const apiVersion = e.target.value as "v1" | "v2";
+                  setFormData({ 
+                    ...formData, 
+                    apiVersion,
+                    signType: apiVersion === "v2" ? "RSA" : "MD5" // v2 默认使用 RSA
+                  });
+                }}
+                style={{ width: "100%", padding: "8px", marginTop: "4px" }}
+              >
+                <option value="v1">v1 (兼容模式 - /mapi.php)</option>
+                <option value="v2">v2 (现代模式 - /api/pay/create)</option>
+              </select>
+              <Text size={2} color="default2" marginTop={1}>
+                {formData.apiVersion === "v1" 
+                  ? "使用传统 v1 API，兼容性好" 
+                  : "使用现代 v2 API，支持更多功能"}
+              </Text>
+            </Box>
+
+            <Box>
+              <Text size={3}>签名类型 *</Text>
+              <select
+                value={formData.signType}
+                onChange={(e) => setFormData({ ...formData, signType: e.target.value as "MD5" | "RSA" })}
+                style={{ width: "100%", padding: "8px", marginTop: "4px" }}
+              >
+                <option value="MD5">MD5 签名</option>
+                <option value="RSA">RSA 签名</option>
+              </select>
+              <Text size={2} color="default2" marginTop={1}>
+                {formData.signType === "MD5" 
+                  ? "MD5 签名，适用于 v1 API" 
+                  : "RSA 签名，推荐用于 v2 API"}
+              </Text>
+            </Box>
+          </Box>
+
+          <Box display="grid" __gridTemplateColumns="1fr 1fr" gap={3}>
+            <Box>
               <Text size={3}>图标URL</Text>
               <input
                 type="url"
@@ -255,12 +302,29 @@ export function GatewayManager() {
                     />
                   )}
                   <Box>
-                    <Text size={5} fontWeight="bold">{gateway.name}</Text>
+                    <Box display="flex" alignItems="center" gap={2}>
+                      <Text size={5} fontWeight="bold">{gateway.name}</Text>
+                      <Box 
+                        display="inline-flex" 
+                        alignItems="center" 
+                        padding={1} 
+                        backgroundColor={gateway.apiVersion === "v2" ? "success1" : "warning1"}
+                        borderRadius={2}
+                      >
+                        <Text size={1} fontWeight="bold" color="default2">
+                          {gateway.apiVersion?.toUpperCase() || "V1"} / {gateway.signType || "MD5"}
+                        </Text>
+                      </Box>
+                    </Box>
                     <Text size={3} color="default1">
                       API: {gateway.epayUrl}
                     </Text>
                     <Text size={3} color="default1">
                       商户ID: {gateway.epayPid}
+                    </Text>
+                    <Text size={2} color="default2">
+                      API版本: {gateway.apiVersion === "v2" ? "v2 (现代模式)" : "v1 (兼容模式)"} | 
+                      签名: {gateway.signType || "MD5"}
                     </Text>
                     {gateway.description && (
                       <Text size={2} color="default2">{gateway.description}</Text>

@@ -10,6 +10,11 @@ export const GatewaySchema = z.object({
   epayUrl: z.string().url("易支付API地址必须是有效的URL").min(1, "易支付API地址不能为空"), // 易支付API地址
   epayPid: z.string().min(1, "易支付商户ID不能为空"), // 易支付商户ID
   epayKey: z.string().min(1, "易支付密钥不能为空"), // 易支付密钥
+  
+  // API 版本配置
+  apiVersion: z.enum(["v1", "v2"]).default("v1"), // API 版本
+  signType: z.enum(["MD5", "RSA"]).default("MD5"), // 签名类型
+  
   icon: z.string().optional(), // 图标URL
   enabled: z.boolean().default(true),
   priority: z.number().int().min(0).default(0), // 优先级，数字越大优先级越高
