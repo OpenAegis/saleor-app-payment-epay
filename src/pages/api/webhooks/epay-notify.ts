@@ -94,6 +94,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const params = req.body as EpayNotifyParams;
+    logger.info(
+      {
+        tradeStatus: params.trade_status,
+        orderNo: params.out_trade_no,
+        tradeNo: params.trade_no,
+        amount: params.money,
+      },
+      "Received Epay notify payload",
+    );
 
     // 获取Saleor API信息
     const saleorApiUrl = req.headers["saleor-api-url"] as string;
@@ -114,6 +123,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 创建epay客户端以进行签名验证
     const { createEpayClient } = await import("@/lib/epay/client");
+    logger.info(
+      {
+        saleorApiUrl,
+      },
+      "Loaded Epay configuration for notify",
+    );
+
     const epayClient = createEpayClient(epayConfig);
 
     // 验证签名
@@ -128,8 +144,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       logger.warn("签名验证失败");
       return res.status(400).send("fail");
     }
-
-    // 检查支付状态
+    logger.info(
+      {
+        orderNo: params.out_trade_no,
+        tradeNo: params.trade_no,
+      },
+      "Epay notify signature verified",
+    );
+// 检查支付状态
     if (params.trade_status === "TRADE_SUCCESS") {
       // 支付成功，更新 Saleor 订单
       // 这里需要调用 Saleor transactionEventReport mutation
@@ -191,6 +213,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       return res.status(200).send("success");
     }
+
+    logger.warn(
+      {
+        tradeStatus: params.trade_status,
+        orderNo: params.out_trade_no,
+      },
+      "Notify received non-success trade status",
+    );
 
     return res.status(200).send("fail");
   } catch (error) {

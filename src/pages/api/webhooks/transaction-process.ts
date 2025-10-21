@@ -119,6 +119,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const parsedData = parseEventData(event.data);
     const { action, transaction } = event;
     amountValue = parseFloat(action.amount) || 0;
+    logger.info(
+      {
+        transactionId: transaction.id,
+        amount: amountValue,
+        parsedData,
+      },
+      "Parsed transaction process payload",
+    );
 
     // 获取Saleor API信息
     const saleorApiUrl = req.headers["saleor-api-url"] as string;
@@ -154,21 +162,55 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    logger.info(
+      {
+        saleorApiUrl,
+      },
+      "Loaded Epay configuration for process",
+    );
+
     const epayClient = createEpayClient(epayConfig);
 
     const epayOrderNo = parsedData["epayOrderNo"] || parsedData["pspReference"] || parsedData["externalId"];
     const saleorOrderNo = parsedData["saleorOrderNo"];
 
     let result = await epayClient.queryOrder(epayOrderNo || transaction.id, !epayOrderNo);
+    logger.info(
+      {
+        transactionId: transaction.id,
+        primaryQuery: epayOrderNo || transaction.id,
+        useOutTradeNo: !epayOrderNo,
+        epayStatus: result.status,
+        tradeStatus: result.trade_status,
+      },
+      "Queried Epay order (primary)",
+    );
 
     if (!(result.status === 1 && result.trade_status === "TRADE_SUCCESS") && saleorOrderNo) {
       const fallback = await epayClient.queryOrder(saleorOrderNo, true);
+      logger.info(
+        {
+          transactionId: transaction.id,
+          saleorOrderNo,
+          fallbackStatus: fallback.status,
+          fallbackTradeStatus: fallback.trade_status,
+        },
+        "Queried Epay order (fallback)",
+      );
       if (fallback.status !== undefined) {
         result = fallback;
       }
     }
-
-    if (result.status === 1 && result.trade_status === "TRADE_SUCCESS") {
+if (result.status === 1 && result.trade_status === "TRADE_SUCCESS") {
+      logger.info(
+        {
+          transactionId: transaction.id,
+          epayTradeNo: result.trade_no,
+          epayOrderNo: result.out_trade_no,
+          chargedAmount: result.money,
+        },
+        "Epay order confirmed as success",
+      );
       return res.status(200).json({
         result: "CHARGE_SUCCESS",
         amount: amountValue,
@@ -183,6 +225,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (result.status === 0 || result.trade_status === "TRADE_CLOSED") {
+      logger.warn(
+        {
+          transactionId: transaction.id,
+          epayStatus: result.status,
+          tradeStatus: result.trade_status,
+          message: result.msg,
+        },
+        "Epay order indicates failure/closed",
+      );
       return res.status(200).json({
       result: "CHARGE_FAILURE",
       amount: amountValue,
@@ -190,6 +241,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     }
 
+    logger.info(
+      {
+        transactionId: transaction.id,
+        epayStatus: result.status,
+        tradeStatus: result.trade_status,
+        message: result.msg,
+      },
+      "Epay order still pending",
+    );
     return res.status(200).json({
       result: "CHARGE_REQUEST",
       amount: amountValue,

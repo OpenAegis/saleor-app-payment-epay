@@ -145,6 +145,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { event } = req.body as { event: TransactionEvent };
     const { action, transaction, sourceObject, data } = event;
     amountValue = parseFloat(action.amount) || 0;
+    logger.info(
+      {
+        transactionId: transaction.id,
+        amount: amountValue,
+        payType: data?.payType || action.paymentMethodType,
+        channelId: data?.channelId,
+      },
+      "Parsed transaction initialize payload",
+    );
 
     // 获取Saleor API信息
     const saleorApiUrl = req.headers["saleor-api-url"] as string;
@@ -185,6 +194,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    logger.info(
+      {
+        saleorApiUrl,
+        hasReturnUrl: Boolean(returnUrl),
+      },
+      "Loaded Epay configuration for initialize",
+    );
+
     const epayClient = createEpayClient(epayConfig);
 
     // 根据前端传入的支付类型或默认值
@@ -217,6 +234,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       productName,
       productDesc: `订单号: ${sourceObject?.number || "未知"}`,
     });
+    logger.info(
+      {
+        transactionId: transaction.id,
+        orderNo,
+        epayCode: result.code,
+        hasPayUrl: Boolean(result.payUrl),
+        hasQrcode: Boolean(result.qrcode),
+      },
+      "Epay createOrder response",
+    );
 
     if (result.code === 1 && (result.payUrl || result.qrcode)) {
       // 返回支付链接或二维码
@@ -235,6 +262,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
       });
     }
+
+    logger.warn(
+      {
+        transactionId: transaction.id,
+        orderNo,
+        epayMessage: result.msg,
+      },
+      "Epay createOrder failed",
+    );
 
     return res.status(200).json({
       result: "CHARGE_FAILURE",
