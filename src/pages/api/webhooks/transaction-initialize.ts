@@ -82,13 +82,13 @@ async function getEpayConfig(
         const gatewayConfigs = config.configurations || [];
         logger.info({
           gatewayConfigsCount: gatewayConfigs.length,
-          gatewayConfigIds: gatewayConfigs.map((g: any) => g.id),
+          gatewayConfigIds: gatewayConfigs.map((g: any) => g.configurationId || g.id),
           lookingForGatewayId: channel.gatewayId
         }, "查找网关配置");
         
-        const gatewayConfig = gatewayConfigs.find((g: any) => g.id === channel.gatewayId) as
-          | EpayConfigEntry
-          | undefined;
+        const gatewayConfig = gatewayConfigs.find((g: any) => 
+          g.configurationId === channel.gatewayId || g.id === channel.gatewayId
+        ) as | EpayConfigEntry | undefined;
 
         if (gatewayConfig) {
           logger.info({
@@ -109,7 +109,7 @@ async function getEpayConfig(
         } else {
           logger.warn({
             channelGatewayId: channel.gatewayId,
-            availableGatewayIds: gatewayConfigs.map((g: any) => g.id)
+            availableGatewayIds: gatewayConfigs.map((g: any) => g.configurationId || g.id)
           }, "未找到匹配的网关配置");
         }
       }
@@ -123,7 +123,8 @@ async function getEpayConfig(
         hasPid: !!firstConfig.pid,
         hasKey: !!firstConfig.key,
         hasApiUrl: !!firstConfig.apiUrl,
-        configId: firstConfig.id
+        configurationId: firstConfig.configurationId,
+        configurationName: firstConfig.configurationName
       }, "使用默认配置");
       
       return {
