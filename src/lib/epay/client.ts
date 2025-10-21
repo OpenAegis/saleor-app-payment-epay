@@ -332,10 +332,10 @@ export class EpayClient {
           // 根据 pay_type 提取相应的支付信息
           switch (result.pay_type) {
             case "jump":
-              payUrl = payInfo; // 直接是 URL 字符串
+              payUrl = typeof payInfo === 'string' ? payInfo : undefined; // 直接是 URL 字符串
               break;
             case "qrcode":
-              qrcode = payInfo; // 二维码链接或数据
+              qrcode = typeof payInfo === 'string' ? payInfo : undefined; // 二维码链接或数据
               break;
             case "jsapi":
             case "app":
