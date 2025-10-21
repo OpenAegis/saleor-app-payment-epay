@@ -4,6 +4,8 @@ export interface EpayConfig {
   pid: string;
   key: string;
   apiUrl: string;
+  apiVersion?: "v1" | "v2"; // API 版本
+  signType?: "MD5" | "RSA"; // 签名类型
 }
 
 export interface CreateOrderParams {
@@ -15,6 +17,15 @@ export interface CreateOrderParams {
   productName?: string;
   productDesc?: string;
   clientIp?: string;
+  
+  // v2 API 额外参数
+  method?: string; // v2: 接口类型 web/jump/jsapi/app/scan/applet
+  device?: string; // v2: 设备类型 pc/mobile/qq/wechat/alipay
+  channelId?: number; // v2: 通道ID
+  authCode?: string; // v2: 被扫支付授权码
+  subOpenid?: string; // v2: 用户Openid
+  subAppid?: string; // v2: 公众号AppId
+  param?: string; // v2: 业务扩展参数
 }
 
 export interface EpayOrderResult {
@@ -24,6 +35,13 @@ export interface EpayOrderResult {
   tradeNo?: string;
   qrcode?: string;
   type?: string;
+  
+  // v2 API 返回字段
+  payType?: string; // v2: 发起支付类型
+  payInfo?: string; // v2: 发起支付参数 (JSON字符串)
+  timestamp?: string; // v2: 当前时间戳
+  sign?: string; // v2: 签名字符串
+  signType?: string; // v2: 签名类型
 }
 
 export interface EpayNotifyParams {
@@ -55,6 +73,17 @@ interface SubmitResponse {
   trade_no?: string;
   qrcode?: string;
   type?: string;
+}
+
+interface SubmitV2Response {
+  code?: number;
+  msg?: string;
+  trade_no?: string;
+  pay_type?: string;
+  pay_info?: string;
+  timestamp?: string;
+  sign?: string;
+  sign_type?: string;
 }
 
 interface QueryResponse {
@@ -91,6 +120,17 @@ export class EpayClient {
 
   // 创建支付订单
   async createOrder(params: CreateOrderParams): Promise<EpayOrderResult> {
+    const apiVersion = this.config.apiVersion || "v1";
+    
+    if (apiVersion === "v2") {
+      return this.createOrderV2(params);
+    } else {
+      return this.createOrderV1(params);
+    }
+  }
+
+  // v1 API 创建订单
+  private async createOrderV1(params: CreateOrderParams): Promise<EpayOrderResult> {
     const requestData: Record<string, string> = {
       pid: this.config.pid,
       type: params.payType || "alipay",
@@ -112,10 +152,9 @@ export class EpayClient {
     // 生成签名
     const sign = this.generateSign(requestData);
     requestData.sign = sign;
-    requestData.sign_type = "MD5";
+    requestData.sign_type = this.config.signType || "MD5";
 
     try {
-      // 使用 v1 API 的 mapi.php 端点
       const apiEndpoint = `${this.config.apiUrl}/mapi.php`;
       
       console.log('[EpayClient] 使用 v1 API 发起支付请求', {
@@ -128,7 +167,6 @@ export class EpayClient {
         signPreview: sign.substring(0, 8) + '...'
       });
 
-      // 发起请求
       const response = await fetch(apiEndpoint, {
         method: "POST",
         headers: {
@@ -139,7 +177,7 @@ export class EpayClient {
         body: new URLSearchParams(requestData).toString(),
       });
 
-      console.log('[EpayClient] API 响应状态', {
+      console.log('[EpayClient] v1 API 响应状态', {
         status: response.status,
         statusText: response.statusText,
         contentType: response.headers.get('content-type')
@@ -147,10 +185,6 @@ export class EpayClient {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.log('[EpayClient] HTTP 错误响应', {
-          status: response.status,
-          errorText: errorText.substring(0, 500)
-        });
         return {
           code: 0,
           msg: `HTTP Error: ${response.status} - ${errorText}`,
@@ -158,21 +192,12 @@ export class EpayClient {
       }
 
       const responseText = await response.text();
-      console.log('[EpayClient] API 原始响应', {
+      console.log('[EpayClient] v1 API 原始响应', {
         responseLength: responseText.length,
-        responsePreview: responseText.substring(0, 200),
-        isJson: responseText.trim().startsWith('{') || responseText.trim().startsWith('[')
+        responsePreview: responseText.substring(0, 200)
       });
 
-      // 解析 JSON 响应
       const result = JSON.parse(responseText) as SubmitResponse;
-
-      console.log('[EpayClient] 解析后的响应', {
-        code: result.code,
-        msg: result.msg,
-        hasPayUrl: !!result.payurl,
-        hasQrcode: !!result.qrcode
-      });
 
       return {
         code: result.code || 0,
@@ -184,11 +209,173 @@ export class EpayClient {
       };
 
     } catch (error) {
-      // 记录详细的错误信息
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      console.error('[EpayClient] 创建订单异常', {
-        error: errorMessage,
-        requestData: { ...requestData, sign: requestData.sign?.substring(0, 8) + '...' }
+      console.error('[EpayClient] v1 创建订单异常', {
+        error: errorMessage
+      });
+
+      return {
+        code: 0,
+        msg: `创建订单失败: ${errorMessage}`,
+      };
+    }
+  }
+
+  // v2 API 创建订单
+  private async createOrderV2(params: CreateOrderParams): Promise<EpayOrderResult> {
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    
+    const requestData: Record<string, string> = {
+      pid: this.config.pid,
+      method: params.method || "web",
+      type: params.payType || "alipay",
+      out_trade_no: params.orderNo,
+      notify_url: params.notifyUrl,
+      return_url: params.returnUrl,
+      name: params.productName || "虚拟商品",
+      money: params.amount.toFixed(2),
+      clientip: params.clientIp || "127.0.0.1",
+      timestamp: timestamp,
+    };
+
+    // 添加可选参数
+    if (params.productDesc) {
+      requestData.desc = params.productDesc;
+    }
+    if (params.device) {
+      requestData.device = params.device;
+    }
+    if (params.channelId) {
+      requestData.channel_id = params.channelId.toString();
+    }
+    if (params.authCode) {
+      requestData.auth_code = params.authCode;
+    }
+    if (params.subOpenid) {
+      requestData.sub_openid = params.subOpenid;
+    }
+    if (params.subAppid) {
+      requestData.sub_appid = params.subAppid;
+    }
+    if (params.param) {
+      requestData.param = params.param;
+    }
+
+    // 生成签名
+    const sign = this.generateSign(requestData);
+    requestData.sign = sign;
+    requestData.sign_type = this.config.signType || "RSA";
+
+    try {
+      const apiEndpoint = `${this.config.apiUrl}/api/pay/create`;
+      
+      console.log('[EpayClient] 使用 v2 API 发起支付请求', {
+        endpoint: apiEndpoint,
+        pid: this.config.pid,
+        method: params.method,
+        amount: params.amount,
+        orderNo: params.orderNo,
+        payType: params.payType,
+        timestamp: timestamp,
+        signType: this.config.signType,
+        signPreview: sign.substring(0, 8) + '...'
+      });
+
+      const response = await fetch(apiEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Accept": "application/json, text/plain, */*",
+          "User-Agent": "Saleor-Epay-Client/2.0"
+        },
+        body: new URLSearchParams(requestData).toString(),
+      });
+
+      console.log('[EpayClient] v2 API 响应状态', {
+        status: response.status,
+        statusText: response.statusText,
+        contentType: response.headers.get('content-type')
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          code: 0,
+          msg: `HTTP Error: ${response.status} - ${errorText}`,
+        };
+      }
+
+      const responseText = await response.text();
+      console.log('[EpayClient] v2 API 原始响应', {
+        responseLength: responseText.length,
+        responsePreview: responseText.substring(0, 200)
+      });
+
+      const result = JSON.parse(responseText) as SubmitV2Response;
+
+      console.log('[EpayClient] v2 解析后的响应', {
+        code: result.code,
+        msg: result.msg,
+        payType: result.pay_type,
+        hasPayInfo: !!result.pay_info,
+        tradeNo: result.trade_no
+      });
+
+      // 根据 pay_type 处理不同的支付方式
+      let payUrl: string | undefined;
+      let qrcode: string | undefined;
+
+      if (result.pay_info) {
+        try {
+          const payInfo = JSON.parse(result.pay_info);
+          
+          // 根据 pay_type 提取相应的支付信息
+          switch (result.pay_type) {
+            case "jump":
+              payUrl = payInfo; // 直接是 URL 字符串
+              break;
+            case "qrcode":
+              qrcode = payInfo; // 二维码链接或数据
+              break;
+            case "jsapi":
+            case "app":
+            case "wxplugin":
+            case "wxapp":
+              // 这些类型返回的是对象，需要前端进一步处理
+              console.log('[EpayClient] v2 特殊支付类型', {
+                payType: result.pay_type,
+                payInfo: payInfo
+              });
+              break;
+          }
+        } catch (parseError) {
+          console.warn('[EpayClient] v2 支付信息解析失败', {
+            payInfo: result.pay_info,
+            error: parseError
+          });
+        }
+      }
+
+      return {
+        code: result.code || 0,
+        msg: result.msg || "",
+        payUrl: payUrl,
+        tradeNo: result.trade_no,
+        qrcode: qrcode,
+        type: result.pay_type,
+        
+        // v2 特有字段
+        payType: result.pay_type,
+        payInfo: result.pay_info,
+        timestamp: result.timestamp,
+        sign: result.sign,
+        signType: result.sign_type,
+      };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error('[EpayClient] v2 创建订单异常', {
+        error: errorMessage
       });
 
       return {

@@ -92,6 +92,8 @@ async function getEpayConfig(
                 pid: gateway.epayPid,
                 key: gateway.epayKey,
                 apiUrl: gateway.epayUrl,
+                apiVersion: (gateway.apiVersion as "v1" | "v2") || "v1",
+                signType: (gateway.signType as "MD5" | "RSA") || "MD5",
               },
               returnUrl: null, // 目前数据库结构中没有 returnUrl 字段
             };
@@ -136,6 +138,8 @@ async function getEpayConfig(
           pid: firstGateway.epayPid,
           key: firstGateway.epayKey,
           apiUrl: firstGateway.epayUrl,
+          apiVersion: (firstGateway.apiVersion as "v1" | "v2") || "v1",
+          signType: (firstGateway.signType as "MD5" | "RSA") || "MD5",
         },
         returnUrl: null,
       };
@@ -321,6 +325,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     };
     const signTest = epayClient.testSignGeneration(testParams);
     logger.info({
+      apiVersion: epayConfig.apiVersion,
+      signType: epayConfig.signType,
       signTest
     }, "签名生成测试");
 
@@ -351,17 +357,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                      req.socket.remoteAddress || 
                      '127.0.0.1';
 
+    // 根据 User-Agent 检测设备类型（仅 v2 需要）
+    const userAgent = req.headers['user-agent'] || '';
+    let device = "pc";
+    if (userAgent.includes('Mobile') || userAgent.includes('Android') || userAgent.includes('iPhone')) {
+      device = "mobile";
+    }
+    if (userAgent.includes('MicroMessenger')) {
+      device = "wechat";
+    }
+    if (userAgent.includes('QQ')) {
+      device = "qq";
+    }
+    if (userAgent.includes('AlipayClient')) {
+      device = "alipay";
+    }
+
     // 创建彩虹易支付订单
-    const result = await epayClient.createOrder({
+    const createOrderParams = {
       amount: amountValue,
       orderNo,
       notifyUrl: `${env.APP_URL}/api/webhooks/epay-notify`,
-      returnUrl: returnUrl || `${env.APP_URL}/checkout/success`, // 使用配置的返回地址或默认地址
-      payType, // 直接使用传入的支付类型，支持自定义
+      returnUrl: returnUrl || `${env.APP_URL}/checkout/success`,
+      payType,
       productName,
       productDesc: `订单号: ${sourceObject?.number || "未知"}`,
-      clientIp: Array.isArray(clientIp) ? clientIp[0] : clientIp.split(',')[0].trim(), // 处理多重代理的情况
-    });
+      clientIp: Array.isArray(clientIp) ? clientIp[0] : clientIp.split(',')[0].trim(),
+      
+      // v2 API 额外参数
+      method: epayConfig.apiVersion === "v2" ? "web" : undefined,
+      device: epayConfig.apiVersion === "v2" ? device : undefined,
+    };
+
+    logger.info({
+      createOrderParams: {
+        ...createOrderParams,
+        clientIp: createOrderParams.clientIp?.substring(0, 10) + '...'
+      },
+      apiVersion: epayConfig.apiVersion,
+      detectedDevice: device
+    }, "创建订单参数");
+
+    const result = await epayClient.createOrder(createOrderParams);
     logger.info(
       {
         transactionId: transaction.id,

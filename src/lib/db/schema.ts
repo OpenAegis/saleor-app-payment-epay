@@ -12,6 +12,11 @@ export const gateways = sqliteTable("gateways", {
   epayUrl: text("epay_url").notNull(), // 易支付API地址
   epayPid: text("epay_pid").notNull(), // 易支付商户ID
   epayKey: text("epay_key").notNull(), // 易支付密钥
+  
+  // API 版本配置
+  apiVersion: text("api_version").notNull().default("v1"), // v1 或 v2
+  signType: text("sign_type").notNull().default("MD5"), // MD5 或 RSA
+  
   icon: text("icon"),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   priority: integer("priority").notNull().default(0),
