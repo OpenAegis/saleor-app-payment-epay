@@ -222,7 +222,9 @@ export class EpayClient {
     requestData.sign_type = this.config.signType || "MD5";
 
     try {
-      const apiEndpoint = `${this.config.apiUrl}/mapi.php`;
+      // 确保正确的 URL 拼接，避免双斜杠问题
+      const baseUrl = this.config.apiUrl.replace(/\/+$/, ''); // 移除尾部斜杠
+      const apiEndpoint = `${baseUrl}/mapi.php`;
       
       console.log('[EpayClient] 使用 v1 API 发起支付请求', {
         endpoint: apiEndpoint,
@@ -346,7 +348,9 @@ export class EpayClient {
     requestData.sign_type = this.config.signType || "RSA";
 
     try {
-      const apiEndpoint = `${this.config.apiUrl}/api/pay/create`;
+      // 确保正确的 URL 拼接，避免双斜杠问题
+      const baseUrl = this.config.apiUrl.replace(/\/+$/, ''); // 移除尾部斜杠
+      const apiEndpoint = `${baseUrl}/api/pay/create`;
       
       console.log('[EpayClient] 使用 v2 API 发起支付请求', {
         endpoint: apiEndpoint,
