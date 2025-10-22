@@ -114,8 +114,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       method: req.method,
       saleorApiUrl: req.headers["saleor-api-url"],
       userAgent: req.headers["user-agent"],
+      requestBody: req.body,
     }, "Process webhook called");
-    const { event } = req.body as { event: TransactionProcessEvent };
+
+    // 验证请求体结构
+    if (!req.body) {
+      logger.error({ requestBody: req.body }, "Request body is empty");
+      return res.status(400).json({
+        result: "CHARGE_FAILURE",
+        amount: 0,
+        message: "Request body is empty",
+      });
+    }
+
+    // 检查 event 属性是否存在
+    const body = req.body;
+    let event: TransactionProcessEvent;
+    
+    if (body.event) {
+      // 标准格式: { event: TransactionProcessEvent }
+      event = body.event;
+    } else if (body.action && body.transaction) {
+      // 直接格式: TransactionProcessEvent
+      event = body as TransactionProcessEvent;
+    } else {
+      logger.error({ body }, "Invalid request body structure");
+      return res.status(400).json({
+        result: "CHARGE_FAILURE",
+        amount: 0,
+        message: "Invalid request body structure",
+      });
+    }
+
     const parsedData = parseEventData(event.data);
     const { action, transaction } = event;
     amountValue = parseFloat(action.amount) || 0;
