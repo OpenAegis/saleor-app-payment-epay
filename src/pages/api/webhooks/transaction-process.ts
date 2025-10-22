@@ -387,13 +387,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    const orderNoToQuery = epayOrderNo || transaction.id;
-    let result = await epayClient.queryOrder(orderNoToQuery as string, !epayOrderNo);
+    // 使用 out_trade_no 参数查询我们自己生成的订单号
+    // epayOrderNo 是我们自己生成的订单号，应该作为 out_trade_no 参数传递
+    let result = await epayClient.queryOrder(epayOrderNo as string, true);
     logger.info(
       {
         transactionId: transaction.id,
         primaryQuery: epayOrderNo || transaction.id,
-        useOutTradeNo: !epayOrderNo,
+        useOutTradeNo: true, // 始终使用 out_trade_no 查询我们自己生成的订单号
         epayStatus: result.status,
         tradeStatus: result.trade_status,
       },
