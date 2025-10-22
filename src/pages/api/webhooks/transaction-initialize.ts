@@ -500,11 +500,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         epayCode: result.code,
         hasPayUrl: Boolean(result.payUrl),
         hasQrcode: Boolean(result.qrcode),
+        payUrl: result.payUrl,
+        qrcode: result.qrcode,
+        resultCode: result.code,
+        resultMsg: result.msg,
+        resultType: result.type,
+        resultPayType: result.payType,
+        hasPayInfo: Boolean(result.payInfo),
       },
       "Epay createOrder response",
     );
 
-    if (result.code === 0 && (result.payUrl || result.qrcode)) {
+    if (result.code === 1 && (result.payUrl || result.qrcode)) {
       // 返回支付链接或二维码
       return res.status(200).json({
         result: "CHARGE_ACTION_REQUIRED",
