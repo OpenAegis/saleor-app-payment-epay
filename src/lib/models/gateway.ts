@@ -3,7 +3,7 @@ import { z } from "zod";
 /**
  * 渠道（Gateway）- 具体的易支付配置
  */
-export const GatewaySchema = z.object({
+const BaseGatewaySchema = z.object({
   id: z.string(),
   name: z.string().min(1, "渠道名称不能为空"),
   description: z.string().optional(),
@@ -27,7 +27,10 @@ export const GatewaySchema = z.object({
 
   createdAt: z.string(),
   updatedAt: z.string(),
-}).refine((data) => {
+});
+
+// 添加验证的完整 Schema
+export const GatewaySchema = BaseGatewaySchema.refine((data) => {
   // v1 API 必须使用 MD5 签名
   if (data.apiVersion === "v1" && data.signType !== "MD5") {
     return false;
@@ -47,10 +50,24 @@ export const GatewaySchema = z.object({
 
 export type Gateway = z.infer<typeof GatewaySchema>;
 
-export const CreateGatewaySchema = GatewaySchema.omit({
+export const CreateGatewaySchema = BaseGatewaySchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).refine((data) => {
+  // 同样的验证逻辑
+  if (data.apiVersion === "v1" && data.signType !== "MD5") {
+    return false;
+  }
+  if (data.apiVersion === "v2" && data.signType !== "RSA") {
+    return false;
+  }
+  if (data.signType === "RSA" && !data.epayRsaPrivateKey?.trim()) {
+    return false;
+  }
+  return true;
+}, {
+  message: "API 版本与签名类型不匹配，或 RSA 签名缺少私钥",
 });
 
 export type CreateGatewayInput = z.infer<typeof CreateGatewaySchema>;
@@ -60,9 +77,25 @@ export type CreateGatewayAPIInput = Omit<CreateGatewayInput, 'allowedUsers'> & {
   allowedUsers: string[];
 };
 
-export const UpdateGatewaySchema = GatewaySchema.partial().omit({
+export const UpdateGatewaySchema = BaseGatewaySchema.partial().omit({
   id: true,
   createdAt: true,
+}).refine((data) => {
+  // 更新时的验证逻辑，但都是可选的
+  if (data.apiVersion && data.signType) {
+    if (data.apiVersion === "v1" && data.signType !== "MD5") {
+      return false;
+    }
+    if (data.apiVersion === "v2" && data.signType !== "RSA") {
+      return false;
+    }
+  }
+  if (data.signType === "RSA" && !data.epayRsaPrivateKey?.trim()) {
+    return false;
+  }
+  return true;
+}, {
+  message: "API 版本与签名类型不匹配，或 RSA 签名缺少私钥",
 });
 
 export type UpdateGatewayInput = z.infer<typeof UpdateGatewaySchema>;
