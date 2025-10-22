@@ -190,9 +190,73 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     }
 
-    // 获取支付配置
-    const epayConfig = await getEpayConfig(saleorApiUrl, authToken || "");
+    // 获取支付配置 - 从本地数据库
+    // 这里我们需要从 parsedData 中获取 gatewayId，或者使用默认配置
+    let epayConfig: EpayConfig | null = null;
+    
+    try {
+      // 尝试从 parsedData 中获取支付响应信息
+      const gatewayId = parsedData["gatewayId"] || parsedData["paymentMethodId"];
+      
+      logger.info({
+        transactionId: transaction.id,
+        gatewayId,
+        parsedDataKeys: Object.keys(parsedData)
+      }, "尝试获取支付配置");
+      
+      if (gatewayId) {
+        // 使用与 transaction-initialize 相同的方法
+        const { gatewayManager } = await import("@/lib/managers/gateway-manager");
+        const gateway = await gatewayManager.get(gatewayId);
+        
+        if (gateway && gateway.enabled) {
+          epayConfig = {
+            pid: gateway.epayPid,
+            key: gateway.epayKey,
+            rsaPrivateKey: gateway.epayRsaPrivateKey || undefined,
+            apiUrl: gateway.epayUrl,
+            apiVersion: (gateway.apiVersion as "v1" | "v2") || "v1",
+            signType: (gateway.signType as "MD5" | "RSA") || "MD5",
+          };
+          
+          logger.info({
+            gatewayId: gateway.id,
+            gatewayName: gateway.name,
+            apiVersion: gateway.apiVersion
+          }, "从本地数据库获取支付配置成功");
+        }
+      }
+      
+      // 如果没有特定配置，尝试获取默认配置
+      if (!epayConfig) {
+        const { gatewayManager } = await import("@/lib/managers/gateway-manager");
+        const enabledGateways = await gatewayManager.getEnabled();
+        
+        if (enabledGateways.length > 0) {
+          const firstGateway = enabledGateways[0];
+          epayConfig = {
+            pid: firstGateway.epayPid,
+            key: firstGateway.epayKey,
+            rsaPrivateKey: firstGateway.epayRsaPrivateKey || undefined,
+            apiUrl: firstGateway.epayUrl,
+            apiVersion: (firstGateway.apiVersion as "v1" | "v2") || "v1",
+            signType: (firstGateway.signType as "MD5" | "RSA") || "MD5",
+          };
+          
+          logger.info({
+            gatewayId: firstGateway.id,
+            gatewayName: firstGateway.name
+          }, "使用默认网关配置");
+        }
+      }
+    } catch (configError) {
+      logger.error({
+        error: configError instanceof Error ? configError.message : "未知错误"
+      }, "获取支付配置失败");
+    }
+    
     if (!epayConfig) {
+      logger.warn("无法获取支付配置");
       return res.status(200).json({
         result: "CHARGE_FAILURE",
         amount: amountValue,
@@ -203,8 +267,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     logger.info(
       {
         saleorApiUrl,
+        apiVersion: epayConfig.apiVersion,
+        signType: epayConfig.signType,
+        hasRsaKey: Boolean(epayConfig.rsaPrivateKey)
       },
-      "Loaded Epay configuration for process",
+      "从本地数据库加载支付配置用于处理",
     );
 
     const epayClient = createEpayClient(epayConfig);
