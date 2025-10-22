@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { createEpayClient, type EpayConfig } from "@/lib/epay/client";
+import { createEpayClient, EpayClient, type EpayConfig } from "@/lib/epay/client";
 import { env } from "@/lib/env.mjs";
 import { siteManager } from "@/lib/managers/site-manager";
 import { gatewayManager } from "@/lib/managers/gateway-manager";
@@ -380,21 +380,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                      req.socket.remoteAddress || 
                      '127.0.0.1';
 
-    // 根据 User-Agent 检测设备类型（仅 v2 需要）
+    // 使用 EpayClient 的设备检测方法
     const userAgent = req.headers['user-agent'] || '';
-    let device = "pc";
-    if (userAgent.includes('Mobile') || userAgent.includes('Android') || userAgent.includes('iPhone')) {
-      device = "mobile";
-    }
-    if (userAgent.includes('MicroMessenger')) {
-      device = "wechat";
-    }
-    if (userAgent.includes('QQ')) {
-      device = "qq";
-    }
-    if (userAgent.includes('AlipayClient')) {
-      device = "alipay";
-    }
+    const device = EpayClient.detectDevice(userAgent);
+    
+    // 根据设备类型和支付方式获取推荐的 method 参数（v2 API）
+    const recommendedMethod = EpayClient.getRecommendedMethod(device, payType);
+    
+    logger.info({
+      userAgent,
+      detectedDevice: device,
+      payType,
+      recommendedMethod
+    }, "设备检测和支付方式推荐");
 
     // 创建彩虹易支付订单
     const createOrderParams = {
@@ -408,7 +406,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       clientIp: Array.isArray(clientIp) ? clientIp[0] : clientIp.split(',')[0].trim(),
       
       // v2 API 额外参数
-      method: epayConfig.apiVersion === "v2" ? "web" : undefined,
+      method: epayConfig.apiVersion === "v2" ? recommendedMethod : undefined,
       device: epayConfig.apiVersion === "v2" ? device : undefined,
     };
 
