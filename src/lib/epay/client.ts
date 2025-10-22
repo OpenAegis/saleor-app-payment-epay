@@ -610,11 +610,14 @@ export class EpayClient {
 
   // 查询订单状态
   async queryOrder(tradeNoOrOutTradeNo: string, useOutTradeNo = false): Promise<EpayQueryResult> {
-    // 参考 v2 demo：查询接口需要 act=order，并支持 trade_no 或 out_trade_no
+    const apiVersion = this.config.apiVersion || "v1";
+    
+    // 根据 API 版本构建请求参数
     const requestData: Record<string, string> = {
       pid: this.config.pid,
       act: "order",
     };
+    
     if (useOutTradeNo) {
       requestData.out_trade_no = tradeNoOrOutTradeNo;
     } else {
@@ -622,7 +625,7 @@ export class EpayClient {
     }
 
     const sign = this.generateSign(requestData);
-    const signType = this.config.signType || "MD5";
+    const signType = this.config.signType || (apiVersion === "v2" ? "RSA" : "MD5");
     const params = new URLSearchParams({
       ...requestData,
       sign,
@@ -632,10 +635,20 @@ export class EpayClient {
     try {
       // 确保正确的 URL 拼接，避免双斜杠问题
       const baseUrl = this.config.apiUrl.replace(/\/+$/, ''); // 移除尾部斜杠
-      const queryEndpoint = `${baseUrl}/api.php`;
+      
+      // 根据 API 版本选择正确的查询端点
+      let queryEndpoint: string;
+      if (apiVersion === "v2") {
+        // v2 API 使用 /api/order/query 端点
+        queryEndpoint = `${baseUrl}/api/order/query`;
+      } else {
+        // v1 API 使用 /api.php 端点
+        queryEndpoint = `${baseUrl}/api.php`;
+      }
       
       console.log('[EpayClient] 查询订单请求', {
         endpoint: queryEndpoint,
+        apiVersion,
         pid: this.config.pid,
         act: requestData.act,
         useOutTradeNo,
@@ -681,20 +694,36 @@ export class EpayClient {
 
   // 查询商户信息
   async queryMerchantInfo(): Promise<MerchantInfoResponse> {
+    const apiVersion = this.config.apiVersion || "v1";
+    
     const requestData = {
       pid: this.config.pid,
       act: "query",
     };
 
     const sign = this.generateSign(requestData);
+    const signType = this.config.signType || (apiVersion === "v2" ? "RSA" : "MD5");
     const params = new URLSearchParams({
       ...requestData,
       sign,
-      sign_type: "MD5",
+      sign_type: signType,
     });
 
     try {
-      const response = await fetch(`${this.config.apiUrl}/api.php?${params.toString()}`);
+      // 确保正确的 URL 拼接，避免双斜杠问题
+      const baseUrl = this.config.apiUrl.replace(/\/+$/, ''); // 移除尾部斜杠
+      
+      // 根据 API 版本选择正确的端点
+      let endpoint: string;
+      if (apiVersion === "v2") {
+        // v2 API 可能使用不同的商户信息查询端点
+        endpoint = `${baseUrl}/api/merchant/info`;
+      } else {
+        // v1 API 使用 /api.php 端点
+        endpoint = `${baseUrl}/api.php`;
+      }
+      
+      const response = await fetch(`${endpoint}?${params.toString()}`);
 
       if (!response.ok) {
         const errorText = await response.text();

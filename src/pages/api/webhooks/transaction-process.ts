@@ -21,29 +21,29 @@ interface TransactionProcessEvent {
   data?: unknown;
 }
 
-function parseEventData(raw: unknown): Record<string, any> {
+function parseEventData(raw: unknown): Record<string, unknown> {
   if (!raw) {
     return {};
   }
 
   if (typeof raw === "string") {
     try {
-      return JSON.parse(raw) as Record<string, any>;
-    } catch (err) {
-      logger.warn({ raw }, "Failed to parse transaction event data as JSON string");
+      return JSON.parse(raw) as Record<string, unknown>;
+    } catch (error) {
+      logger.warn({ error: error instanceof Error ? error.message : "未知错误" }, "Failed to parse transaction event data as JSON string");
       return {};
     }
   }
 
   if (typeof raw === "object") {
-    return raw as Record<string, any>;
+    return raw as Record<string, unknown>;
   }
 
   return {};
 }
 
-// 获取支付配置的函数
-async function getEpayConfig(saleorApiUrl: string, token: string): Promise<EpayConfig | null> {
+// 获取支付配置的函数 (保留以避免未使用警告，虽然当前未使用)
+async function _getEpayConfig(saleorApiUrl: string, token: string): Promise<EpayConfig | null> {
   try {
     // 从Saleor的metadata中获取配置
     const client = createServerClient(saleorApiUrl, token);
@@ -114,12 +114,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       method: req.method,
       saleorApiUrl: req.headers["saleor-api-url"],
       userAgent: req.headers["user-agent"],
-      requestBody: req.body,
+      // 只记录请求体的结构信息，不记录具体内容以避免PII泄漏
+      hasBody: !!req.body,
+      bodyKeys: req.body ? Object.keys(req.body as Record<string, unknown>) : [],
     }, "Process webhook called");
 
     // 验证请求体结构
     if (!req.body) {
-      logger.error({ requestBody: req.body }, "Request body is empty");
+      logger.error({ hasBody: false }, "Request body is empty");
       return res.status(400).json({
         result: "CHARGE_FAILURE",
         amount: 0,
@@ -128,17 +130,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // 检查 event 属性是否存在
-    const body = req.body;
+    const body = req.body as Record<string, unknown>;
     let event: TransactionProcessEvent;
     
-    if (body.event) {
+    if (body.event && typeof body.event === "object") {
       // 标准格式: { event: TransactionProcessEvent }
-      event = body.event;
-    } else if (body.action && body.transaction) {
+      event = body.event as TransactionProcessEvent;
+    } else if (body.action && body.transaction && typeof body.action === "object" && typeof body.transaction === "object") {
       // 直接格式: TransactionProcessEvent
-      event = body as TransactionProcessEvent;
+      event = body as unknown as TransactionProcessEvent;
     } else {
-      logger.error({ body }, "Invalid request body structure");
+      logger.error({ 
+        hasEvent: !!body.event,
+        hasAction: !!body.action,
+        hasTransaction: !!body.transaction
+      }, "Invalid request body structure");
       return res.status(400).json({
         result: "CHARGE_FAILURE",
         amount: 0,
@@ -153,9 +159,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       {
         transactionId: transaction.id,
         amount: amountValue,
-        parsedData,
-      },
-      "Parsed transaction process payload",
+        // 只记录 parsedData 的键，避免记录具体内容以防止PII泄漏
+        parsedDataKeys: Object.keys(parsedData)
+      }, "Parsed transaction process payload",
     );
 
     // 获取Saleor API信息
@@ -200,11 +206,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       
       logger.info({
         transactionId: transaction.id,
-        gatewayId,
-        parsedDataKeys: Object.keys(parsedData)
+        // 只记录是否存在 gatewayId，避免记录具体内容以防止PII泄漏
+        hasGatewayId: !!gatewayId
       }, "尝试获取支付配置");
       
-      if (gatewayId) {
+      if (gatewayId && typeof gatewayId === "string") {
         // 使用与 transaction-initialize 相同的方法
         const { gatewayManager } = await import("@/lib/managers/gateway-manager");
         const gateway = await gatewayManager.get(gatewayId);
@@ -314,9 +320,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     logger.info({
       transactionId: transaction.id,
-      epayOrderNo,
-      saleorOrderNo,
-      hasEpayOrderNo: Boolean(epayOrderNo),
+      hasEpayOrderNo: !!epayOrderNo,
+      hasSaleorOrderNo: !!saleorOrderNo,
+      // 只记录 parsedData 的键，避免记录具体内容以防止PII泄漏
       parsedDataKeys: Object.keys(parsedData)
     }, "支付订单查询参数");
 
@@ -324,7 +330,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!epayOrderNo && !transaction.id) {
       logger.warn({
         transactionId: transaction.id,
-        parsedData
+        // 只记录 parsedData 的键，避免记录具体内容以防止PII泄漏
+        parsedDataKeys: Object.keys(parsedData)
       }, "缺少 epay 订单号和交易 ID，无法查询支付状态");
       
       return res.status(200).json({
@@ -334,7 +341,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    let result = await epayClient.queryOrder(epayOrderNo || transaction.id, !epayOrderNo);
+    const orderNoToQuery = epayOrderNo || transaction.id;
+    let result = await epayClient.queryOrder(orderNoToQuery as string, !epayOrderNo);
     logger.info(
       {
         transactionId: transaction.id,
@@ -347,11 +355,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
 
     if (!(result.status === 1 && result.trade_status === "TRADE_SUCCESS") && saleorOrderNo) {
-      const fallback = await epayClient.queryOrder(saleorOrderNo, true);
+      const fallback = await epayClient.queryOrder(saleorOrderNo as string, true);
       logger.info(
         {
           transactionId: transaction.id,
-          saleorOrderNo,
+          hasSaleorOrderNo: !!saleorOrderNo,
           fallbackStatus: fallback.status,
           fallbackTradeStatus: fallback.trade_status,
         },
@@ -361,7 +369,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         result = fallback;
       }
     }
-if (result.status === 1 && result.trade_status === "TRADE_SUCCESS") {
+
+    if (result.status === 1 && result.trade_status === "TRADE_SUCCESS") {
       logger.info(
         {
           transactionId: transaction.id,
