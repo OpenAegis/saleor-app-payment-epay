@@ -16,11 +16,23 @@ export class GatewayManager {
     const now = new Date().toISOString();
     const gateway: NewGateway = {
       id: randomId(),
-      ...input,
+      name: input.name,
+      description: input.description,
+      epayUrl: input.epayUrl,
+      epayPid: input.epayPid,
+      epayKey: input.epayKey,
+      epayRsaPrivateKey: input.epayRsaPrivateKey || null,
+      apiVersion: input.apiVersion || "v1",
+      signType: input.signType || "MD5",
+      icon: input.icon,
+      enabled: input.enabled ?? true,
+      priority: input.priority || 0,
+      isMandatory: input.isMandatory || false,
+      isGlobal: input.isGlobal ?? true,
       // 确保allowedUsers是JSON字符串
       allowedUsers: Array.isArray(input.allowedUsers) 
         ? JSON.stringify(input.allowedUsers)
-        : input.allowedUsers || "[]",
+        : JSON.stringify(input.allowedUsers || []),
       createdAt: now,
       updatedAt: now,
     };
