@@ -6,6 +6,9 @@ import { createLogger } from "@/lib/logger";
 import { createPrivateSettingsManager } from "@/modules/app-configuration/metadata-manager";
 import { EpayConfigManager } from "@/modules/payment-app-configuration/epay-config-manager";
 import { type EpayConfigEntry } from "@/modules/payment-app-configuration/epay-config";
+import { db } from "@/lib/db/turso-client";
+import { orderMappings } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 const logger = createLogger({ component: "EpayNotifyWebhook" });
 
@@ -178,8 +181,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           const client = createServerClient(saleorApiUrl, authToken);
 
           // 从out_trade_no中提取Saleor transaction ID
-          // 假设格式为: ORDER-{timestamp}-{random}-{transactionId}
-          const transactionId = params.out_trade_no.split("-").pop() || params.out_trade_no;
+          // 新格式: ORDER-{timestamp}-{random}-{hash8} 
+          // 旧格式: ORDER-{timestamp}-{random}-{transactionId}
+          const orderParts = params.out_trade_no.split("-");
+          const lastPart = orderParts.pop() || params.out_trade_no;
+          
+          let transactionId: string;
+          if (lastPart.length === 8 && !/[=+/]/.test(lastPart)) {
+            // 新格式：8位哈希值，从数据库查找对应的 transaction ID
+            try {
+              const mapping = await db
+                .select()
+                .from(orderMappings)
+                .where(eq(orderMappings.orderHash, lastPart))
+                .limit(1);
+              
+              if (mapping.length > 0) {
+                transactionId = mapping[0].transactionId;
+                logger.info(`通过哈希查找到交易ID: ${lastPart} -> ${transactionId}`);
+              } else {
+                logger.error(`未找到哈希值对应的交易ID: ${lastPart}`);
+                return res.status(400).send("fail");
+              }
+            } catch (dbError) {
+              logger.error(`查找交易ID映射失败: ${dbError instanceof Error ? dbError.message : '未知错误'}`);
+              return res.status(500).send("fail");
+            }
+          } else {
+            // 旧格式：直接使用最后一部分作为 transaction ID
+            transactionId = lastPart;
+          }
 
           const result = await client.mutation(TRANSACTION_EVENT_REPORT, {
             transactionId,

@@ -4,7 +4,9 @@ import { env } from "@/lib/env.mjs";
 import { siteManager } from "@/lib/managers/site-manager";
 import { gatewayManager } from "@/lib/managers/gateway-manager";
 import { channelManager } from "@/lib/managers/channel-manager";
-import { type Gateway, type Channel } from "@/lib/db/schema";
+import { type Gateway, type Channel, orderMappings, type NewOrderMapping } from "@/lib/db/schema";
+import { db } from "@/lib/db/turso-client";
+import { randomId } from "@/lib/random-id";
 import { createLogger } from "@/lib/logger";
 
 const logger = createLogger({ component: "TransactionInitializeWebhook" });
@@ -343,10 +345,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       logger.info(`使用自定义支付方式: ${payType ? payType : "unknown"}`);
     }
 
-    // 创建订单号（包含交易ID以便回调时识别）
-    const orderNo = `ORDER-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${
-      transaction.id
-    }`;
+    // 创建订单号（包含交易ID的哈希值以便回调时识别，避免特殊字符）
+    const crypto = require('crypto');
+    const transactionHash = crypto.createHash('md5').update(transaction.id).digest('hex').substring(0, 8);
+    const orderNo = `ORDER-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${transactionHash}`;
+
+    // 保存订单映射关系到数据库
+    try {
+      const now = new Date().toISOString();
+      const orderMapping: NewOrderMapping = {
+        id: randomId(),
+        orderNo,
+        orderHash: transactionHash,
+        transactionId: transaction.id,
+        saleorApiUrl,
+        status: "pending",
+        createdAt: now,
+        updatedAt: now,
+      };
+      await db.insert(orderMappings).values(orderMapping);
+      logger.info(`订单映射已保存: ${orderNo} -> ${transaction.id}`);
+    } catch (mappingError) {
+      logger.error(`保存订单映射失败: ${mappingError instanceof Error ? mappingError.message : '未知错误'}`);
+      // 不阻止支付流程，只记录错误
+    }
 
     // 获取商品名称（从订单信息中）
     const productName = sourceObject?.lines?.[0]?.productName || "订单支付";

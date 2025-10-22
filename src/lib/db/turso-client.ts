@@ -122,6 +122,29 @@ export async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS domain_whitelist_pattern_idx ON domain_whitelist(domain_pattern)
     `);
 
+    // 5. 创建order_mappings表 (订单映射) - 没有外键依赖
+    await tursoClient.execute(`
+      CREATE TABLE IF NOT EXISTS order_mappings (
+        id TEXT PRIMARY KEY,
+        order_no TEXT NOT NULL UNIQUE,
+        order_hash TEXT NOT NULL UNIQUE,
+        transaction_id TEXT NOT NULL,
+        saleor_api_url TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+
+    // 创建order_mappings表的索引
+    await tursoClient.execute(`
+      CREATE INDEX IF NOT EXISTS order_mappings_hash_idx ON order_mappings(order_hash)
+    `);
+
+    await tursoClient.execute(`
+      CREATE INDEX IF NOT EXISTS order_mappings_transaction_idx ON order_mappings(transaction_id)
+    `);
+
     // 数据库迁移：添加新的 API 版本字段
     await migrateApiVersionFields();
 

@@ -112,9 +112,32 @@ export const domainWhitelist = sqliteTable("domain_whitelist", {
     .default(sql`(datetime('now'))`),
 });
 
+/**
+ * 订单映射表
+ * 存储订单号哈希值和 Saleor transaction ID 的映射关系
+ */
+export const orderMappings = sqliteTable("order_mappings", {
+  id: text("id").primaryKey(),
+  orderNo: text("order_no").notNull().unique(), // 完整的订单号
+  orderHash: text("order_hash").notNull().unique(), // 订单号中的哈希部分 (8位)
+  transactionId: text("transaction_id").notNull(), // Saleor transaction ID
+  saleorApiUrl: text("saleor_api_url").notNull(), // 关联的 Saleor API URL
+  status: text("status").notNull().default("pending"), // pending, paid, failed
+  
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
 // 类型定义
 export type Channel = typeof channels.$inferSelect;
 export type NewChannel = typeof channels.$inferInsert;
+
+export type OrderMapping = typeof orderMappings.$inferSelect;
+export type NewOrderMapping = typeof orderMappings.$inferInsert;
 export type Gateway = typeof gateways.$inferSelect;
 export type NewGateway = typeof gateways.$inferInsert;
 export type Site = typeof sites.$inferSelect;
