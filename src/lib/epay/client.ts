@@ -119,6 +119,72 @@ export class EpayClient {
     this.config = config;
   }
 
+  /**
+   * 检测设备类型并返回合适的 device 参数
+   * @param userAgent 用户代理字符串
+   * @returns 设备类型
+   */
+  static detectDevice(userAgent?: string): string {
+    if (!userAgent) return 'pc';
+    
+    const ua = userAgent.toLowerCase();
+    
+    // 支付宝客户端
+    if (ua.includes('alipayclient') || ua.includes('alipay')) {
+      return 'alipay';
+    }
+    
+    // 微信内浏览器
+    if (ua.includes('micromessenger')) {
+      return 'wechat';
+    }
+    
+    // 手机QQ内浏览器
+    if (ua.includes('qq/') && (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone'))) {
+      return 'qq';
+    }
+    
+    // 移动设备浏览器
+    if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone') || ua.includes('ipad')) {
+      return 'mobile';
+    }
+    
+    // 默认为电脑浏览器
+    return 'pc';
+  }
+
+  /**
+   * 根据设备类型获取推荐的支付方式
+   * @param device 设备类型
+   * @param paymentType 支付类型 (alipay/wechat/etc.)
+   * @returns 推荐的 method 参数
+   */
+  static getRecommendedMethod(device: string, paymentType: string = 'alipay'): string {
+    // 对于 web 通用支付，根据设备和支付类型自动选择最佳方式
+    switch (device) {
+      case 'alipay':
+        // 支付宝客户端内，使用 jsapi 或 app 支付
+        return paymentType === 'alipay' ? 'jsapi' : 'web';
+      
+      case 'wechat':
+        // 微信内浏览器，使用 jsapi 支付
+        return paymentType === 'wechat' ? 'jsapi' : 'web';
+      
+      case 'qq':
+        // QQ 内浏览器，使用跳转支付
+        return 'jump';
+      
+      case 'mobile':
+        // 移动浏览器，优先使用二维码或跳转
+        return 'web'; // 让服务器根据具体情况决定
+      
+      case 'pc':
+      default:
+        // 电脑浏览器，使用通用网页支付
+        return 'web';
+    }
+  }
+
   // 创建支付订单
   async createOrder(params: CreateOrderParams): Promise<EpayOrderResult> {
     const apiVersion = this.config.apiVersion || "v1";
@@ -226,9 +292,21 @@ export class EpayClient {
   private async createOrderV2(params: CreateOrderParams): Promise<EpayOrderResult> {
     const timestamp = Math.floor(Date.now() / 1000).toString();
     
+    // 自动检测设备类型和推荐支付方式
+    const detectedDevice = params.device || EpayClient.detectDevice(params.clientIp);
+    const recommendedMethod = params.method || EpayClient.getRecommendedMethod(detectedDevice, params.payType);
+    
+    console.log('[EpayClient] v2 API 自动配置', {
+      originalDevice: params.device,
+      detectedDevice: detectedDevice,
+      originalMethod: params.method,
+      recommendedMethod: recommendedMethod,
+      payType: params.payType
+    });
+    
     const requestData: Record<string, string> = {
       pid: this.config.pid,
-      method: params.method || "web",
+      method: recommendedMethod,
       type: params.payType || "alipay",
       out_trade_no: params.orderNo,
       notify_url: params.notifyUrl,
@@ -243,9 +321,9 @@ export class EpayClient {
     if (params.productDesc) {
       requestData.desc = params.productDesc;
     }
-    if (params.device) {
-      requestData.device = params.device;
-    }
+    
+    // 使用检测到的设备类型
+    requestData.device = detectedDevice;
     if (params.channelId) {
       requestData.channel_id = params.channelId.toString();
     }
@@ -327,33 +405,79 @@ export class EpayClient {
       let qrcode: string | undefined;
 
       if (result.pay_info) {
-        try {
-          const payInfo = JSON.parse(result.pay_info);
-          
-          // 根据 pay_type 提取相应的支付信息
-          switch (result.pay_type) {
-            case "jump":
-              payUrl = typeof payInfo === 'string' ? payInfo : undefined; // 直接是 URL 字符串
-              break;
-            case "qrcode":
-              qrcode = typeof payInfo === 'string' ? payInfo : undefined; // 二维码链接或数据
-              break;
-            case "jsapi":
-            case "app":
-            case "wxplugin":
-            case "wxapp":
-              // 这些类型返回的是对象，需要前端进一步处理
-              console.log('[EpayClient] v2 特殊支付类型', {
+        // 根据 pay_type 决定如何处理 pay_info 数据
+        switch (result.pay_type) {
+          case "jump":
+            // 跳转支付: pay_info 直接是 URL 字符串
+            payUrl = result.pay_info;
+            console.log('[EpayClient] v2 跳转支付', {
+              payType: result.pay_type,
+              payUrl: payUrl
+            });
+            break;
+            
+          case "html":
+            // HTML 代码支付: pay_info 是 HTML 代码字符串
+            console.log('[EpayClient] v2 HTML 支付页面', {
+              payType: result.pay_type,
+              htmlLength: result.pay_info?.length || 0
+            });
+            // HTML 代码保存在 payInfo 中，前端可以直接渲染
+            break;
+            
+          case "qrcode":
+            // 二维码支付: pay_info 直接是二维码数据或URL
+            qrcode = result.pay_info;
+            console.log('[EpayClient] v2 二维码支付', {
+              payType: result.pay_type,
+              qrcode: qrcode
+            });
+            break;
+            
+          case "urlscheme":
+            // URL Scheme 跳转: pay_info 直接是 scheme URL
+            payUrl = result.pay_info;
+            console.log('[EpayClient] v2 URL Scheme 跳转', {
+              payType: result.pay_type,
+              scheme: payUrl
+            });
+            break;
+            
+          case "jsapi":
+          case "app":
+          case "scan":
+          case "wxplugin":
+          case "wxapp":
+            // 这些类型: pay_info 是 JSON 字符串，需要解析
+            try {
+              const payInfo = JSON.parse(result.pay_info);
+              console.log('[EpayClient] v2 JSON 参数支付类型', {
                 payType: result.pay_type,
                 payInfo: payInfo
               });
-              break;
-          }
-        } catch (parseError) {
-          console.warn('[EpayClient] v2 支付信息解析失败', {
-            payInfo: result.pay_info,
-            error: parseError
-          });
+              // 这些类型的参数保存在 payInfo 中，前端根据类型处理
+            } catch (parseError) {
+              console.warn('[EpayClient] v2 JSON 支付信息解析失败', {
+                payType: result.pay_type,
+                payInfo: result.pay_info,
+                error: parseError
+              });
+            }
+            break;
+            
+          default:
+            console.warn('[EpayClient] v2 未知支付类型', {
+              payType: result.pay_type,
+              payInfo: result.pay_info
+            });
+            // 对于未知类型，尝试作为字符串处理
+            if (result.pay_info && typeof result.pay_info === 'string') {
+              if (result.pay_info.startsWith('http')) {
+                payUrl = result.pay_info;
+              } else if (result.pay_info.includes('://')) {
+                payUrl = result.pay_info; // 可能是 scheme URL
+              }
+            }
         }
       }
 
