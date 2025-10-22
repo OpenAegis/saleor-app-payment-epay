@@ -163,14 +163,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const authToken = req.headers["authorization"]?.replace("Bearer ", "");
 
     // 验证必要参数
-    if (!saleorApiUrl || !authToken) {
-      logger.warn("缺少必要的Saleor API信息");
+    if (!saleorApiUrl) {
+      logger.warn("缺少Saleor API URL");
       return res.status(200).json({
       result: "CHARGE_FAILURE",
       amount: amountValue,
-      message: "缺少必要的Saleor API信息",
+      message: "缺少Saleor API URL",
     });
     }
+
+    // 对于某些 webhook，authorization header 可能是可选的
+    // 使用 Saleor 签名验证或其他认证方式
+    logger.info({
+      saleorApiUrl,
+      hasAuthToken: Boolean(authToken),
+      authTokenLength: authToken?.length || 0
+    }, "Saleor API 信息检查");
 
     // 检查站点授权
     const isSiteAuthorized = await checkSiteAuthorization(saleorApiUrl);
@@ -203,6 +211,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const epayOrderNo = parsedData["epayOrderNo"] || parsedData["pspReference"] || parsedData["externalId"];
     const saleorOrderNo = parsedData["saleorOrderNo"];
+
+    logger.info({
+      transactionId: transaction.id,
+      epayOrderNo,
+      saleorOrderNo,
+      hasEpayOrderNo: Boolean(epayOrderNo),
+      parsedDataKeys: Object.keys(parsedData)
+    }, "支付订单查询参数");
+
+    // 检查是否有足够的信息进行查询
+    if (!epayOrderNo && !transaction.id) {
+      logger.warn({
+        transactionId: transaction.id,
+        parsedData
+      }, "缺少 epay 订单号和交易 ID，无法查询支付状态");
+      
+      return res.status(200).json({
+        result: "CHARGE_FAILURE",
+        amount: amountValue,
+        message: "缺少必要的订单信息，无法查询支付状态",
+      });
+    }
 
     let result = await epayClient.queryOrder(epayOrderNo || transaction.id, !epayOrderNo);
     logger.info(
