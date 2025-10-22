@@ -9,7 +9,8 @@ export const GatewaySchema = z.object({
   description: z.string().optional(),
   epayUrl: z.string().url("易支付API地址必须是有效的URL").min(1, "易支付API地址不能为空"), // 易支付API地址
   epayPid: z.string().min(1, "易支付商户ID不能为空"), // 易支付商户ID
-  epayKey: z.string().min(1, "易支付密钥不能为空"), // 易支付密钥
+  epayKey: z.string().min(1, "易支付密钥不能为空"), // 易支付密钥 (MD5签名使用)
+  epayRsaPrivateKey: z.string().optional(), // RSA私钥 (RSA签名使用)
   
   // API 版本配置
   apiVersion: z.enum(["v1", "v2"]).default("v1"), // API 版本

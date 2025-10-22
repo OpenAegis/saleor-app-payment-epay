@@ -11,7 +11,8 @@ export const gateways = sqliteTable("gateways", {
   description: text("description"),
   epayUrl: text("epay_url").notNull(), // 易支付API地址
   epayPid: text("epay_pid").notNull(), // 易支付商户ID
-  epayKey: text("epay_key").notNull(), // 易支付密钥
+  epayKey: text("epay_key").notNull(), // 易支付密钥 (MD5签名使用)
+  epayRsaPrivateKey: text("epay_rsa_private_key"), // RSA私钥 (RSA签名使用)
   
   // API 版本配置
   apiVersion: text("api_version").notNull().default("v1"), // v1 或 v2

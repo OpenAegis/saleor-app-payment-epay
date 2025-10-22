@@ -2,7 +2,8 @@ import crypto from "crypto";
 
 export interface EpayConfig {
   pid: string;
-  key: string;
+  key: string; // MD5 签名使用的密钥
+  rsaPrivateKey?: string; // RSA 签名使用的私钥
   apiUrl: string;
   apiVersion?: "v1" | "v2"; // API 版本
   signType?: "MD5" | "RSA"; // 签名类型
@@ -403,15 +404,37 @@ export class EpayClient {
       .map((k) => `${k}=${params[k]}`)
       .join("&");
 
-    const signString = sortedParams + this.config.key;
-    const sign = crypto.createHash("md5").update(signString).digest("hex");
+    const signType = this.config.signType || "MD5";
+    let sign: string;
+
+    if (signType === "RSA") {
+      // RSA 签名：对于 v2 API，通常使用 RSA-SHA256
+      try {
+        if (!this.config.rsaPrivateKey) {
+          throw new Error("RSA 私钥未配置");
+        }
+        // 对于 RSA 签名，不需要在最后添加 key，直接对 sortedParams 签名
+        const signer = crypto.createSign('RSA-SHA256');
+        signer.update(sortedParams);
+        sign = signer.sign(this.config.rsaPrivateKey, 'base64');
+      } catch (error) {
+        console.error('[EpayClient] RSA 签名失败:', error);
+        // 如果 RSA 签名失败，抛出错误而不是降级
+        throw new Error(`RSA 签名失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      }
+    } else {
+      // MD5 签名：用于 v1 API
+      const signString = sortedParams + this.config.key;
+      sign = crypto.createHash("md5").update(signString).digest("hex");
+    }
     
     // 调试日志
     console.log('[EpayClient] 签名生成详情', {
       filteredParams: Object.keys(params).filter((k) => k !== "sign" && k !== "sign_type" && params[k]),
       sortedParams,
+      signType,
       keyLength: this.config.key.length,
-      signString: signString.substring(0, 50) + '...' + signString.substring(signString.length - 10),
+      signString: signType === "MD5" ? (sortedParams + this.config.key).substring(0, 50) + '...' : sortedParams,
       generatedSign: sign
     });
     

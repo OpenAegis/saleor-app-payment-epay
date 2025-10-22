@@ -36,6 +36,7 @@ export async function initializeDatabase() {
         epay_url TEXT NOT NULL,
         epay_pid TEXT NOT NULL,
         epay_key TEXT NOT NULL,
+        epay_rsa_private_key TEXT,
         api_version TEXT NOT NULL DEFAULT 'v1',
         sign_type TEXT NOT NULL DEFAULT 'MD5',
         icon TEXT,
@@ -136,10 +137,11 @@ export async function initializeDatabase() {
  */
 async function migrateApiVersionFields() {
   try {
-    // 检查 api_version 列是否存在
+    // 检查需要的列是否存在
     const columns = await tursoClient.execute(`PRAGMA table_info(gateways)`);
     const hasApiVersion = columns.rows.some(row => row.name === 'api_version');
     const hasSignType = columns.rows.some(row => row.name === 'sign_type');
+    const hasRsaPrivateKey = columns.rows.some(row => row.name === 'epay_rsa_private_key');
 
     if (!hasApiVersion) {
       await tursoClient.execute(`
@@ -155,8 +157,15 @@ async function migrateApiVersionFields() {
       console.log("✅ 添加 sign_type 字段");
     }
 
-    if (hasApiVersion && hasSignType) {
-      console.log("ℹ️ API 版本字段已存在，跳过迁移");
+    if (!hasRsaPrivateKey) {
+      await tursoClient.execute(`
+        ALTER TABLE gateways ADD COLUMN epay_rsa_private_key TEXT
+      `);
+      console.log("✅ 添加 epay_rsa_private_key 字段");
+    }
+
+    if (hasApiVersion && hasSignType && hasRsaPrivateKey) {
+      console.log("ℹ️ 所有 API 版本字段已存在，跳过迁移");
     }
   } catch (error) {
     console.error("❌ API 版本字段迁移失败:", error);

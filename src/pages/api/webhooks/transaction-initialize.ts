@@ -91,6 +91,7 @@ async function getEpayConfig(
               config: {
                 pid: gateway.epayPid,
                 key: gateway.epayKey,
+                rsaPrivateKey: gateway.epayRsaPrivateKey || undefined,
                 apiUrl: gateway.epayUrl,
                 apiVersion: (gateway.apiVersion as "v1" | "v2") || "v1",
                 signType: (gateway.signType as "MD5" | "RSA") || "MD5",

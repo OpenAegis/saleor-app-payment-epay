@@ -13,6 +13,7 @@ export function GatewayManager() {
     epayUrl: "",
     epayPid: "",
     epayKey: "",
+    epayRsaPrivateKey: "",
     apiVersion: "v1" as "v1" | "v2",
     signType: "MD5" as "MD5" | "RSA",
     icon: "",
@@ -76,6 +77,7 @@ export function GatewayManager() {
       epayUrl: "",
       epayPid: "",
       epayKey: "",
+      epayRsaPrivateKey: "",
       apiVersion: "v1" as "v1" | "v2",
       signType: "MD5" as "MD5" | "RSA",
       icon: "",
@@ -93,6 +95,7 @@ export function GatewayManager() {
       epayUrl: gateway.epayUrl,
       epayPid: gateway.epayPid,
       epayKey: gateway.epayKey,
+      epayRsaPrivateKey: gateway.epayRsaPrivateKey || "",
       apiVersion: (gateway.apiVersion as "v1" | "v2") || "v1",
       signType: (gateway.signType as "MD5" | "RSA") || "MD5",
       icon: gateway.icon || "",
@@ -249,6 +252,30 @@ export function GatewayManager() {
               style={{ width: "100%", padding: "8px", marginTop: "4px" }}
             />
           </Box>
+
+          {/* RSA 私钥字段 - 仅在选择 RSA 签名时显示 */}
+          {formData.signType === "RSA" && (
+            <Box>
+              <Text size={3}>RSA 私钥 (RSA 签名专用) *</Text>
+              <textarea
+                value={formData.epayRsaPrivateKey}
+                onChange={(e) => setFormData({ ...formData, epayRsaPrivateKey: e.target.value })}
+                required={formData.signType === "RSA"}
+                placeholder="请输入 RSA 私钥 (PKCS#1 或 PKCS#8 格式)"
+                rows={6}
+                style={{ 
+                  width: "100%", 
+                  padding: "8px", 
+                  marginTop: "4px",
+                  fontFamily: "monospace",
+                  fontSize: "12px"
+                }}
+              />
+              <Text size={2} color="default2" marginTop={1}>
+                请粘贴完整的 RSA 私钥，包括 -----BEGIN PRIVATE KEY----- 和 -----END PRIVATE KEY----- 标记
+              </Text>
+            </Box>
+          )}
 
           <Box display="grid" __gridTemplateColumns="1fr 1fr" gap={3}>
             <Box>
