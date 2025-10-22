@@ -276,8 +276,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const epayClient = createEpayClient(epayConfig);
 
-    const epayOrderNo = parsedData["epayOrderNo"] || parsedData["pspReference"] || parsedData["externalId"];
+    let epayOrderNo = parsedData["epayOrderNo"] || parsedData["pspReference"] || parsedData["externalId"];
     const saleorOrderNo = parsedData["saleorOrderNo"];
+
+    // 如果没有从 parsedData 获取到订单号，尝试从订单映射表查找
+    if (!epayOrderNo) {
+      try {
+        const { db } = await import("@/lib/db/turso-client");
+        const { orderMappings } = await import("@/lib/db/schema");
+        const { eq } = await import("drizzle-orm");
+        
+        const mapping = await db
+          .select()
+          .from(orderMappings)
+          .where(eq(orderMappings.transactionId, transaction.id))
+          .limit(1);
+        
+        if (mapping.length > 0) {
+          epayOrderNo = mapping[0].orderNo;
+          logger.info({
+            transactionId: transaction.id,
+            foundOrderNo: epayOrderNo,
+            mappingId: mapping[0].id
+          }, "从订单映射表找到对应的订单号");
+        } else {
+          logger.warn({
+            transactionId: transaction.id
+          }, "在订单映射表中未找到对应的订单号");
+        }
+      } catch (mappingError) {
+        logger.error({
+          error: mappingError instanceof Error ? mappingError.message : "未知错误",
+          transactionId: transaction.id
+        }, "查询订单映射表失败");
+      }
+    }
 
     logger.info({
       transactionId: transaction.id,

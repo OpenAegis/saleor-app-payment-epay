@@ -622,14 +622,29 @@ export class EpayClient {
     }
 
     const sign = this.generateSign(requestData);
+    const signType = this.config.signType || "MD5";
     const params = new URLSearchParams({
       ...requestData,
       sign,
-      sign_type: "MD5",
+      sign_type: signType,
     });
 
     try {
-      const response = await fetch(`${this.config.apiUrl}/api.php?${params.toString()}`, {
+      // 确保正确的 URL 拼接，避免双斜杠问题
+      const baseUrl = this.config.apiUrl.replace(/\/+$/, ''); // 移除尾部斜杠
+      const queryEndpoint = `${baseUrl}/api.php`;
+      
+      console.log('[EpayClient] 查询订单请求', {
+        endpoint: queryEndpoint,
+        pid: this.config.pid,
+        act: requestData.act,
+        useOutTradeNo,
+        tradeNoOrOutTradeNo,
+        signType,
+        signPreview: sign.substring(0, 20) + '...'
+      });
+      
+      const response = await fetch(`${queryEndpoint}?${params.toString()}`, {
         headers: { Accept: "application/json" },
       });
 
