@@ -248,9 +248,12 @@ export function GatewayManager() {
               value={formData.epayKey}
               onChange={(e) => setFormData({ ...formData, epayKey: e.target.value })}
               required
-              placeholder="易支付密钥"
+              placeholder="易支付密钥 (MD5 签名使用)"
               style={{ width: "100%", padding: "8px", marginTop: "4px" }}
             />
+            <Text size={2} color="default2" marginTop={1}>
+              请输入易支付平台提供的商户密钥，用于 MD5 签名验证
+            </Text>
           </Box>
 
           {/* RSA 私钥字段 - 仅在选择 RSA 签名时显示 */}
@@ -261,8 +264,8 @@ export function GatewayManager() {
                 value={formData.epayRsaPrivateKey}
                 onChange={(e) => setFormData({ ...formData, epayRsaPrivateKey: e.target.value })}
                 required={formData.signType === "RSA"}
-                placeholder="请输入 RSA 私钥 (PKCS#1 或 PKCS#8 格式)"
-                rows={6}
+                placeholder="请输入易支付平台的 RSA 私钥 (Base64 格式，不包含 BEGIN/END 标头)"
+                rows={8}
                 style={{ 
                   width: "100%", 
                   padding: "8px", 
@@ -272,7 +275,7 @@ export function GatewayManager() {
                 }}
               />
               <Text size={2} color="default2" marginTop={1}>
-                请粘贴完整的 RSA 私钥，包括 -----BEGIN PRIVATE KEY----- 和 -----END PRIVATE KEY----- 标记
+                请输入易支付平台提供的 RSA 私钥 (纯 Base64 格式，如：MIIEvQIBADANBgkqhkiG...)
               </Text>
             </Box>
           )}
@@ -287,7 +290,7 @@ export function GatewayManager() {
                   setFormData({ 
                     ...formData, 
                     apiVersion,
-                    signType: apiVersion === "v2" ? "RSA" : "MD5" // v2 默认使用 RSA
+                    signType: apiVersion === "v2" ? "RSA" : "MD5" // v1 强制 MD5, v2 强制 RSA
                   });
                 }}
                 style={{ width: "100%", padding: "8px", marginTop: "4px" }}
@@ -303,19 +306,23 @@ export function GatewayManager() {
             </Box>
 
             <Box>
-              <Text size={3}>签名类型 *</Text>
-              <select
+              <Text size={3}>签名类型 (自动匹配) *</Text>
+              <input
+                type="text"
                 value={formData.signType}
-                onChange={(e) => setFormData({ ...formData, signType: e.target.value as "MD5" | "RSA" })}
-                style={{ width: "100%", padding: "8px", marginTop: "4px" }}
-              >
-                <option value="MD5">MD5 签名</option>
-                <option value="RSA">RSA 签名</option>
-              </select>
+                disabled
+                style={{ 
+                  width: "100%", 
+                  padding: "8px", 
+                  marginTop: "4px",
+                  backgroundColor: "#f5f5f5",
+                  color: "#666"
+                }}
+              />
               <Text size={2} color="default2" marginTop={1}>
-                {formData.signType === "MD5" 
-                  ? "MD5 签名，适用于 v1 API" 
-                  : "RSA 签名，推荐用于 v2 API"}
+                {formData.apiVersion === "v1" 
+                  ? "v1 API 强制使用 MD5 签名" 
+                  : "v2 API 强制使用 RSA 签名，更安全"}
               </Text>
             </Box>
           </Box>

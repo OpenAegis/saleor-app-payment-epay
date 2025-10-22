@@ -413,10 +413,22 @@ export class EpayClient {
         if (!this.config.rsaPrivateKey) {
           throw new Error("RSA 私钥未配置");
         }
+
+        // 将易支付的 Base64 私钥转换为 PEM 格式
+        let privateKeyPem = this.config.rsaPrivateKey.trim();
+        
+        // 如果不是 PEM 格式，则转换为 PEM 格式
+        if (!privateKeyPem.startsWith('-----BEGIN')) {
+          // 移除所有空白字符和换行符
+          const base64Key = privateKeyPem.replace(/\s/g, '');
+          // 转换为 PEM 格式
+          privateKeyPem = `-----BEGIN PRIVATE KEY-----\n${base64Key.match(/.{1,64}/g)?.join('\n') || base64Key}\n-----END PRIVATE KEY-----`;
+        }
+
         // 对于 RSA 签名，不需要在最后添加 key，直接对 sortedParams 签名
         const signer = crypto.createSign('RSA-SHA256');
         signer.update(sortedParams);
-        sign = signer.sign(this.config.rsaPrivateKey, 'base64');
+        sign = signer.sign(privateKeyPem, 'base64');
       } catch (error) {
         console.error('[EpayClient] RSA 签名失败:', error);
         // 如果 RSA 签名失败，抛出错误而不是降级
@@ -433,7 +445,7 @@ export class EpayClient {
       filteredParams: Object.keys(params).filter((k) => k !== "sign" && k !== "sign_type" && params[k]),
       sortedParams,
       signType,
-      keyLength: this.config.key.length,
+      keyLength: signType === "MD5" ? this.config.key.length : (this.config.rsaPrivateKey?.length || 0),
       signString: signType === "MD5" ? (sortedParams + this.config.key).substring(0, 50) + '...' : sortedParams,
       generatedSign: sign
     });

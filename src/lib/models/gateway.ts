@@ -27,6 +27,22 @@ export const GatewaySchema = z.object({
 
   createdAt: z.string(),
   updatedAt: z.string(),
+}).refine((data) => {
+  // v1 API 必须使用 MD5 签名
+  if (data.apiVersion === "v1" && data.signType !== "MD5") {
+    return false;
+  }
+  // v2 API 必须使用 RSA 签名
+  if (data.apiVersion === "v2" && data.signType !== "RSA") {
+    return false;
+  }
+  // RSA 签名时必须提供 RSA 私钥
+  if (data.signType === "RSA" && !data.epayRsaPrivateKey?.trim()) {
+    return false;
+  }
+  return true;
+}, {
+  message: "API 版本与签名类型不匹配，或 RSA 签名缺少私钥",
 });
 
 export type Gateway = z.infer<typeof GatewaySchema>;
