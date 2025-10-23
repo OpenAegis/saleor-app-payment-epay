@@ -19,14 +19,9 @@ const formatEpayClientError = (error: unknown) => {
   const cause = nodeError.cause;
 
   const causeMessage =
-    cause instanceof Error
-      ? cause.message
-      : typeof cause === "string"
-        ? cause
-        : undefined;
+    cause instanceof Error ? cause.message : typeof cause === "string" ? cause : undefined;
 
-  const causeCode =
-    cause instanceof Error ? (cause as NodeLikeError).code : undefined;
+  const causeCode = cause instanceof Error ? (cause as NodeLikeError).code : undefined;
 
   const suffixParts: string[] = [];
 
@@ -42,9 +37,7 @@ const formatEpayClientError = (error: unknown) => {
 
   const baseMessage = nodeError.message || "Unknown error";
   const formattedMessage =
-    suffixParts.length > 0
-      ? `${baseMessage} (${suffixParts.join(", ")})`
-      : baseMessage;
+    suffixParts.length > 0 ? `${baseMessage} (${suffixParts.join(", ")})` : baseMessage;
 
   return {
     message: formattedMessage,
@@ -436,6 +429,9 @@ export class EpayClient {
         signPreview: sign.substring(0, 8) + "...",
       });
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超时
+
       const response = await fetch(apiEndpoint, {
         method: "POST",
         headers: {
@@ -444,7 +440,10 @@ export class EpayClient {
           "User-Agent": "Saleor-Epay-Client/2.0",
         },
         body: new URLSearchParams(requestData).toString(),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       console.log("[EpayClient] v2 API 响应状态", {
         status: response.status,
@@ -573,12 +572,30 @@ export class EpayClient {
         signType: result.sign_type,
       };
     } catch (error) {
-      const { message: formattedMessage, logPayload } = formatEpayClientError(error);
-      console.error("[EpayClient] v2 创建订单异常", logPayload);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error("[EpayClient] v2 创建订单异常", {
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+
+      // 提供更具体的错误信息
+      let detailedMessage = `创建订单失败: ${errorMessage}`;
+      if (error instanceof Error) {
+        const cause = error.cause as { code?: string };
+        if (cause && typeof cause === "object" && "code" in cause) {
+          if (cause.code === "UND_ERR_CONNECT_TIMEOUT") {
+            detailedMessage = "创建订单失败: 连接支付网关超时，请检查网络连接或稍后重试";
+          } else if (cause.code === "ECONNREFUSED") {
+            detailedMessage = "创建订单失败: 无法连接到支付网关，请检查支付网关服务器状态";
+          } else if (cause.code) {
+            detailedMessage = `创建订单失败: ${cause.code} - ${errorMessage}`;
+          }
+        }
+      }
 
       return {
         code: 0,
-        msg: `创建订单失败: ${formattedMessage}`,
+        msg: detailedMessage,
       };
     }
   }

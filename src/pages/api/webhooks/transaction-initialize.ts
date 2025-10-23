@@ -493,6 +493,44 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
 
     const result = await epayClient.createOrder(createOrderParams);
+
+    // 如果第一次尝试失败，进行重试
+    let retryCount = 0;
+    const maxRetries = 2;
+    while (result.code === 0 && retryCount < maxRetries) {
+      logger.warn(
+        {
+          transactionId: transaction.id,
+          orderNo,
+          retryCount: retryCount + 1,
+          maxRetries,
+          errorMessage: result.msg,
+        },
+        "Epay createOrder failed, retrying...",
+      );
+
+      // 等待一段时间再重试
+      await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
+
+      const retryResult = await epayClient.createOrder(createOrderParams);
+      if (retryResult.code !== 0) {
+        // 重试成功
+        logger.info(
+          {
+            transactionId: transaction.id,
+            orderNo,
+            retryCount: retryCount + 1,
+            resultCode: retryResult.code,
+          },
+          "Epay createOrder succeeded after retry",
+        );
+        Object.assign(result, retryResult);
+        break;
+      }
+
+      retryCount++;
+    }
+
     logger.info(
       {
         transactionId: transaction.id,
@@ -511,7 +549,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       "Epay createOrder response",
     );
 
-    if (result.code === 0 && (result.payUrl || result.qrcode)) {
+    if (result.code === 1 && (result.payUrl || result.qrcode)) {
       // 返回支付链接或二维码
       return res.status(200).json({
         result: "CHARGE_ACTION_REQUIRED",
