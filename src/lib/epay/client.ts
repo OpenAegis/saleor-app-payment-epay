@@ -463,8 +463,10 @@ export class EpayClient {
             const errorText = await response.text();
             // 如果是服务器错误且不是最后一次尝试，继续重试
             if (response.status >= 500 && attempt < maxRetries) {
-              console.warn(`[EpayClient] 服务器错误 (${response.status}), 将在 ${attempt * 1000}ms 后重试...`);
-              await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+              console.warn(
+                `[EpayClient] 服务器错误 (${response.status}), 将在 ${attempt * 1000}ms 后重试...`,
+              );
+              await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
               continue;
             }
             return {
@@ -597,7 +599,7 @@ export class EpayClient {
           // 如果不是最后一次尝试，等待后重试
           if (attempt < maxRetries) {
             console.log(`[EpayClient] 等待 ${attempt * 1000}ms 后进行第 ${attempt + 1} 次重试...`);
-            await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+            await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
           }
         }
       }
@@ -626,7 +628,7 @@ export class EpayClient {
             detailedMessage = `创建订单失败: ${cause.code} - ${errorMessage}`;
           }
         }
-        
+
         // 检查是否是网络错误
         if (errorMessage.includes("fetch failed") && !cause) {
           detailedMessage = "创建订单失败: 网络连接异常，请检查网络设置或稍后重试";

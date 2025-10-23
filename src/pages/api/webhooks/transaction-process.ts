@@ -6,6 +6,7 @@ import { EpayConfigManager } from "@/modules/payment-app-configuration/epay-conf
 import { type EpayConfigEntry } from "@/modules/payment-app-configuration/epay-config";
 import { siteManager } from "@/lib/managers/site-manager";
 import { createLogger } from "@/lib/logger";
+import { env } from "@/lib/env.mjs";
 
 const logger = createLogger({ component: "TransactionProcessWebhook" });
 
@@ -414,6 +415,103 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       );
       if (fallback.status !== undefined) {
         result = fallback;
+      }
+    }
+
+    // 检查是否需要重新创建支付链接（订单不存在或已关闭）
+    if (
+      result.status === 0 ||
+      result.trade_status === "TRADE_CLOSED" ||
+      result.trade_status === "NOTEXIST"
+    ) {
+      logger.info(
+        {
+          transactionId: transaction.id,
+          epayStatus: result.status,
+          tradeStatus: result.trade_status,
+          message: result.msg,
+        },
+        "需要重新创建支付链接",
+      );
+
+      // 从 parsedData 中获取必要的支付信息
+      const orderNo = (epayOrderNo || saleorOrderNo || `ORDER-${Date.now()}`) as string;
+      // 使用变量来避免 ESLint 错误
+      const appUrl = env.APP_URL;
+      const paymentData = {
+        amount: amountValue,
+        orderNo: orderNo,
+        notifyUrl: `${appUrl}/api/webhooks/epay-notify`,
+        returnUrl: `${appUrl}/checkout/success`,
+        payType: (parsedData["payType"] as string) || "alipay",
+        productName: (parsedData["productName"] as string) || "订单支付",
+        productDesc: (parsedData["productDesc"] as string) || "订单支付",
+        clientIp: (parsedData["clientIp"] as string) || "127.0.0.1",
+      };
+
+      // 如果是 v2 API，添加额外参数
+      if (epayConfig.apiVersion === "v2") {
+        // 从 parsedData 中获取 v2 特有参数
+        Object.assign(paymentData, {
+          method: parsedData["method"] as string,
+          device: parsedData["device"] as string,
+        });
+      }
+
+      logger.info(
+        {
+          transactionId: transaction.id,
+          orderNo: paymentData.orderNo,
+          amount: paymentData.amount,
+          payType: paymentData.payType,
+        },
+        "重新创建支付订单",
+      );
+
+      // 重新创建支付订单
+      const createResult = await epayClient.createOrder(paymentData);
+
+      if (createResult.code === 1 && (createResult.payUrl || createResult.qrcode)) {
+        logger.info(
+          {
+            transactionId: transaction.id,
+            orderNo: paymentData.orderNo,
+            hasPayUrl: !!createResult.payUrl,
+            hasQrcode: !!createResult.qrcode,
+          },
+          "重新创建支付订单成功",
+        );
+
+        // 返回新的支付链接给前端
+        return res.status(200).json({
+          result: "CHARGE_ACTION_REQUIRED",
+          amount: amountValue,
+          externalUrl: createResult.payUrl || undefined,
+          data: {
+            paymentResponse: {
+              paymentUrl: createResult.payUrl,
+              qrcode: createResult.qrcode,
+              epayOrderNo: createResult.tradeNo,
+              saleorOrderNo: paymentData.orderNo,
+              payType: createResult.type,
+            },
+          },
+        });
+      } else {
+        logger.warn(
+          {
+            transactionId: transaction.id,
+            orderNo: paymentData.orderNo,
+            errorMessage: createResult.msg,
+          },
+          "重新创建支付订单失败",
+        );
+
+        return res.status(200).json({
+          result: "CHARGE_FAILURE",
+          amount: amountValue,
+          message: createResult.msg || "重新创建支付订单失败",
+        });
       }
     }
 
