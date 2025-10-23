@@ -429,148 +429,181 @@ export class EpayClient {
         signPreview: sign.substring(0, 8) + "...",
       });
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超时
+      // 增强的超时和重试机制
+      const maxRetries = 3;
+      let lastError: unknown;
 
-      const response = await fetch(apiEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json, text/plain, */*",
-          "User-Agent": "Saleor-Epay-Client/2.0",
-        },
-        body: new URLSearchParams(requestData).toString(),
-        signal: controller.signal,
-      });
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const controller = new AbortController();
+          // 增加超时时间到 30 秒
+          const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-      clearTimeout(timeoutId);
+          const response = await fetch(apiEndpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              Accept: "application/json, text/plain, */*",
+              "User-Agent": "Saleor-Epay-Client/2.0",
+            },
+            body: new URLSearchParams(requestData).toString(),
+            signal: controller.signal,
+          });
 
-      console.log("[EpayClient] v2 API 响应状态", {
-        status: response.status,
-        statusText: response.statusText,
-        contentType: response.headers.get("content-type"),
-      });
+          clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        return {
-          code: 0,
-          msg: `HTTP Error: ${response.status} - ${errorText}`,
-        };
-      }
+          console.log("[EpayClient] v2 API 响应状态", {
+            attempt,
+            status: response.status,
+            statusText: response.statusText,
+            contentType: response.headers.get("content-type"),
+          });
 
-      const responseText = await response.text();
-      console.log("[EpayClient] v2 API 原始响应", {
-        responseLength: responseText.length,
-        responsePreview: responseText.substring(0, 200),
-      });
-
-      const result = JSON.parse(responseText) as SubmitV2Response;
-
-      console.log("[EpayClient] v2 解析后的响应", {
-        code: result.code,
-        msg: result.msg,
-        payType: result.pay_type,
-        hasPayInfo: !!result.pay_info,
-        tradeNo: result.trade_no,
-      });
-
-      // 根据 pay_type 处理不同的支付方式
-      let payUrl: string | undefined;
-      let qrcode: string | undefined;
-
-      if (result.pay_info) {
-        // 根据 pay_type 决定如何处理 pay_info 数据
-        switch (result.pay_type) {
-          case "jump":
-            // 跳转支付: pay_info 直接是 URL 字符串
-            payUrl = result.pay_info;
-            console.log("[EpayClient] v2 跳转支付", {
-              payType: result.pay_type,
-              payUrl: payUrl,
-            });
-            break;
-
-          case "html":
-            // HTML 代码支付: pay_info 是 HTML 代码字符串
-            console.log("[EpayClient] v2 HTML 支付页面", {
-              payType: result.pay_type,
-              htmlLength: result.pay_info?.length || 0,
-            });
-            // HTML 代码保存在 payInfo 中，前端可以直接渲染
-            break;
-
-          case "qrcode":
-            // 二维码支付: pay_info 直接是二维码数据或URL
-            qrcode = result.pay_info;
-            console.log("[EpayClient] v2 二维码支付", {
-              payType: result.pay_type,
-              qrcode: qrcode,
-            });
-            break;
-
-          case "urlscheme":
-            // URL Scheme 跳转: pay_info 直接是 scheme URL
-            payUrl = result.pay_info;
-            console.log("[EpayClient] v2 URL Scheme 跳转", {
-              payType: result.pay_type,
-              scheme: payUrl,
-            });
-            break;
-
-          case "jsapi":
-          case "app":
-          case "scan":
-          case "wxplugin":
-          case "wxapp":
-            // 这些类型: pay_info 是 JSON 字符串，需要解析
-            try {
-              const payInfo = JSON.parse(result.pay_info);
-              console.log("[EpayClient] v2 JSON 参数支付类型", {
-                payType: result.pay_type,
-                payInfo: payInfo,
-              });
-              // 这些类型的参数保存在 payInfo 中，前端根据类型处理
-            } catch (parseError) {
-              console.warn("[EpayClient] v2 JSON 支付信息解析失败", {
-                payType: result.pay_type,
-                payInfo: result.pay_info,
-                error: parseError,
-              });
+          if (!response.ok) {
+            const errorText = await response.text();
+            // 如果是服务器错误且不是最后一次尝试，继续重试
+            if (response.status >= 500 && attempt < maxRetries) {
+              console.warn(`[EpayClient] 服务器错误 (${response.status}), 将在 ${attempt * 1000}ms 后重试...`);
+              await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+              continue;
             }
-            break;
+            return {
+              code: 0,
+              msg: `HTTP Error: ${response.status} - ${errorText}`,
+            };
+          }
 
-          default:
-            console.warn("[EpayClient] v2 未知支付类型", {
-              payType: result.pay_type,
-              payInfo: result.pay_info,
-            });
-            // 对于未知类型，尝试作为字符串处理
-            if (result.pay_info && typeof result.pay_info === "string") {
-              if (result.pay_info.startsWith("http")) {
+          const responseText = await response.text();
+          console.log("[EpayClient] v2 API 原始响应", {
+            attempt,
+            responseLength: responseText.length,
+            responsePreview: responseText.substring(0, 200),
+          });
+
+          const result = JSON.parse(responseText) as SubmitV2Response;
+
+          console.log("[EpayClient] v2 解析后的响应", {
+            attempt,
+            code: result.code,
+            msg: result.msg,
+            payType: result.pay_type,
+            hasPayInfo: !!result.pay_info,
+            tradeNo: result.trade_no,
+          });
+
+          // 根据 pay_type 处理不同的支付方式
+          let payUrl: string | undefined;
+          let qrcode: string | undefined;
+
+          if (result.pay_info) {
+            // 根据 pay_type 决定如何处理 pay_info 数据
+            switch (result.pay_type) {
+              case "jump":
+                // 跳转支付: pay_info 直接是 URL 字符串
                 payUrl = result.pay_info;
-              } else if (result.pay_info.includes("://")) {
-                payUrl = result.pay_info; // 可能是 scheme URL
-              }
+                console.log("[EpayClient] v2 跳转支付", {
+                  payType: result.pay_type,
+                  payUrl: payUrl,
+                });
+                break;
+
+              case "html":
+                // HTML 代码支付: pay_info 是 HTML 代码字符串
+                console.log("[EpayClient] v2 HTML 支付页面", {
+                  payType: result.pay_type,
+                  htmlLength: result.pay_info?.length || 0,
+                });
+                // HTML 代码保存在 payInfo 中，前端可以直接渲染
+                break;
+
+              case "qrcode":
+                // 二维码支付: pay_info 直接是二维码数据或URL
+                qrcode = result.pay_info;
+                console.log("[EpayClient] v2 二维码支付", {
+                  payType: result.pay_type,
+                  qrcode: qrcode,
+                });
+                break;
+
+              case "urlscheme":
+                // URL Scheme 跳转: pay_info 直接是 scheme URL
+                payUrl = result.pay_info;
+                console.log("[EpayClient] v2 URL Scheme 跳转", {
+                  payType: result.pay_type,
+                  scheme: payUrl,
+                });
+                break;
+
+              case "jsapi":
+              case "app":
+              case "scan":
+              case "wxplugin":
+              case "wxapp":
+                // 这些类型: pay_info 是 JSON 字符串，需要解析
+                try {
+                  const payInfo = JSON.parse(result.pay_info);
+                  console.log("[EpayClient] v2 JSON 参数支付类型", {
+                    payType: result.pay_type,
+                    payInfo: payInfo,
+                  });
+                  // 这些类型的参数保存在 payInfo 中，前端根据类型处理
+                } catch (parseError) {
+                  console.warn("[EpayClient] v2 JSON 支付信息解析失败", {
+                    payType: result.pay_type,
+                    payInfo: result.pay_info,
+                    error: parseError,
+                  });
+                }
+                break;
+
+              default:
+                console.warn("[EpayClient] v2 未知支付类型", {
+                  payType: result.pay_type,
+                  payInfo: result.pay_info,
+                });
+                // 对于未知类型，尝试作为字符串处理
+                if (result.pay_info && typeof result.pay_info === "string") {
+                  if (result.pay_info.startsWith("http")) {
+                    payUrl = result.pay_info;
+                  } else if (result.pay_info.includes("://")) {
+                    payUrl = result.pay_info; // 可能是 scheme URL
+                  }
+                }
             }
+          }
+
+          return {
+            code: result.code || (result.pay_info ? 1 : 0), // 如果有pay_info，认为是成功的
+            msg: result.msg || "",
+            payUrl: payUrl,
+            tradeNo: result.trade_no,
+            qrcode: qrcode,
+            type: result.pay_type,
+
+            // v2 特有字段
+            payType: result.pay_type,
+            payInfo: result.pay_info,
+            timestamp: result.timestamp,
+            sign: result.sign,
+            signType: result.sign_type,
+          };
+        } catch (error) {
+          lastError = error;
+          console.error(`[EpayClient] v2 创建订单尝试 ${attempt} 失败`, {
+            error: error instanceof Error ? error.message : "Unknown error",
+            stack: error instanceof Error ? error.stack : undefined,
+          });
+
+          // 如果不是最后一次尝试，等待后重试
+          if (attempt < maxRetries) {
+            console.log(`[EpayClient] 等待 ${attempt * 1000}ms 后进行第 ${attempt + 1} 次重试...`);
+            await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+          }
         }
       }
 
-      return {
-        code: result.code || (result.pay_info ? 1 : 0), // 如果有pay_info，认为是成功的
-        msg: result.msg || "",
-        payUrl: payUrl,
-        tradeNo: result.trade_no,
-        qrcode: qrcode,
-        type: result.pay_type,
-
-        // v2 特有字段
-        payType: result.pay_type,
-        payInfo: result.pay_info,
-        timestamp: result.timestamp,
-        sign: result.sign,
-        signType: result.sign_type,
-      };
+      // 所有重试都失败了
+      throw lastError;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       console.error("[EpayClient] v2 创建订单异常", {
@@ -587,9 +620,16 @@ export class EpayClient {
             detailedMessage = "创建订单失败: 连接支付网关超时，请检查网络连接或稍后重试";
           } else if (cause.code === "ECONNREFUSED") {
             detailedMessage = "创建订单失败: 无法连接到支付网关，请检查支付网关服务器状态";
+          } else if (cause.code === "ENOTFOUND") {
+            detailedMessage = "创建订单失败: 无法解析支付网关域名，请检查网络DNS设置";
           } else if (cause.code) {
             detailedMessage = `创建订单失败: ${cause.code} - ${errorMessage}`;
           }
+        }
+        
+        // 检查是否是网络错误
+        if (errorMessage.includes("fetch failed") && !cause) {
+          detailedMessage = "创建订单失败: 网络连接异常，请检查网络设置或稍后重试";
         }
       }
 

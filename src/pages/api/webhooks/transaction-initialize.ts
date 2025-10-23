@@ -494,9 +494,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const result = await epayClient.createOrder(createOrderParams);
 
-    // 如果第一次尝试失败，进行重试
+    // 增强的重试机制
     let retryCount = 0;
-    const maxRetries = 2;
+    const maxRetries = 3;
     while (result.code !== 1 && retryCount < maxRetries) {
       logger.warn(
         {
@@ -511,8 +511,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         "Epay createOrder failed, retrying...",
       );
 
-      // 等待一段时间再重试
-      await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
+      // 增加递增的等待时间
+      const waitTime = Math.pow(2, retryCount) * 1000; // 指数退避: 1秒, 2秒, 4秒
+      logger.info(
+        {
+          transactionId: transaction.id,
+          orderNo,
+          retryCount: retryCount + 1,
+          waitTime,
+        },
+        "等待后重试...",
+      );
+      
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
 
       const retryResult = await epayClient.createOrder(createOrderParams);
       if (retryResult.code === 1 || retryResult.payUrl || retryResult.qrcode) {
@@ -553,6 +564,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       "Epay createOrder response",
     );
 
+    // 修复条件判断，v2 API 成功时 code 为 1
     if (result.code === 1 && (result.payUrl || result.qrcode)) {
       // 返回支付链接或二维码
       return res.status(200).json({
