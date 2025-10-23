@@ -1,9 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { createEpayClient, type EpayConfig } from "@/lib/epay/client";
-import { createServerClient } from "@/lib/create-graphq-client";
-import { createPrivateSettingsManager } from "@/modules/app-configuration/metadata-manager";
-import { EpayConfigManager } from "@/modules/payment-app-configuration/epay-config-manager";
-import { type EpayConfigEntry } from "@/modules/payment-app-configuration/epay-config";
 import { siteManager } from "@/lib/managers/site-manager";
 import { createLogger } from "@/lib/logger";
 
@@ -43,35 +39,6 @@ function parseEventData(raw: unknown): Record<string, unknown> {
   }
 
   return {};
-}
-
-// 获取支付配置的函数 (保留以避免未使用警告，虽然当前未使用)
-async function _getEpayConfig(saleorApiUrl: string, token: string): Promise<EpayConfig | null> {
-  try {
-    // 从Saleor的metadata中获取配置
-    const client = createServerClient(saleorApiUrl, token);
-    const settingsManager = createPrivateSettingsManager(client);
-    const configManager = new EpayConfigManager(settingsManager, saleorApiUrl);
-
-    // 获取配置（这里简化处理，实际应该根据channel等信息获取对应配置）
-    const config = await configManager.getConfig();
-
-    // 获取第一个配置项作为默认配置
-    if (config.configurations && config.configurations.length > 0) {
-      const firstConfig = config.configurations[0] as EpayConfigEntry;
-      return {
-        pid: firstConfig.pid,
-        key: firstConfig.key,
-        apiUrl: firstConfig.apiUrl,
-      };
-    }
-  } catch (error) {
-    console.error("从Saleor metadata获取支付配置失败:", error);
-  }
-
-  // 不再回退到环境变量配置
-  console.warn("支付配置未找到，请在后台配置支付参数");
-  return null;
 }
 
 // 检查站点授权
@@ -468,7 +435,78 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       }
 
-      // 如果无法使用初始化时的支付链接，返回失败
+      // 如果无法使用初始化时的支付链接，从数据库中获取订单信息
+      try {
+        const { db } = await import("@/lib/db/turso-client");
+        const { orderMappings } = await import("@/lib/db/schema");
+        const { eq } = await import("drizzle-orm");
+
+        const mapping = await db
+          .select()
+          .from(orderMappings)
+          .where(eq(orderMappings.transactionId, transaction.id))
+          .limit(1);
+
+        if (mapping.length > 0) {
+          const orderInfo = mapping[0];
+
+          // 检查 parsedData 中是否包含支付链接信息
+          if (parsedData["paymentResponse"]) {
+            const paymentResponse = parsedData["paymentResponse"] as Record<string, unknown>;
+            if (paymentResponse["paymentUrl"] || paymentResponse["qrcode"]) {
+              logger.info(
+                {
+                  transactionId: transaction.id,
+                  hasPaymentUrl: !!paymentResponse["paymentUrl"],
+                  hasQrcode: !!paymentResponse["qrcode"],
+                },
+                "使用初始化时的支付链接",
+              );
+
+              // 直接返回初始化时的支付链接
+              return res.status(200).json({
+                result: "CHARGE_ACTION_REQUIRED",
+                amount: amountValue,
+                externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
+                data: {
+                  paymentResponse: {
+                    paymentUrl: paymentResponse["paymentUrl"],
+                    qrcode: paymentResponse["qrcode"],
+                    epayOrderNo: paymentResponse["epayOrderNo"],
+                    saleorOrderNo: paymentResponse["saleorOrderNo"],
+                    payType: paymentResponse["payType"],
+                  },
+                },
+              });
+            }
+          }
+
+          logger.warn(
+            {
+              transactionId: transaction.id,
+              orderNo: orderInfo.orderNo,
+            },
+            "订单存在但无支付链接信息，无法重新创建支付链接",
+          );
+        } else {
+          logger.warn(
+            {
+              transactionId: transaction.id,
+            },
+            "在订单映射表中未找到对应的订单号，无法重新创建支付链接",
+          );
+        }
+      } catch (mappingError) {
+        logger.error(
+          {
+            error: mappingError instanceof Error ? mappingError.message : "未知错误",
+            transactionId: transaction.id,
+          },
+          "查询订单映射表失败",
+        );
+      }
+
+      // 如果无法重新创建支付链接，返回失败
       return res.status(200).json({
         result: "CHARGE_FAILURE",
         amount: amountValue,
@@ -542,7 +580,75 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       }
 
-      // 如果无法使用初始化时的支付链接，返回待处理状态
+      // 如果无法使用初始化时的支付链接，从数据库中获取订单信息
+      try {
+        const { db } = await import("@/lib/db/turso-client");
+        const { orderMappings } = await import("@/lib/db/schema");
+        const { eq } = await import("drizzle-orm");
+
+        const mapping = await db
+          .select()
+          .from(orderMappings)
+          .where(eq(orderMappings.transactionId, transaction.id))
+          .limit(1);
+
+        if (mapping.length > 0) {
+          // 检查 parsedData 中是否包含支付链接信息
+          if (parsedData["paymentResponse"]) {
+            const paymentResponse = parsedData["paymentResponse"] as Record<string, unknown>;
+            if (paymentResponse["paymentUrl"] || paymentResponse["qrcode"]) {
+              logger.info(
+                {
+                  transactionId: transaction.id,
+                  hasPaymentUrl: !!paymentResponse["paymentUrl"],
+                  hasQrcode: !!paymentResponse["qrcode"],
+                },
+                "使用初始化时的支付链接",
+              );
+
+              // 直接返回初始化时的支付链接
+              return res.status(200).json({
+                result: "CHARGE_ACTION_REQUIRED",
+                amount: amountValue,
+                externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
+                data: {
+                  paymentResponse: {
+                    paymentUrl: paymentResponse["paymentUrl"],
+                    qrcode: paymentResponse["qrcode"],
+                    epayOrderNo: paymentResponse["epayOrderNo"],
+                    saleorOrderNo: paymentResponse["saleorOrderNo"],
+                    payType: paymentResponse["payType"],
+                  },
+                },
+              });
+            }
+          }
+
+          logger.warn(
+            {
+              transactionId: transaction.id,
+            },
+            "订单存在但无支付链接信息，无法重新创建支付链接",
+          );
+        } else {
+          logger.warn(
+            {
+              transactionId: transaction.id,
+            },
+            "在订单映射表中未找到对应的订单号，无法重新创建支付链接",
+          );
+        }
+      } catch (mappingError) {
+        logger.error(
+          {
+            error: mappingError instanceof Error ? mappingError.message : "未知错误",
+            transactionId: transaction.id,
+          },
+          "查询订单映射表失败",
+        );
+      }
+
+      // 如果无法重新创建支付链接，返回待处理状态
       return res.status(200).json({
         result: "CHARGE_REQUEST",
         amount: amountValue,
@@ -592,6 +698,74 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       }
 
+      // 如果无法使用初始化时的支付链接，从数据库中获取订单信息
+      try {
+        const { db } = await import("@/lib/db/turso-client");
+        const { orderMappings } = await import("@/lib/db/schema");
+        const { eq } = await import("drizzle-orm");
+
+        const mapping = await db
+          .select()
+          .from(orderMappings)
+          .where(eq(orderMappings.transactionId, transaction.id))
+          .limit(1);
+
+        if (mapping.length > 0) {
+          // 检查 parsedData 中是否包含支付链接信息
+          if (parsedData["paymentResponse"]) {
+            const paymentResponse = parsedData["paymentResponse"] as Record<string, unknown>;
+            if (paymentResponse["paymentUrl"] || paymentResponse["qrcode"]) {
+              logger.info(
+                {
+                  transactionId: transaction.id,
+                  hasPaymentUrl: !!paymentResponse["paymentUrl"],
+                  hasQrcode: !!paymentResponse["qrcode"],
+                },
+                "使用初始化时的支付链接",
+              );
+
+              // 直接返回初始化时的支付链接
+              return res.status(200).json({
+                result: "CHARGE_ACTION_REQUIRED",
+                amount: amountValue,
+                externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
+                data: {
+                  paymentResponse: {
+                    paymentUrl: paymentResponse["paymentUrl"],
+                    qrcode: paymentResponse["qrcode"],
+                    epayOrderNo: paymentResponse["epayOrderNo"],
+                    saleorOrderNo: paymentResponse["saleorOrderNo"],
+                    payType: paymentResponse["payType"],
+                  },
+                },
+              });
+            }
+          }
+
+          logger.warn(
+            {
+              transactionId: transaction.id,
+            },
+            "订单存在但无支付链接信息，无法重新创建支付链接",
+          );
+        } else {
+          logger.warn(
+            {
+              transactionId: transaction.id,
+            },
+            "在订单映射表中未找到对应的订单号，无法重新创建支付链接",
+          );
+        }
+      } catch (mappingError) {
+        logger.error(
+          {
+            error: mappingError instanceof Error ? mappingError.message : "未知错误",
+            transactionId: transaction.id,
+          },
+          "查询订单映射表失败",
+        );
+      }
+
       return res.status(200).json({
         result: "CHARGE_FAILURE",
         amount: amountValue,
@@ -638,6 +812,74 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           },
         });
       }
+    }
+
+    // 如果无法使用初始化时的支付链接，从数据库中获取订单信息
+    try {
+      const { db } = await import("@/lib/db/turso-client");
+      const { orderMappings } = await import("@/lib/db/schema");
+      const { eq } = await import("drizzle-orm");
+
+      const mapping = await db
+        .select()
+        .from(orderMappings)
+        .where(eq(orderMappings.transactionId, transaction.id))
+        .limit(1);
+
+      if (mapping.length > 0) {
+        // 检查 parsedData 中是否包含支付链接信息
+        if (parsedData["paymentResponse"]) {
+          const paymentResponse = parsedData["paymentResponse"] as Record<string, unknown>;
+          if (paymentResponse["paymentUrl"] || paymentResponse["qrcode"]) {
+            logger.info(
+              {
+                transactionId: transaction.id,
+                hasPaymentUrl: !!paymentResponse["paymentUrl"],
+                hasQrcode: !!paymentResponse["qrcode"],
+              },
+              "使用初始化时的支付链接",
+            );
+
+            // 直接返回初始化时的支付链接
+            return res.status(200).json({
+              result: "CHARGE_ACTION_REQUIRED",
+              amount: amountValue,
+              externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
+              data: {
+                paymentResponse: {
+                  paymentUrl: paymentResponse["paymentUrl"],
+                  qrcode: paymentResponse["qrcode"],
+                  epayOrderNo: paymentResponse["epayOrderNo"],
+                  saleorOrderNo: paymentResponse["saleorOrderNo"],
+                  payType: paymentResponse["payType"],
+                },
+              },
+            });
+          }
+        }
+
+        logger.warn(
+          {
+            transactionId: transaction.id,
+          },
+          "订单存在但无支付链接信息，无法重新创建支付链接",
+        );
+      } else {
+        logger.warn(
+          {
+            transactionId: transaction.id,
+          },
+          "在订单映射表中未找到对应的订单号，无法重新创建支付链接",
+        );
+      }
+    } catch (mappingError) {
+      logger.error(
+        {
+          error: mappingError instanceof Error ? mappingError.message : "未知错误",
+          transactionId: transaction.id,
+        },
+        "查询订单映射表失败",
+      );
     }
 
     return res.status(200).json({
