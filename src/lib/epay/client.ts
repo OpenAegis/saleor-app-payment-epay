@@ -1,5 +1,71 @@
 import crypto from "crypto";
 
+type NodeLikeError = Error & {
+  code?: string;
+  syscall?: string;
+  hostname?: string;
+  cause?: unknown;
+};
+
+const formatEpayClientError = (error: unknown) => {
+  if (!(error instanceof Error)) {
+    return {
+      message: "Unknown error",
+      logPayload: { error },
+    };
+  }
+
+  const nodeError = error as NodeLikeError;
+  const cause = nodeError.cause;
+
+  const causeMessage =
+    cause instanceof Error
+      ? cause.message
+      : typeof cause === "string"
+        ? cause
+        : undefined;
+
+  const causeCode =
+    cause instanceof Error ? (cause as NodeLikeError).code : undefined;
+
+  const suffixParts: string[] = [];
+
+  if (nodeError.code) {
+    suffixParts.push(`code=${nodeError.code}`);
+  }
+
+  if (causeCode) {
+    suffixParts.push(`cause=${causeCode}`);
+  } else if (causeMessage) {
+    suffixParts.push(`cause=${causeMessage}`);
+  }
+
+  const baseMessage = nodeError.message || "Unknown error";
+  const formattedMessage =
+    suffixParts.length > 0
+      ? `${baseMessage} (${suffixParts.join(", ")})`
+      : baseMessage;
+
+  return {
+    message: formattedMessage,
+    logPayload: {
+      message: nodeError.message,
+      code: nodeError.code,
+      syscall: nodeError.syscall,
+      hostname: nodeError.hostname,
+      cause:
+        cause instanceof Error
+          ? {
+              message: cause.message,
+              code: (cause as NodeLikeError).code,
+              stack: cause.stack,
+            }
+          : cause,
+      stack: nodeError.stack,
+    },
+  };
+};
+
 export interface EpayConfig {
   pid: string;
   key: string; // MD5 签名使用的密钥
@@ -285,14 +351,12 @@ export class EpayClient {
         type: result.type,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      console.error("[EpayClient] v1 创建订单异常", {
-        error: errorMessage,
-      });
+      const { message: formattedMessage, logPayload } = formatEpayClientError(error);
+      console.error("[EpayClient] v1 创建订单异常", logPayload);
 
       return {
         code: 0,
-        msg: `创建订单失败: ${errorMessage}`,
+        msg: `创建订单失败: ${formattedMessage}`,
       };
     }
   }
@@ -509,14 +573,12 @@ export class EpayClient {
         signType: result.sign_type,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      console.error("[EpayClient] v2 创建订单异常", {
-        error: errorMessage,
-      });
+      const { message: formattedMessage, logPayload } = formatEpayClientError(error);
+      console.error("[EpayClient] v2 创建订单异常", logPayload);
 
       return {
         code: 0,
-        msg: `创建订单失败: ${errorMessage}`,
+        msg: `创建订单失败: ${formattedMessage}`,
       };
     }
   }
@@ -710,12 +772,12 @@ export class EpayClient {
           type: result.type,
         };
       } catch (error) {
-        // 记录详细的错误信息
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        const { message: formattedMessage, logPayload } = formatEpayClientError(error);
+        console.error("[EpayClient] 查询订单失败(v2)", logPayload);
 
         return {
           status: 0,
-          msg: `查询订单失败: ${errorMessage}`,
+          msg: `查询订单失败: ${formattedMessage}`,
         };
       }
     } else {
@@ -766,12 +828,12 @@ export class EpayClient {
           type: result.type,
         };
       } catch (error) {
-        // 记录详细的错误信息
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        const { message: formattedMessage, logPayload } = formatEpayClientError(error);
+        console.error("[EpayClient] 查询订单失败(v1)", logPayload);
 
         return {
           status: 0,
-          msg: `查询订单失败: ${errorMessage}`,
+          msg: `查询订单失败: ${formattedMessage}`,
         };
       }
     }
@@ -824,11 +886,9 @@ export class EpayClient {
 
       return result as MerchantInfoResponse;
     } catch (error) {
-      // 记录详细的错误信息
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      // const errorStack = error instanceof Error ? error.stack : undefined;
-
-      throw new Error(`查询商户信息失败: ${errorMessage}`);
+      const { message: formattedMessage, logPayload } = formatEpayClientError(error);
+      console.error("[EpayClient] 查询商户信息失败", logPayload);
+      throw new Error(`查询商户信息失败: ${formattedMessage}`);
     }
   }
 }

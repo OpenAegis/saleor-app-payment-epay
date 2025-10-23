@@ -1,0 +1,11 @@
+# Code Style & Conventions
+- TypeScript-first，严格启用 `@typescript-eslint` 规则，保持类型安全。
+- 引号: 默认使用双引号，允许模板字符串。
+- 模块导入: 启用 `import/order` 排序，禁止 `import` 循环、mutable export、默认导出（`src/pages` 例外），推荐类型导入 `import type`。
+- 环境变量: 禁止直接在大部分文件访问 `process.env`，需通过封装模块。
+- 允许空接口/空函数，`async` 可不含 `await`。
+- 模板字符串允许数字与布尔值。
+- 前端交互: `form` 必须显式 `method="post"`，`button` 需声明 `type`。
+- Sentry: 禁止默认导入，需使用 `import * as Sentry`。
+- .js/.jsx 文件默认忽略 ESLint，主要使用 .ts/.tsx。
+- 测试文件放宽类型限制，允许 `any` 等。

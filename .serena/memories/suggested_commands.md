@@ -1,0 +1,11 @@
+# Suggested Commands
+- `pnpm install`：安装依赖。
+- `pnpm dev`：启动 Next.js 开发服务器（端口 3000）。
+- `pnpm build`：运行 GraphQL 代码生成并构建生产包。
+- `pnpm start`：启动生产服务器。
+- `pnpm lint`：运行 ESLint（包含 Next + Saleor 规则）。
+- `pnpm type-check`：执行 TypeScript 类型检查。
+- `pnpm test`：使用 Vitest 运行测试。
+- `pnpm test:ui`：Vitest UI 模式调试测试。
+- `node dist/run-migrations.js` 或 `tsx src/run-migrations.ts`：执行 Turso 数据库迁移（按项目脚本约定）。
+- `pnpm generate`：运行 GraphQL Code Generator。
