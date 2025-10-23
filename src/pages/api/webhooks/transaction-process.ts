@@ -6,7 +6,6 @@ import { EpayConfigManager } from "@/modules/payment-app-configuration/epay-conf
 import { type EpayConfigEntry } from "@/modules/payment-app-configuration/epay-config";
 import { siteManager } from "@/lib/managers/site-manager";
 import { createLogger } from "@/lib/logger";
-import { env } from "@/lib/env.mjs";
 
 const logger = createLogger({ component: "TransactionProcessWebhook" });
 
@@ -278,6 +277,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             {
               gatewayId: firstGateway.id,
               gatewayName: firstGateway.name,
+              apiVersion: firstGateway.apiVersion,
+              signType: firstGateway.signType,
             },
             "使用默认网关配置",
           );
@@ -419,10 +420,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // 检查是否需要重新创建支付链接（订单不存在或已关闭）
+    // 修改条件判断，正确处理订单不存在的情况
     if (
       result.status === 0 ||
       result.trade_status === "TRADE_CLOSED" ||
-      result.trade_status === "NOTEXIST"
+      result.trade_status === "NOTEXIST" ||
+      !result.trade_status // 当 trade_status 为空时，也认为订单不存在
     ) {
       logger.info(
         {
@@ -431,88 +434,46 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           tradeStatus: result.trade_status,
           message: result.msg,
         },
-        "需要重新创建支付链接",
+        "订单不存在或已关闭，尝试使用初始化时的支付链接",
       );
 
-      // 从 parsedData 中获取必要的支付信息
-      const orderNo = (epayOrderNo || saleorOrderNo || `ORDER-${Date.now()}`) as string;
-      // 使用变量来避免 ESLint 错误
-      const appUrl = env.APP_URL;
-      const paymentData = {
-        amount: amountValue,
-        orderNo: orderNo,
-        notifyUrl: `${appUrl}/api/webhooks/epay-notify`,
-        returnUrl: `${appUrl}/checkout/success`,
-        payType: (parsedData["payType"] as string) || "alipay",
-        productName: (parsedData["productName"] as string) || "订单支付",
-        productDesc: (parsedData["productDesc"] as string) || "订单支付",
-        clientIp: (parsedData["clientIp"] as string) || "127.0.0.1",
-      };
-
-      // 如果是 v2 API，添加额外参数
-      if (epayConfig.apiVersion === "v2") {
-        // 从 parsedData 中获取 v2 特有参数
-        Object.assign(paymentData, {
-          method: parsedData["method"] as string,
-          device: parsedData["device"] as string,
-        });
-      }
-
-      logger.info(
-        {
-          transactionId: transaction.id,
-          orderNo: paymentData.orderNo,
-          amount: paymentData.amount,
-          payType: paymentData.payType,
-        },
-        "重新创建支付订单",
-      );
-
-      // 重新创建支付订单
-      const createResult = await epayClient.createOrder(paymentData);
-
-      if (createResult.code === 1 && (createResult.payUrl || createResult.qrcode)) {
-        logger.info(
-          {
-            transactionId: transaction.id,
-            orderNo: paymentData.orderNo,
-            hasPayUrl: !!createResult.payUrl,
-            hasQrcode: !!createResult.qrcode,
-          },
-          "重新创建支付订单成功",
-        );
-
-        // 返回新的支付链接给前端
-        return res.status(200).json({
-          result: "CHARGE_ACTION_REQUIRED",
-          amount: amountValue,
-          externalUrl: createResult.payUrl || undefined,
-          data: {
-            paymentResponse: {
-              paymentUrl: createResult.payUrl,
-              qrcode: createResult.qrcode,
-              epayOrderNo: createResult.tradeNo,
-              saleorOrderNo: paymentData.orderNo,
-              payType: createResult.type,
+      // 检查 parsedData 中是否包含支付链接信息
+      if (parsedData["paymentResponse"]) {
+        const paymentResponse = parsedData["paymentResponse"] as Record<string, unknown>;
+        if (paymentResponse["paymentUrl"] || paymentResponse["qrcode"]) {
+          logger.info(
+            {
+              transactionId: transaction.id,
+              hasPaymentUrl: !!paymentResponse["paymentUrl"],
+              hasQrcode: !!paymentResponse["qrcode"],
             },
-          },
-        });
-      } else {
-        logger.warn(
-          {
-            transactionId: transaction.id,
-            orderNo: paymentData.orderNo,
-            errorMessage: createResult.msg,
-          },
-          "重新创建支付订单失败",
-        );
+            "使用初始化时的支付链接",
+          );
 
-        return res.status(200).json({
-          result: "CHARGE_FAILURE",
-          amount: amountValue,
-          message: createResult.msg || "重新创建支付订单失败",
-        });
+          // 直接返回初始化时的支付链接
+          return res.status(200).json({
+            result: "CHARGE_ACTION_REQUIRED",
+            amount: amountValue,
+            externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
+            data: {
+              paymentResponse: {
+                paymentUrl: paymentResponse["paymentUrl"],
+                qrcode: paymentResponse["qrcode"],
+                epayOrderNo: paymentResponse["epayOrderNo"],
+                saleorOrderNo: paymentResponse["saleorOrderNo"],
+                payType: paymentResponse["payType"],
+              },
+            },
+          });
+        }
       }
+
+      // 如果无法使用初始化时的支付链接，返回失败
+      return res.status(200).json({
+        result: "CHARGE_FAILURE",
+        amount: amountValue,
+        message: "无法获取支付链接",
+      });
     }
 
     if (result.status === 1 && result.trade_status === "TRADE_SUCCESS") {
@@ -538,6 +499,57 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    // 当订单状态为待支付时，返回支付链接给前端
+    if (result.status === 0 && (!result.trade_status || result.trade_status === "")) {
+      logger.info(
+        {
+          transactionId: transaction.id,
+          epayStatus: result.status,
+          tradeStatus: result.trade_status,
+          message: result.msg,
+        },
+        "Epay order is pending, need to return payment link",
+      );
+
+      // 检查 parsedData 中是否包含支付链接信息
+      if (parsedData["paymentResponse"]) {
+        const paymentResponse = parsedData["paymentResponse"] as Record<string, unknown>;
+        if (paymentResponse["paymentUrl"] || paymentResponse["qrcode"]) {
+          logger.info(
+            {
+              transactionId: transaction.id,
+              hasPaymentUrl: !!paymentResponse["paymentUrl"],
+              hasQrcode: !!paymentResponse["qrcode"],
+            },
+            "使用初始化时的支付链接",
+          );
+
+          // 直接返回初始化时的支付链接
+          return res.status(200).json({
+            result: "CHARGE_ACTION_REQUIRED",
+            amount: amountValue,
+            externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
+            data: {
+              paymentResponse: {
+                paymentUrl: paymentResponse["paymentUrl"],
+                qrcode: paymentResponse["qrcode"],
+                epayOrderNo: paymentResponse["epayOrderNo"],
+                saleorOrderNo: paymentResponse["saleorOrderNo"],
+                payType: paymentResponse["payType"],
+              },
+            },
+          });
+        }
+      }
+
+      // 如果无法使用初始化时的支付链接，返回待处理状态
+      return res.status(200).json({
+        result: "CHARGE_REQUEST",
+        amount: amountValue,
+        message: result.msg || "支付处理中",
+      });
+    }
+
     if (result.status === 0 || result.trade_status === "TRADE_CLOSED") {
       logger.warn(
         {
@@ -548,6 +560,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
         "Epay order indicates failure/closed",
       );
+
+      // 检查 parsedData 中是否包含支付链接信息
+      if (parsedData["paymentResponse"]) {
+        const paymentResponse = parsedData["paymentResponse"] as Record<string, unknown>;
+        if (paymentResponse["paymentUrl"] || paymentResponse["qrcode"]) {
+          logger.info(
+            {
+              transactionId: transaction.id,
+              hasPaymentUrl: !!paymentResponse["paymentUrl"],
+              hasQrcode: !!paymentResponse["qrcode"],
+            },
+            "使用初始化时的支付链接",
+          );
+
+          // 直接返回初始化时的支付链接
+          return res.status(200).json({
+            result: "CHARGE_ACTION_REQUIRED",
+            amount: amountValue,
+            externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
+            data: {
+              paymentResponse: {
+                paymentUrl: paymentResponse["paymentUrl"],
+                qrcode: paymentResponse["qrcode"],
+                epayOrderNo: paymentResponse["epayOrderNo"],
+                saleorOrderNo: paymentResponse["saleorOrderNo"],
+                payType: paymentResponse["payType"],
+              },
+            },
+          });
+        }
+      }
+
       return res.status(200).json({
         result: "CHARGE_FAILURE",
         amount: amountValue,
@@ -564,6 +608,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
       "Epay order still pending",
     );
+
+    // 检查 parsedData 中是否包含支付链接信息
+    if (parsedData["paymentResponse"]) {
+      const paymentResponse = parsedData["paymentResponse"] as Record<string, unknown>;
+      if (paymentResponse["paymentUrl"] || paymentResponse["qrcode"]) {
+        logger.info(
+          {
+            transactionId: transaction.id,
+            hasPaymentUrl: !!paymentResponse["paymentUrl"],
+            hasQrcode: !!paymentResponse["qrcode"],
+          },
+          "使用初始化时的支付链接",
+        );
+
+        // 直接返回初始化时的支付链接
+        return res.status(200).json({
+          result: "CHARGE_ACTION_REQUIRED",
+          amount: amountValue,
+          externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
+          data: {
+            paymentResponse: {
+              paymentUrl: paymentResponse["paymentUrl"],
+              qrcode: paymentResponse["qrcode"],
+              epayOrderNo: paymentResponse["epayOrderNo"],
+              saleorOrderNo: paymentResponse["saleorOrderNo"],
+              payType: paymentResponse["payType"],
+            },
+          },
+        });
+      }
+    }
+
     return res.status(200).json({
       result: "CHARGE_REQUEST",
       amount: amountValue,
