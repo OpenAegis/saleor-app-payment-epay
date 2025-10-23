@@ -13,11 +13,11 @@ export const gateways = sqliteTable("gateways", {
   epayPid: text("epay_pid").notNull(), // 易支付商户ID
   epayKey: text("epay_key").notNull(), // 易支付密钥 (MD5签名使用)
   epayRsaPrivateKey: text("epay_rsa_private_key"), // RSA私钥 (RSA签名使用)
-  
+
   // API 版本配置
   apiVersion: text("api_version").notNull().default("v1"), // v1 或 v2
   signType: text("sign_type").notNull().default("MD5"), // MD5 或 RSA
-  
+
   icon: text("icon"),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   priority: integer("priority").notNull().default(0),
@@ -64,18 +64,18 @@ export const channels = sqliteTable("channels", {
  */
 export const sites = sqliteTable("sites", {
   id: text("id").primaryKey(),
-  
+
   // 站点基本信息
   domain: text("domain").notNull().unique(), // 站点域名，如 shop.example.com
   name: text("name").notNull(), // 站点名称
   saleorApiUrl: text("saleor_api_url").notNull(), // Saleor API地址（也是认证数据的主键）
   clientIP: text("client_ip"), // 客户端真实IP地址
-  
+
   // 认证数据字段
   token: text("token"), // Saleor认证token
   appId: text("app_id"), // Saleor App ID
   jwks: text("jwks"), // JWKS数据（JSON字符串）
-  
+
   // 授权管理字段
   status: text("status").notNull().default("pending"), // pending, approved, rejected, suspended
   requestedAt: text("requested_at")
@@ -85,7 +85,7 @@ export const sites = sqliteTable("sites", {
   approvedBy: text("approved_by"), // 审批人（插件管理员）
   notes: text("notes"), // 备注
   lastActiveAt: text("last_active_at"), // 最后活跃时间
-  
+
   // 时间戳
   createdAt: text("created_at")
     .notNull()
@@ -123,7 +123,10 @@ export const orderMappings = sqliteTable("order_mappings", {
   transactionId: text("transaction_id").notNull(), // Saleor transaction ID
   saleorApiUrl: text("saleor_api_url").notNull(), // 关联的 Saleor API URL
   status: text("status").notNull().default("pending"), // pending, paid, failed
-  
+
+  // 添加支付响应数据字段
+  paymentResponse: text("payment_response"), // 存储支付响应数据(JSON字符串)
+
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),

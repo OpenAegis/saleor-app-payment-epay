@@ -450,6 +450,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (mapping.length > 0) {
           const orderInfo = mapping[0];
 
+          // 检查数据库中是否存储了支付响应数据
+          if (orderInfo.paymentResponse) {
+            try {
+              const paymentResponse = JSON.parse(orderInfo.paymentResponse) as Record<
+                string,
+                unknown
+              >;
+              if (paymentResponse["paymentUrl"] || paymentResponse["qrcode"]) {
+                logger.info(
+                  {
+                    transactionId: transaction.id,
+                    hasPaymentUrl: !!paymentResponse["paymentUrl"],
+                    hasQrcode: !!paymentResponse["qrcode"],
+                  },
+                  "从数据库获取支付链接",
+                );
+
+                // 直接返回数据库中存储的支付链接
+                return res.status(200).json({
+                  result: "CHARGE_ACTION_REQUIRED",
+                  amount: amountValue,
+                  externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
+                  data: {
+                    paymentResponse: {
+                      paymentUrl: paymentResponse["paymentUrl"],
+                      qrcode: paymentResponse["qrcode"],
+                      epayOrderNo: paymentResponse["epayOrderNo"],
+                      saleorOrderNo: paymentResponse["saleorOrderNo"],
+                      payType: paymentResponse["payType"],
+                    },
+                  },
+                });
+              }
+            } catch (parseError) {
+              logger.error(
+                {
+                  transactionId: transaction.id,
+                  error: parseError instanceof Error ? parseError.message : "未知错误",
+                },
+                "解析数据库中的支付响应数据失败",
+              );
+            }
+          }
+
           // 检查 parsedData 中是否包含支付链接信息
           if (parsedData["paymentResponse"]) {
             const paymentResponse = parsedData["paymentResponse"] as Record<string, unknown>;
@@ -593,6 +637,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .limit(1);
 
         if (mapping.length > 0) {
+          // 检查数据库中是否存储了支付响应数据
+          if (mapping[0].paymentResponse) {
+            try {
+              const paymentResponse = JSON.parse(mapping[0].paymentResponse) as Record<
+                string,
+                unknown
+              >;
+              if (paymentResponse["paymentUrl"] || paymentResponse["qrcode"]) {
+                logger.info(
+                  {
+                    transactionId: transaction.id,
+                    hasPaymentUrl: !!paymentResponse["paymentUrl"],
+                    hasQrcode: !!paymentResponse["qrcode"],
+                  },
+                  "从数据库获取支付链接",
+                );
+
+                // 直接返回数据库中存储的支付链接
+                return res.status(200).json({
+                  result: "CHARGE_ACTION_REQUIRED",
+                  amount: amountValue,
+                  externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
+                  data: {
+                    paymentResponse: {
+                      paymentUrl: paymentResponse["paymentUrl"],
+                      qrcode: paymentResponse["qrcode"],
+                      epayOrderNo: paymentResponse["epayOrderNo"],
+                      saleorOrderNo: paymentResponse["saleorOrderNo"],
+                      payType: paymentResponse["payType"],
+                    },
+                  },
+                });
+              }
+            } catch (parseError) {
+              logger.error(
+                {
+                  transactionId: transaction.id,
+                  error: parseError instanceof Error ? parseError.message : "未知错误",
+                },
+                "解析数据库中的支付响应数据失败",
+              );
+            }
+          }
+
           // 检查 parsedData 中是否包含支付链接信息
           if (parsedData["paymentResponse"]) {
             const paymentResponse = parsedData["paymentResponse"] as Record<string, unknown>;
@@ -648,7 +736,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         );
       }
 
-      // 如果无法重新创建支付链接，返回待处理状态
       return res.status(200).json({
         result: "CHARGE_REQUEST",
         amount: amountValue,
@@ -711,6 +798,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .limit(1);
 
         if (mapping.length > 0) {
+          // 检查数据库中是否存储了支付响应数据
+          if (mapping[0].paymentResponse) {
+            try {
+              const paymentResponse = JSON.parse(mapping[0].paymentResponse) as Record<
+                string,
+                unknown
+              >;
+              if (paymentResponse["paymentUrl"] || paymentResponse["qrcode"]) {
+                logger.info(
+                  {
+                    transactionId: transaction.id,
+                    hasPaymentUrl: !!paymentResponse["paymentUrl"],
+                    hasQrcode: !!paymentResponse["qrcode"],
+                  },
+                  "从数据库获取支付链接",
+                );
+
+                // 直接返回数据库中存储的支付链接
+                return res.status(200).json({
+                  result: "CHARGE_ACTION_REQUIRED",
+                  amount: amountValue,
+                  externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
+                  data: {
+                    paymentResponse: {
+                      paymentUrl: paymentResponse["paymentUrl"],
+                      qrcode: paymentResponse["qrcode"],
+                      epayOrderNo: paymentResponse["epayOrderNo"],
+                      saleorOrderNo: paymentResponse["saleorOrderNo"],
+                      payType: paymentResponse["payType"],
+                    },
+                  },
+                });
+              }
+            } catch (parseError) {
+              logger.error(
+                {
+                  transactionId: transaction.id,
+                  error: parseError instanceof Error ? parseError.message : "未知错误",
+                },
+                "解析数据库中的支付响应数据失败",
+              );
+            }
+          }
+
           // 检查 parsedData 中是否包含支付链接信息
           if (parsedData["paymentResponse"]) {
             const paymentResponse = parsedData["paymentResponse"] as Record<string, unknown>;
@@ -827,6 +958,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .limit(1);
 
       if (mapping.length > 0) {
+        // 检查数据库中是否存储了支付响应数据
+        if (mapping[0].paymentResponse) {
+          try {
+            const paymentResponse = JSON.parse(mapping[0].paymentResponse) as Record<
+              string,
+              unknown
+            >;
+            if (paymentResponse["paymentUrl"] || paymentResponse["qrcode"]) {
+              logger.info(
+                {
+                  transactionId: transaction.id,
+                  hasPaymentUrl: !!paymentResponse["paymentUrl"],
+                  hasQrcode: !!paymentResponse["qrcode"],
+                },
+                "从数据库获取支付链接",
+              );
+
+              // 直接返回数据库中存储的支付链接
+              return res.status(200).json({
+                result: "CHARGE_ACTION_REQUIRED",
+                amount: amountValue,
+                externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
+                data: {
+                  paymentResponse: {
+                    paymentUrl: paymentResponse["paymentUrl"],
+                    qrcode: paymentResponse["qrcode"],
+                    epayOrderNo: paymentResponse["epayOrderNo"],
+                    saleorOrderNo: paymentResponse["saleorOrderNo"],
+                    payType: paymentResponse["payType"],
+                  },
+                },
+              });
+            }
+          } catch (parseError) {
+            logger.error(
+              {
+                transactionId: transaction.id,
+                error: parseError instanceof Error ? parseError.message : "未知错误",
+              },
+              "解析数据库中的支付响应数据失败",
+            );
+          }
+        }
+
         // 检查 parsedData 中是否包含支付链接信息
         if (parsedData["paymentResponse"]) {
           const paymentResponse = parsedData["paymentResponse"] as Record<string, unknown>;

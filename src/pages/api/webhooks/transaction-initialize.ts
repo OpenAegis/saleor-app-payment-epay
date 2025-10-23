@@ -566,19 +566,56 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 修复条件判断，v2 API 成功时 code 为 1
     if (result.code === 1 && (result.payUrl || result.qrcode)) {
+      // 准备支付响应数据
+      const paymentResponse = {
+        paymentUrl: result.payUrl,
+        qrcode: result.qrcode,
+        epayOrderNo: result.tradeNo,
+        saleorOrderNo: orderNo,
+        payType: result.type,
+      };
+
+      // 将支付响应数据存储到数据库
+      try {
+        const { db } = await import("@/lib/db/turso-client");
+        const { orderMappings } = await import("@/lib/db/schema");
+        const { eq } = await import("drizzle-orm");
+
+        // 更新订单映射记录，添加支付响应数据
+        await db
+          .update(orderMappings)
+          .set({
+            paymentResponse: JSON.stringify(paymentResponse),
+            updatedAt: new Date().toISOString(),
+          })
+          .where(eq(orderMappings.orderNo, orderNo));
+
+        logger.info(
+          {
+            transactionId: transaction.id,
+            orderNo,
+          },
+          "支付响应数据已存储到数据库",
+        );
+      } catch (storageError) {
+        logger.error(
+          {
+            transactionId: transaction.id,
+            orderNo,
+            error: storageError instanceof Error ? storageError.message : "未知错误",
+          },
+          "存储支付响应数据到数据库失败",
+        );
+        // 即使存储失败，也不影响支付流程
+      }
+
       // 返回支付链接或二维码
       return res.status(200).json({
         result: "CHARGE_ACTION_REQUIRED",
         amount: amountValue,
         externalUrl: result.payUrl || undefined,
         data: {
-          paymentResponse: {
-            paymentUrl: result.payUrl,
-            qrcode: result.qrcode,
-            epayOrderNo: result.tradeNo,
-            saleorOrderNo: orderNo,
-            payType: result.type,
-          },
+          paymentResponse,
         },
       });
     }
