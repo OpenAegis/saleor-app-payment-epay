@@ -497,7 +497,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 如果第一次尝试失败，进行重试
     let retryCount = 0;
     const maxRetries = 2;
-    while (result.code === 0 && retryCount < maxRetries) {
+    while (result.code !== 1 && retryCount < maxRetries) {
       logger.warn(
         {
           transactionId: transaction.id,
@@ -505,6 +505,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           retryCount: retryCount + 1,
           maxRetries,
           errorMessage: result.msg,
+          hasPayUrl: Boolean(result.payUrl),
+          hasPayInfo: Boolean(result.payInfo),
         },
         "Epay createOrder failed, retrying...",
       );
@@ -513,7 +515,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
 
       const retryResult = await epayClient.createOrder(createOrderParams);
-      if (retryResult.code !== 0) {
+      if (retryResult.code === 1 || retryResult.payUrl || retryResult.qrcode) {
         // 重试成功
         logger.info(
           {
@@ -521,6 +523,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             orderNo,
             retryCount: retryCount + 1,
             resultCode: retryResult.code,
+            hasPayUrl: Boolean(retryResult.payUrl),
+            hasQrcode: Boolean(retryResult.qrcode),
           },
           "Epay createOrder succeeded after retry",
         );

@@ -557,7 +557,7 @@ export class EpayClient {
       }
 
       return {
-        code: result.code || 0,
+        code: result.code || (result.pay_info ? 1 : 0), // 如果有pay_info，认为是成功的
         msg: result.msg || "",
         payUrl: payUrl,
         tradeNo: result.trade_no,
