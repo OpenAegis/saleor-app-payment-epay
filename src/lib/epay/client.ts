@@ -266,7 +266,8 @@ export class EpayClient {
 
   // v1 API 创建订单
   private async createOrderV1(params: CreateOrderParams): Promise<EpayOrderResult> {
-    const requestData: Record<string, string> = {
+    // 基础请求数据，适用于所有v1接口
+    const baseRequestData: Record<string, string> = {
       pid: this.config.pid,
       type: params.payType || "alipay",
       out_trade_no: params.orderNo,
@@ -276,19 +277,10 @@ export class EpayClient {
       money: params.amount.toFixed(2),
     };
 
-    // 添加可选参数
-    // 对于 /submit.php 接口，productDesc 应该映射为 param
-    if (params.productDesc) {
-      requestData.param = params.productDesc;
-    }
-    if (params.clientIp) {
-      requestData.clientip = params.clientIp;
-    }
-
     // 生成签名
-    const sign = this.generateSign(requestData);
-    requestData.sign = sign;
-    requestData.sign_type = this.config.signType || "MD5";
+    const sign = this.generateSign(baseRequestData);
+    baseRequestData.sign = sign;
+    baseRequestData.sign_type = this.config.signType || "MD5";
 
     try {
       // 确保正确的 URL 拼接，避免双斜杠问题
@@ -297,81 +289,121 @@ export class EpayClient {
       // 检查是否需要使用 /submit.php 而不是 /mapi.php
       // 有些支付接口只支持 /submit.php
       const useSubmitPhp = this.config.useSubmitPhp ?? false;
-      const apiEndpoint = useSubmitPhp ? `${baseUrl}/submit.php` : `${baseUrl}/mapi.php`;
 
-      console.log("[EpayClient] 使用 v1 API 发起支付请求", {
-        endpoint: apiEndpoint,
-        pid: this.config.pid,
-        amount: params.amount,
-        orderNo: params.orderNo,
-        payType: params.payType,
-        hasClientIp: !!params.clientIp,
-        signPreview: sign.substring(0, 8) + "...",
-        useSubmitPhp,
-      });
+      if (useSubmitPhp) {
+        // 对于 /submit.php，我们直接构造 URL 并返回给前端
+        // 前端需要将用户重定向到这个 URL 来完成支付
 
-      const response = await fetch(apiEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json, text/plain, */*",
-          "User-Agent": "Saleor-Epay-Client/1.0",
-        },
-        body: new URLSearchParams(requestData).toString(),
-        redirect: "manual", // 手动处理重定向
-      });
+        // 构造适用于 /submit.php 的请求数据
+        const submitRequestData: Record<string, string> = {
+          ...baseRequestData,
+        };
 
-      console.log("[EpayClient] v1 API 响应状态", {
-        status: response.status,
-        statusText: response.statusText,
-        contentType: response.headers.get("content-type"),
-        location: response.headers.get("location"), // 获取跳转地址
-      });
+        // 对于 /submit.php 接口，productDesc 应该映射为 param
+        if (params.productDesc) {
+          submitRequestData.param = params.productDesc;
+        }
+        // 注意：/submit.php 接口不支持 clientip 参数
 
-      // 检查是否是重定向响应 (30x)
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get("location");
-        if (location) {
-          console.log("[EpayClient] 检测到重定向响应", {
-            statusCode: response.status,
-            location,
-          });
+        const baseUrlSubmit = baseUrl.replace(/\/+$/, ""); // 确保没有尾部斜杠
+        const submitUrl = `${baseUrlSubmit}/submit.php`;
 
-          // 对于 /submit.php 接口，30x 跳转是正常的，跳转地址就是支付链接
+        // 构造查询参数
+        const queryParams = new URLSearchParams();
+        for (const [key, value] of Object.entries(submitRequestData)) {
+          queryParams.append(key, value);
+        }
+
+        const fullPayUrl = `${submitUrl}?${queryParams.toString()}`;
+
+        console.log("[EpayClient] 使用 v1 API 构造 submit.php 支付链接", {
+          submitUrl,
+          orderNo: params.orderNo,
+          payType: params.payType,
+          fullPayUrlPreview: fullPayUrl.substring(0, 100) + "...",
+        });
+
+        return {
+          code: 1,
+          msg: "success",
+          payUrl: fullPayUrl,
+          tradeNo: params.orderNo,
+          type: params.payType || "unknown",
+        };
+      } else {
+        // 使用传统的 /mapi.php 接口
+        const apiEndpoint = `${baseUrl}/mapi.php`;
+
+        // 构造适用于 /mapi.php 的请求数据
+        const mapiRequestData: Record<string, string> = {
+          ...baseRequestData,
+        };
+
+        // 对于 /mapi.php 接口，productDesc 应该映射为 param
+        if (params.productDesc) {
+          mapiRequestData.param = params.productDesc;
+        }
+        // /mapi.php 接口支持 clientip 参数
+        if (params.clientIp) {
+          mapiRequestData.clientip = params.clientIp;
+        }
+
+        console.log("[EpayClient] 使用 v1 API 发起支付请求", {
+          endpoint: apiEndpoint,
+          pid: this.config.pid,
+          amount: params.amount,
+          orderNo: params.orderNo,
+          payType: params.payType,
+          hasClientIp: !!params.clientIp,
+          signPreview: sign.substring(0, 8) + "...",
+        });
+
+        const response = await fetch(apiEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Accept: "application/json, text/plain, */*",
+            "User-Agent": "Saleor-Epay-Client/1.0",
+          },
+          body: new URLSearchParams(mapiRequestData).toString(),
+          redirect: "manual", // 手动处理重定向
+        });
+
+        console.log("[EpayClient] v1 API 响应状态", {
+          status: response.status,
+          statusText: response.statusText,
+          contentType: response.headers.get("content-type"),
+          location: response.headers.get("location"), // 获取跳转地址
+        });
+
+        // 不再处理 30x 跳转，因为没有任何接口会返回 30x 跳转
+        // 直接处理响应内容
+
+        if (!response.ok) {
+          const errorText = await response.text();
           return {
-            code: 1,
-            msg: "success",
-            payUrl: location, // 使用跳转地址作为支付链接
-            tradeNo: params.orderNo, // 使用我们自己的订单号作为交易号
-            type: params.payType || "unknown",
+            code: 0,
+            msg: `HTTP Error: ${response.status} - ${errorText}`,
           };
         }
-      }
 
-      if (!response.ok) {
-        const errorText = await response.text();
+        const responseText = await response.text();
+        console.log("[EpayClient] v1 API 原始响应", {
+          responseLength: responseText.length,
+          responsePreview: responseText.substring(0, 200),
+        });
+
+        const result = JSON.parse(responseText) as SubmitResponse;
+
         return {
-          code: 0,
-          msg: `HTTP Error: ${response.status} - ${errorText}`,
+          code: result.code || 0,
+          msg: result.msg || "",
+          payUrl: result.payurl,
+          tradeNo: result.trade_no,
+          qrcode: result.qrcode,
+          type: result.type,
         };
       }
-
-      const responseText = await response.text();
-      console.log("[EpayClient] v1 API 原始响应", {
-        responseLength: responseText.length,
-        responsePreview: responseText.substring(0, 200),
-      });
-
-      const result = JSON.parse(responseText) as SubmitResponse;
-
-      return {
-        code: result.code || 0,
-        msg: result.msg || "",
-        payUrl: result.payurl,
-        tradeNo: result.trade_no,
-        qrcode: result.qrcode,
-        type: result.type,
-      };
     } catch (error) {
       const { message: formattedMessage, logPayload } = formatEpayClientError(error);
       console.error("[EpayClient] v1 创建订单异常", logPayload);
@@ -977,6 +1009,85 @@ export class EpayClient {
       const { message: formattedMessage, logPayload } = formatEpayClientError(error);
       console.error("[EpayClient] 查询商户信息失败", logPayload);
       throw new Error(`查询商户信息失败: ${formattedMessage}`);
+    }
+  }
+
+  // 从 /submit.php 的响应中提取支付 URL
+  private extractPayUrlFromSubmitResponse(
+    responseText: string,
+    _requestData: Record<string, string>,
+  ): string | null {
+    try {
+      // 检查是否是包含 info 参数的 URL 格式
+      // 示例: https://shangqing-3gwsujmwf0522776-1251220544.tcloudbaseapp.com/submit.html?info=BASE64_ENCODED_DATA
+      const urlMatch = responseText.match(/https?:\/\/[^\s]*submit\.html\?info=([A-Za-z0-9+/=]+)/);
+      if (urlMatch && urlMatch[1]) {
+        const base64Data = urlMatch[1];
+        console.log("[EpayClient] 检测到 submit.php 的 Base64 编码数据", {
+          base64Length: base64Data.length,
+          base64Preview: base64Data.substring(0, 50) + "...",
+        });
+
+        try {
+          // 解码 Base64 数据
+          const decodedData = Buffer.from(base64Data, "base64").toString("utf-8");
+          console.log("[EpayClient] Base64 解码后的数据", {
+            decodedData,
+          });
+
+          // 解析 JSON 数据
+          const jsonData: unknown = JSON.parse(decodedData);
+
+          // 检查是否有 url 或 url2 字段
+          if (
+            jsonData &&
+            typeof jsonData === "object" &&
+            "url" in jsonData &&
+            typeof jsonData.url === "string"
+          ) {
+            console.log("[EpayClient] 从 submit.php 响应中提取到支付 URL", {
+              url: jsonData.url,
+            });
+            return jsonData.url;
+          }
+
+          if (
+            jsonData &&
+            typeof jsonData === "object" &&
+            "url2" in jsonData &&
+            typeof jsonData.url2 === "string"
+          ) {
+            console.log("[EpayClient] 从 submit.php 响应中提取到备用支付 URL", {
+              url2: jsonData.url2,
+            });
+            return jsonData.url2;
+          }
+        } catch (decodeError) {
+          console.warn("[EpayClient] Base64 解码或 JSON 解析失败", {
+            error: decodeError instanceof Error ? decodeError.message : "未知错误",
+          });
+        }
+      }
+
+      // 如果上面的方法失败，尝试其他可能的提取方式
+      // 检查是否有直接的 URL
+      const directUrlMatch = responseText.match(/https?:\/\/[^\s]*\/pay\/[^\s"'>]+/);
+      if (directUrlMatch) {
+        console.log("[EpayClient] 从 submit.php 响应中直接提取到支付 URL", {
+          url: directUrlMatch[0],
+        });
+        return directUrlMatch[0];
+      }
+
+      console.log("[EpayClient] 无法从 submit.php 响应中提取支付 URL", {
+        responsePreview: responseText.substring(0, 200),
+      });
+      return null;
+    } catch (error) {
+      console.error("[EpayClient] 从 submit.php 响应中提取支付 URL 时发生错误", {
+        error: error instanceof Error ? error.message : "未知错误",
+      });
+      return null;
     }
   }
 }
