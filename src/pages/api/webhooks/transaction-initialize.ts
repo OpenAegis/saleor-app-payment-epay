@@ -432,16 +432,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         updatedAt: now,
       };
       await db.insert(orderMappings).values(orderMapping);
-      logger.info("订单映射已保存: " + orderNo + " -> " + transaction.id);
+      logger.info(
+        {
+          transactionId: transaction.id,
+          orderNo,
+          orderHash: transactionHash,
+        },
+        "订单映射已保存到数据库",
+      );
     } catch (mappingError) {
       logger.error(
         {
+          transactionId: transaction.id,
+          orderNo,
+          orderHash: transactionHash,
           error: mappingError instanceof Error ? mappingError.message : "未知错误",
           stack: mappingError instanceof Error ? mappingError.stack : undefined,
+          errorCode: mappingError instanceof Error && 'code' in mappingError ? mappingError.code : undefined,
         },
-        "保存订单映射失败",
+        "保存订单映射失败: " + (mappingError instanceof Error ? mappingError.message : "未知错误"),
       );
-      // 不阻止支付流程，只记录错误
+      // 不阻止支付流程，但返回失败响应以避免数据不一致
+      return res.status(200).json({
+        result: "CHARGE_FAILURE",
+        amount: amountValue,
+        message: "订单映射保存失败，请重试",
+      });
     }
 
     // 获取商品名称（从订单信息中）
@@ -603,8 +619,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         );
 
         // 更新订单映射记录，添加支付响应数据
-        // 使用更明确的参数传递方式
-        await db
+        const updateResult = await db
           .update(orderMappings)
           .set({
             paymentResponse: paymentResponseStr,
@@ -617,6 +632,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             transactionId: transaction.id,
             orderNo,
             paymentResponseLength: paymentResponseStr.length,
+            updateResult: updateResult?.rowsAffected || "unknown",
           },
           "支付响应数据已存储到数据库",
         );
@@ -627,10 +643,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             orderNo,
             error: storageError instanceof Error ? storageError.message : "未知错误",
             stack: storageError instanceof Error ? storageError.stack : undefined,
+            errorCode: storageError instanceof Error && 'code' in storageError ? storageError.code : undefined,
+            sqliteError: storageError instanceof Error && 'cause' in storageError ? storageError.cause : undefined,
           },
-          "存储支付响应数据到数据库失败",
+          "存储支付响应数据到数据库失败: " + (storageError instanceof Error ? storageError.message : "未知错误"),
         );
-        // 即使存储失败，也不影响支付流程
+        // 即使存储失败，也不影响支付流程继续，但需要记录详细错误信息以便调试
       }
 
       // 返回支付链接或二维码

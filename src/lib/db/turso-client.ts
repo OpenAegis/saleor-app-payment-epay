@@ -131,6 +131,7 @@ export async function initializeDatabase() {
         transaction_id TEXT NOT NULL,
         saleor_api_url TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'pending',
+        payment_response TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       )
@@ -147,6 +148,9 @@ export async function initializeDatabase() {
 
     // 数据库迁移：添加新的 API 版本字段
     await migrateApiVersionFields();
+    
+    // 数据库迁移：添加 payment_response 字段
+    await migratePaymentResponseField();
 
     console.log("✅ 数据库表初始化成功");
   } catch (error) {
@@ -206,6 +210,29 @@ async function migrateApiVersionFields() {
     }
   } catch (error) {
     console.error("❌ API 版本字段迁移失败:", error);
+    // 不抛出错误，避免影响整个初始化过程
+  }
+}
+
+/**
+ * 数据库迁移：为 order_mappings 表添加 payment_response 字段
+ */
+async function migratePaymentResponseField() {
+  try {
+    // 检查 payment_response 字段是否存在
+    const columns = await tursoClient.execute("PRAGMA table_info(order_mappings)");
+    const hasPaymentResponse = columns.rows.some((row) => row.name === "payment_response");
+
+    if (!hasPaymentResponse) {
+      await tursoClient.execute(`
+        ALTER TABLE order_mappings ADD COLUMN payment_response TEXT
+      `);
+      console.log("✅ 添加 payment_response 字段到 order_mappings 表");
+    } else {
+      console.log("ℹ️ payment_response 字段已存在，跳过迁移");
+    }
+  } catch (error) {
+    console.error("❌ order_mappings 表迁移失败:", error);
     // 不抛出错误，避免影响整个初始化过程
   }
 }
