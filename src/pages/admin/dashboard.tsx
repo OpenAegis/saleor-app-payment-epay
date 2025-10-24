@@ -3,7 +3,7 @@ import { useRouter } from "next/router";
 import { Button, Box, Text } from "@saleor/macaw-ui";
 import SiteAuthManager from "../../components/SiteAuthManager";
 import ChannelManager from "../../components/ChannelManager";
-import GatewayManager from "../../components/GatewayManager";
+import { GatewayManager } from "../../components/GatewayManager";
 import { DomainWhitelistManager } from "@/modules/ui/organisms/DomainWhitelistManager";
 
 export default function AdminDashboard() {
@@ -27,7 +27,8 @@ export default function AdminDashboard() {
       } else {
         void router.push("/admin/login");
       }
-    } catch (_error) {
+    } catch (error) {
+      console.error("认证检查失败:", error);
       void router.push("/admin/login");
     } finally {
       setLoading(false);
@@ -41,7 +42,8 @@ export default function AdminDashboard() {
         credentials: "include",
       });
       void router.push("/admin/login");
-    } catch (_error) {
+    } catch (error) {
+      console.error("登出失败:", error);
       void router.push("/admin/login");
     }
   };
@@ -60,11 +62,11 @@ export default function AdminDashboard() {
       if (response.ok) {
         alert("数据库初始化成功！新的字段已添加。");
       } else {
-        const error = await response.text();
-        alert(`数据库初始化失败: ${error}`);
+        const errorText = await response.text();
+        alert(`数据库初始化失败: ${errorText}`);
       }
     } catch (error) {
-      alert(`数据库初始化失败: ${error}`);
+      alert(`数据库初始化失败: ${(error as Error).message}`);
     }
   };
 

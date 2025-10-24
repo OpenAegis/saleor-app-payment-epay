@@ -16,6 +16,7 @@ export function GatewayManager() {
     epayRsaPrivateKey: "",
     apiVersion: "v1" as "v1" | "v2",
     signType: "MD5" as "MD5" | "RSA",
+    useSubmitPhp: false, // 添加 useSubmitPhp 字段
     icon: "",
     priority: 0,
   });
@@ -24,7 +25,7 @@ export function GatewayManager() {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/gateways");
-      const data = await res.json() as { gateways?: Gateway[] };
+      const data = (await res.json()) as { gateways?: Gateway[] };
       setGateways(data.gateways || []);
     } catch (error) {
       console.error("Failed to fetch gateways:", error);
@@ -48,7 +49,7 @@ export function GatewayManager() {
 
         if (res.ok) {
           resetForm();
-          await fetchGateways();
+          void fetchGateways();
         }
       } else {
         // 创建新渠道
@@ -60,7 +61,7 @@ export function GatewayManager() {
 
         if (res.ok) {
           resetForm();
-          await fetchGateways();
+          void fetchGateways();
         }
       }
     } catch (error) {
@@ -80,6 +81,7 @@ export function GatewayManager() {
       epayRsaPrivateKey: "",
       apiVersion: "v1" as "v1" | "v2",
       signType: "MD5" as "MD5" | "RSA",
+      useSubmitPhp: false, // 添加 useSubmitPhp 字段
       icon: "",
       priority: 0,
     });
@@ -96,8 +98,9 @@ export function GatewayManager() {
       epayPid: gateway.epayPid,
       epayKey: gateway.epayKey,
       epayRsaPrivateKey: gateway.epayRsaPrivateKey || "",
-      apiVersion: (gateway.apiVersion as "v1" | "v2") || "v1",
-      signType: (gateway.signType as "MD5" | "RSA") || "MD5",
+      apiVersion: gateway.apiVersion || "v1",
+      signType: gateway.signType || "MD5",
+      useSubmitPhp: gateway.useSubmitPhp || false, // 添加 useSubmitPhp 字段
       icon: gateway.icon || "",
       priority: gateway.priority,
     });
@@ -109,14 +112,14 @@ export function GatewayManager() {
       const res = await fetch("/api/admin/gateways", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          id: gateway.id, 
-          enabled: !gateway.enabled 
+        body: JSON.stringify({
+          id: gateway.id,
+          enabled: !gateway.enabled,
         }),
       });
 
       if (res.ok) {
-        await fetchGateways();
+        void fetchGateways();
       }
     } catch (error) {
       console.error("Failed to toggle gateway:", error);
@@ -132,7 +135,7 @@ export function GatewayManager() {
       });
 
       if (res.ok) {
-        await fetchGateways();
+        void fetchGateways();
       }
     } catch (error) {
       console.error("Failed to delete gateway:", error);
@@ -142,18 +145,6 @@ export function GatewayManager() {
   useEffect(() => {
     void fetchGateways();
   }, []);
-
-  const getPaymentTypeName = (type: string) => {
-    const names: Record<string, string> = {
-      alipay: "支付宝",
-      wxpay: "微信支付",
-      qqpay: "QQ钱包",
-      bank: "云闪付",
-      jdpay: "京东支付",
-      paypal: "PayPal",
-    };
-    return names[type] || type;
-  };
 
   return (
     <Box display="flex" flexDirection="column" gap={4}>
@@ -176,7 +167,9 @@ export function GatewayManager() {
       {showForm && (
         <Box
           as="form"
-          onSubmit={handleSubmit}
+          onSubmit={(e) => {
+            void handleSubmit(e);
+          }}
           display="flex"
           flexDirection="column"
           gap={3}
@@ -188,7 +181,7 @@ export function GatewayManager() {
           backgroundColor="default2"
         >
           <Text size={5}>{editingGateway ? "编辑渠道" : "添加新渠道"}</Text>
-          
+
           <Box display="grid" __gridTemplateColumns="1fr 1fr" gap={3}>
             <Box>
               <Text size={3}>渠道名称 *</Text>
@@ -266,12 +259,12 @@ export function GatewayManager() {
                 required={formData.signType === "RSA"}
                 placeholder="请输入易支付平台的 RSA 私钥 (Base64 格式，不包含 BEGIN/END 标头)"
                 rows={8}
-                style={{ 
-                  width: "100%", 
-                  padding: "8px", 
+                style={{
+                  width: "100%",
+                  padding: "8px",
                   marginTop: "4px",
                   fontFamily: "monospace",
-                  fontSize: "12px"
+                  fontSize: "12px",
                 }}
               />
               <Text size={2} color="default2" marginTop={1}>
@@ -287,10 +280,10 @@ export function GatewayManager() {
                 value={formData.apiVersion}
                 onChange={(e) => {
                   const apiVersion = e.target.value as "v1" | "v2";
-                  setFormData({ 
-                    ...formData, 
+                  setFormData({
+                    ...formData,
                     apiVersion,
-                    signType: apiVersion === "v2" ? "RSA" : "MD5" // v1 强制 MD5, v2 强制 RSA
+                    signType: apiVersion === "v2" ? "RSA" : "MD5", // v1 强制 MD5, v2 强制 RSA
                   });
                 }}
                 style={{ width: "100%", padding: "8px", marginTop: "4px" }}
@@ -299,8 +292,8 @@ export function GatewayManager() {
                 <option value="v2">v2 (现代模式 - /api/pay/create)</option>
               </select>
               <Text size={2} color="default2" marginTop={1}>
-                {formData.apiVersion === "v1" 
-                  ? "使用传统 v1 API，兼容性好" 
+                {formData.apiVersion === "v1"
+                  ? "使用传统 v1 API，兼容性好"
                   : "使用现代 v2 API，支持更多功能"}
               </Text>
             </Box>
@@ -311,21 +304,41 @@ export function GatewayManager() {
                 type="text"
                 value={formData.signType}
                 disabled
-                style={{ 
-                  width: "100%", 
-                  padding: "8px", 
+                style={{
+                  width: "100%",
+                  padding: "8px",
                   marginTop: "4px",
                   backgroundColor: "#f5f5f5",
-                  color: "#666"
+                  color: "#666",
                 }}
               />
               <Text size={2} color="default2" marginTop={1}>
-                {formData.apiVersion === "v1" 
-                  ? "v1 API 强制使用 MD5 签名" 
+                {formData.apiVersion === "v1"
+                  ? "v1 API 强制使用 MD5 签名"
                   : "v2 API 强制使用 RSA 签名，更安全"}
               </Text>
             </Box>
           </Box>
+
+          {/* 添加 useSubmitPhp 选项，仅在 v1 API 时显示 */}
+          {formData.apiVersion === "v1" && (
+            <Box>
+              <Box display="flex" alignItems="center" gap={2}>
+                <input
+                  type="checkbox"
+                  id="useSubmitPhp"
+                  checked={formData.useSubmitPhp}
+                  onChange={(e) => setFormData({ ...formData, useSubmitPhp: e.target.checked })}
+                />
+                <label htmlFor="useSubmitPhp">
+                  <Text size={3}>使用 /submit.php 接口</Text>
+                </label>
+              </Box>
+              <Text size={2} color="default2" marginTop={1}>
+                启用此选项将使用 /submit.php 而不是 /mapi.php 接口（某些支付接口只支持 /submit.php）
+              </Text>
+            </Box>
+          )}
 
           <Box display="grid" __gridTemplateColumns="1fr 1fr" gap={3}>
             <Box>
@@ -353,7 +366,13 @@ export function GatewayManager() {
 
           <Box display="flex" gap={2}>
             <Button type="submit" disabled={loading}>
-              {loading ? (editingGateway ? "保存中..." : "创建中...") : (editingGateway ? "保存渠道" : "创建渠道")}
+              {loading
+                ? editingGateway
+                  ? "保存中..."
+                  : "创建中..."
+                : editingGateway
+                ? "保存渠道"
+                : "创建渠道"}
             </Button>
             <Button type="button" onClick={resetForm}>
               取消
@@ -393,11 +412,13 @@ export function GatewayManager() {
                   )}
                   <Box>
                     <Box display="flex" alignItems="center" gap={2}>
-                      <Text size={5} fontWeight="bold">{gateway.name}</Text>
-                      <Box 
-                        display="inline-flex" 
-                        alignItems="center" 
-                        padding={1} 
+                      <Text size={5} fontWeight="bold">
+                        {gateway.name}
+                      </Text>
+                      <Box
+                        display="inline-flex"
+                        alignItems="center"
+                        padding={1}
                         backgroundColor={gateway.apiVersion === "v2" ? "success1" : "warning1"}
                         borderRadius={2}
                       >
@@ -413,11 +434,13 @@ export function GatewayManager() {
                       商户ID: {gateway.epayPid}
                     </Text>
                     <Text size={2} color="default2">
-                      API版本: {gateway.apiVersion === "v2" ? "v2 (现代模式)" : "v1 (兼容模式)"} | 
+                      API版本: {gateway.apiVersion === "v2" ? "v2 (现代模式)" : "v1 (兼容模式)"} |
                       签名: {gateway.signType || "MD5"}
                     </Text>
                     {gateway.description && (
-                      <Text size={2} color="default2">{gateway.description}</Text>
+                      <Text size={2} color="default2">
+                        {gateway.description}
+                      </Text>
                     )}
                   </Box>
                 </Box>
@@ -427,21 +450,21 @@ export function GatewayManager() {
                 <Button
                   variant={gateway.enabled ? "primary" : "secondary"}
                   size="small"
-                  onClick={() => handleToggleEnabled(gateway)}
+                  onClick={() => {
+                    void handleToggleEnabled(gateway);
+                  }}
                 >
                   {gateway.enabled ? "已启用" : "已禁用"}
                 </Button>
-                <Button
-                  variant="secondary"
-                  size="small"
-                  onClick={() => handleEdit(gateway)}
-                >
+                <Button variant="secondary" size="small" onClick={() => handleEdit(gateway)}>
                   编辑
                 </Button>
                 <Button
                   variant="tertiary"
                   size="small"
-                  onClick={() => handleDelete(gateway.id)}
+                  onClick={() => {
+                    void handleDelete(gateway.id);
+                  }}
                 >
                   删除
                 </Button>
@@ -453,5 +476,3 @@ export function GatewayManager() {
     </Box>
   );
 }
-
-export default GatewayManager;
