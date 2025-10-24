@@ -360,6 +360,115 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 使用 out_trade_no 参数查询我们自己生成的订单号
     // epayOrderNo 是我们自己生成的订单号，应该作为 out_trade_no 参数传递
+
+    // 检查是否在初始化后的10秒内，如果是则直接返回支付链接而不查询
+    let shouldUseCachedPaymentLink = false;
+    let cachedPaymentResponse: Record<string, unknown> | null = null;
+    let orderNoForCache: string | null = null; // 保存订单号用于验证
+
+    try {
+      const { db } = await import("@/lib/db/turso-client");
+      const { orderMappings } = await import("@/lib/db/schema");
+      const { eq } = await import("drizzle-orm");
+
+      const mapping = await db
+        .select()
+        .from(orderMappings)
+        .where(eq(orderMappings.transactionId, transaction.id))
+        .limit(1);
+
+      if (mapping.length > 0) {
+        const orderInfo = mapping[0];
+        orderNoForCache = orderInfo.orderNo; // 保存订单号
+
+        // 检查订单创建时间是否在10秒内
+        const orderCreatedAt = new Date(orderInfo.createdAt);
+        const currentTime = new Date();
+        const timeDiff = currentTime.getTime() - orderCreatedAt.getTime();
+
+        // 如果在10秒内且有支付响应数据
+        if (timeDiff <= 10000 && orderInfo.paymentResponse) {
+          // 10000毫秒 = 10秒
+          shouldUseCachedPaymentLink = true;
+          try {
+            cachedPaymentResponse = JSON.parse(orderInfo.paymentResponse) as Record<
+              string,
+              unknown
+            >;
+            logger.info(
+              {
+                transactionId: transaction.id,
+                orderNo: orderInfo.orderNo,
+                timeDiffMs: timeDiff,
+                orderCreatedAt: orderInfo.createdAt,
+              },
+              "订单在10秒内创建，使用缓存的支付链接",
+            );
+          } catch (parseError) {
+            logger.error(
+              {
+                transactionId: transaction.id,
+                error: parseError instanceof Error ? parseError.message : "未知错误",
+              },
+              "解析缓存的支付响应数据失败",
+            );
+            shouldUseCachedPaymentLink = false;
+          }
+        }
+      }
+    } catch (mappingError) {
+      logger.error(
+        {
+          error: mappingError instanceof Error ? mappingError.message : "未知错误",
+          transactionId: transaction.id,
+        },
+        "查询订单映射表检查时间失败",
+      );
+    }
+
+    // 如果应该使用缓存的支付链接，直接返回
+    if (shouldUseCachedPaymentLink && cachedPaymentResponse) {
+      // 验证是否是同一个订单（通过订单号匹配）
+      const cachedSaleorOrderNo = cachedPaymentResponse["saleorOrderNo"] as string;
+      if (cachedSaleorOrderNo && cachedSaleorOrderNo === orderNoForCache) {
+        if (cachedPaymentResponse["paymentUrl"] || cachedPaymentResponse["qrcode"]) {
+          logger.info(
+            {
+              transactionId: transaction.id,
+              orderNo: orderNoForCache,
+            },
+            "返回缓存的支付链接（验证为同一订单）",
+          );
+
+          // 直接返回缓存的支付链接
+          return res.status(200).json({
+            result: "CHARGE_ACTION_REQUIRED",
+            amount: amountValue,
+            externalUrl: (cachedPaymentResponse["paymentUrl"] as string) || undefined,
+            data: {
+              paymentResponse: {
+                paymentUrl: cachedPaymentResponse["paymentUrl"],
+                qrcode: cachedPaymentResponse["qrcode"],
+                epayOrderNo: cachedPaymentResponse["epayOrderNo"],
+                saleorOrderNo: cachedPaymentResponse["saleorOrderNo"],
+                payType: cachedPaymentResponse["payType"],
+              },
+            },
+          });
+        }
+      } else {
+        logger.warn(
+          {
+            transactionId: transaction.id,
+            cachedOrderNo: cachedSaleorOrderNo,
+            currentOrderNo: orderNoForCache,
+          },
+          "订单号不匹配，不使用缓存的支付链接",
+        );
+      }
+    }
+
+    // 继续原有的查询逻辑
     let result = await epayClient.queryOrder(epayOrderNo as string, true);
     logger.info(
       {
