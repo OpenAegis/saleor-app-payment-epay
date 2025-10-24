@@ -630,7 +630,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({
         result: "CHARGE_ACTION_REQUIRED",
         amount: amountValue,
-        externalUrl: result.payUrl || undefined,
+        // 限制 externalUrl 长度，避免超过 Saleor 的字段限制
+        externalUrl: result.payUrl ? result.payUrl.substring(0, 200) : undefined,
         data: {
           // 只传递必要的信息，避免数据过长
           epayOrderNo: result.tradeNo,
