@@ -449,11 +449,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               ((cachedPaymentResponse["paymentUrl"] as string) || "").substring(0, 200) ||
               undefined,
             data: {
-              // 只传递必要的信息，避免数据过长
-              epayOrderNo: cachedPaymentResponse["epayOrderNo"],
-              saleorOrderNo: cachedPaymentResponse["saleorOrderNo"],
               payType: cachedPaymentResponse["payType"],
-              // 不再传递完整的 paymentResponse 对象
+              paymentUrl: cachedPaymentResponse["paymentUrl"],
+              qrcode: cachedPaymentResponse["qrcode"],
             },
           });
         }
@@ -535,13 +533,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             amount: amountValue,
             externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
             data: {
-              paymentResponse: {
-                paymentUrl: paymentResponse["paymentUrl"],
-                qrcode: paymentResponse["qrcode"],
-                epayOrderNo: paymentResponse["epayOrderNo"],
-                saleorOrderNo: paymentResponse["saleorOrderNo"],
-                payType: paymentResponse["payType"],
-              },
+              payType: paymentResponse["payType"],
+              paymentUrl: paymentResponse["paymentUrl"],
+              qrcode: paymentResponse["qrcode"],
             },
           });
         }
@@ -585,13 +579,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                   amount: amountValue,
                   externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
                   data: {
-                    paymentResponse: {
-                      paymentUrl: paymentResponse["paymentUrl"],
-                      qrcode: paymentResponse["qrcode"],
-                      epayOrderNo: paymentResponse["epayOrderNo"],
-                      saleorOrderNo: paymentResponse["saleorOrderNo"],
-                      payType: paymentResponse["payType"],
-                    },
+                    payType: paymentResponse["payType"],
+                    paymentUrl: paymentResponse["paymentUrl"],
+                    qrcode: paymentResponse["qrcode"],
                   },
                 });
               }
@@ -625,13 +615,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 amount: amountValue,
                 externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
                 data: {
-                  paymentResponse: {
-                    paymentUrl: paymentResponse["paymentUrl"],
-                    qrcode: paymentResponse["qrcode"],
-                    epayOrderNo: paymentResponse["epayOrderNo"],
-                    saleorOrderNo: paymentResponse["saleorOrderNo"],
-                    payType: paymentResponse["payType"],
-                  },
+                  payType: paymentResponse["payType"],
+                  paymentUrl: paymentResponse["paymentUrl"],
+                  qrcode: paymentResponse["qrcode"],
                 },
               });
             }
@@ -724,11 +710,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             amount: amountValue,
             externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
             data: {
-              // 只传递必要的信息，避免数据过长
-              epayOrderNo: paymentResponse["epayOrderNo"],
-              saleorOrderNo: paymentResponse["saleorOrderNo"],
               payType: paymentResponse["payType"],
-              // 不再传递完整的 paymentResponse 对象
+              paymentUrl: paymentResponse["paymentUrl"],
+              qrcode: paymentResponse["qrcode"],
             },
           });
         }
@@ -770,11 +754,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                   amount: amountValue,
                   externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
                   data: {
-                    // 只传递必要的信息，避免数据过长
-                    epayOrderNo: paymentResponse["epayOrderNo"],
-                    saleorOrderNo: paymentResponse["saleorOrderNo"],
                     payType: paymentResponse["payType"],
-                    // 不再传递完整的 paymentResponse 对象
+                    paymentUrl: paymentResponse["paymentUrl"],
+                    qrcode: paymentResponse["qrcode"],
                   },
                 });
               }
@@ -812,6 +794,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                   epayOrderNo: paymentResponse["epayOrderNo"],
                   saleorOrderNo: paymentResponse["saleorOrderNo"],
                   payType: paymentResponse["payType"],
+                  paymentUrl: paymentResponse["paymentUrl"],
+                  qrcode: paymentResponse["qrcode"],
                   // 不再传递完整的 paymentResponse 对象
                 },
               });
@@ -879,13 +863,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             amount: amountValue,
             externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
             data: {
-              paymentResponse: {
-                paymentUrl: paymentResponse["paymentUrl"],
-                qrcode: paymentResponse["qrcode"],
-                epayOrderNo: paymentResponse["epayOrderNo"],
-                saleorOrderNo: paymentResponse["saleorOrderNo"],
-                payType: paymentResponse["payType"],
-              },
+              payType: paymentResponse["payType"],
+              paymentUrl: paymentResponse["paymentUrl"],
+              qrcode: paymentResponse["qrcode"],
             },
           });
         }
@@ -927,13 +907,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                   amount: amountValue,
                   externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
                   data: {
-                    paymentResponse: {
-                      paymentUrl: paymentResponse["paymentUrl"],
-                      qrcode: paymentResponse["qrcode"],
-                      epayOrderNo: paymentResponse["epayOrderNo"],
-                      saleorOrderNo: paymentResponse["saleorOrderNo"],
-                      payType: paymentResponse["payType"],
-                    },
+                    payType: paymentResponse["payType"],
+                    paymentUrl: paymentResponse["paymentUrl"],
+                    qrcode: paymentResponse["qrcode"],
                   },
                 });
               }
@@ -967,13 +943,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 amount: amountValue,
                 externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
                 data: {
-                  paymentResponse: {
-                    paymentUrl: paymentResponse["paymentUrl"],
-                    qrcode: paymentResponse["qrcode"],
-                    epayOrderNo: paymentResponse["epayOrderNo"],
-                    saleorOrderNo: paymentResponse["saleorOrderNo"],
-                    payType: paymentResponse["payType"],
-                  },
+                  payType: paymentResponse["payType"],
+                  paymentUrl: paymentResponse["paymentUrl"],
+                  qrcode: paymentResponse["qrcode"],
                 },
               });
             }
@@ -1039,13 +1011,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           amount: amountValue,
           externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
           data: {
-            paymentResponse: {
-              paymentUrl: paymentResponse["paymentUrl"],
-              qrcode: paymentResponse["qrcode"],
-              epayOrderNo: paymentResponse["epayOrderNo"],
-              saleorOrderNo: paymentResponse["saleorOrderNo"],
-              payType: paymentResponse["payType"],
-            },
+            payType: paymentResponse["payType"],
+            paymentUrl: paymentResponse["paymentUrl"],
+            qrcode: paymentResponse["qrcode"],
           },
         });
       }
@@ -1087,13 +1055,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 amount: amountValue,
                 externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
                 data: {
-                  paymentResponse: {
-                    paymentUrl: paymentResponse["paymentUrl"],
-                    qrcode: paymentResponse["qrcode"],
-                    epayOrderNo: paymentResponse["epayOrderNo"],
-                    saleorOrderNo: paymentResponse["saleorOrderNo"],
-                    payType: paymentResponse["payType"],
-                  },
+                  payType: paymentResponse["payType"],
+                  paymentUrl: paymentResponse["paymentUrl"],
+                  qrcode: paymentResponse["qrcode"],
                 },
               });
             }
@@ -1127,13 +1091,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               amount: amountValue,
               externalUrl: (paymentResponse["paymentUrl"] as string) || undefined,
               data: {
-                paymentResponse: {
-                  paymentUrl: paymentResponse["paymentUrl"],
-                  qrcode: paymentResponse["qrcode"],
-                  epayOrderNo: paymentResponse["epayOrderNo"],
-                  saleorOrderNo: paymentResponse["saleorOrderNo"],
-                  payType: paymentResponse["payType"],
-                },
+                payType: paymentResponse["payType"],
+                paymentUrl: paymentResponse["paymentUrl"],
+                qrcode: paymentResponse["qrcode"],
               },
             });
           }
