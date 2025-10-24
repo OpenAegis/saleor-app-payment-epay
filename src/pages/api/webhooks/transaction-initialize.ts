@@ -583,11 +583,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const { orderMappings } = await import("@/lib/db/schema");
         const { eq } = await import("drizzle-orm");
 
+        // 记录存储前的数据信息
+        const paymentResponseStr = JSON.stringify(paymentResponse);
+        logger.info(
+          {
+            transactionId: transaction.id,
+            orderNo,
+            paymentResponseLength: paymentResponseStr.length,
+            hasPaymentUrl: !!result.payUrl,
+            hasQrcode: !!result.qrcode,
+          },
+          "准备存储支付响应数据到数据库",
+        );
+
         // 更新订单映射记录，添加支付响应数据
         await db
           .update(orderMappings)
           .set({
-            paymentResponse: JSON.stringify(paymentResponse),
+            paymentResponse: paymentResponseStr,
             updatedAt: new Date().toISOString(),
           })
           .where(eq(orderMappings.orderNo, orderNo));
@@ -596,6 +609,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           {
             transactionId: transaction.id,
             orderNo,
+            paymentResponseLength: paymentResponseStr.length,
           },
           "支付响应数据已存储到数据库",
         );
@@ -605,6 +619,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             transactionId: transaction.id,
             orderNo,
             error: storageError instanceof Error ? storageError.message : "未知错误",
+            stack: storageError instanceof Error ? storageError.stack : undefined,
           },
           "存储支付响应数据到数据库失败",
         );
