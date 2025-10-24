@@ -277,6 +277,15 @@ export class EpayClient {
       money: params.amount.toFixed(2),
     };
 
+    // 添加可选参数 - 必须在签名之前添加
+    if (params.productDesc) {
+      baseRequestData.param = params.productDesc;
+    }
+    // clientIp 也需要在签名之前添加（如果会使用）
+    if (params.clientIp) {
+      baseRequestData.clientip = params.clientIp;
+    }
+
     // 生成签名
     const sign = this.generateSign(baseRequestData);
     baseRequestData.sign = sign;
@@ -294,15 +303,10 @@ export class EpayClient {
         // 对于 /submit.php，我们直接构造 URL 并返回给前端
         // 前端需要将用户重定向到这个 URL 来完成支付
 
-        // 构造适用于 /submit.php 的请求数据
+        // 使用已包含所有参数和签名的 baseRequestData
         const submitRequestData: Record<string, string> = {
           ...baseRequestData,
         };
-
-        // 对于 /submit.php 接口，productDesc 应该映射为 param
-        if (params.productDesc) {
-          submitRequestData.param = params.productDesc;
-        }
         // 注意：/submit.php 接口不支持 clientip 参数
 
         const baseUrlSubmit = baseUrl.replace(/\/+$/, ""); // 确保没有尾部斜杠
@@ -334,19 +338,10 @@ export class EpayClient {
         // 使用传统的 /mapi.php 接口
         const apiEndpoint = `${baseUrl}/mapi.php`;
 
-        // 构造适用于 /mapi.php 的请求数据
+        // 使用已包含所有参数和签名的 baseRequestData
         const mapiRequestData: Record<string, string> = {
           ...baseRequestData,
         };
-
-        // 对于 /mapi.php 接口，productDesc 应该映射为 param
-        if (params.productDesc) {
-          mapiRequestData.param = params.productDesc;
-        }
-        // /mapi.php 接口支持 clientip 参数
-        if (params.clientIp) {
-          mapiRequestData.clientip = params.clientIp;
-        }
 
         console.log("[EpayClient] 使用 v1 API 发起支付请求", {
           endpoint: apiEndpoint,
