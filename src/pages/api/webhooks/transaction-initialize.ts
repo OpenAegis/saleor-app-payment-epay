@@ -7,6 +7,7 @@ import { gatewayManager } from "@/lib/managers/gateway-manager";
 import { channelManager } from "@/lib/managers/channel-manager";
 import { type Gateway, orderMappings, type NewOrderMapping } from "@/lib/db/schema";
 import { db } from "@/lib/db/turso-client";
+import { ensureDatabaseInitialized } from "@/lib/db/db-manager";
 import { randomId } from "@/lib/random-id";
 import { createLogger } from "@/lib/logger";
 
@@ -227,6 +228,24 @@ async function checkSiteAuthorization(saleorApiUrl: string): Promise<boolean> {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  // 确保数据库已初始化
+  try {
+    await ensureDatabaseInitialized();
+  } catch (dbError) {
+    logger.error(
+      {
+        error: dbError instanceof Error ? dbError.message : "未知错误",
+        stack: dbError instanceof Error ? dbError.stack : undefined,
+      },
+      "数据库初始化失败"
+    );
+    return res.status(500).json({
+      result: "CHARGE_FAILURE",
+      amount: 0,
+      message: "数据库初始化失败，请稍后重试",
+    });
   }
 
   let amountValue = 0;
