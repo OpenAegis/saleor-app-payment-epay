@@ -617,7 +617,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         amount: amountValue,
         externalUrl: result.payUrl || undefined,
         data: {
-          paymentResponse,
+          // 只传递必要的信息，避免数据过长
+          epayOrderNo: result.tradeNo,
+          saleorOrderNo: orderNo,
+          payType: result.type,
+          // 不再传递完整的 paymentResponse 对象
         },
       });
     }

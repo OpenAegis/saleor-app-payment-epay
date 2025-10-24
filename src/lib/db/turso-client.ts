@@ -162,10 +162,10 @@ async function migrateApiVersionFields() {
   try {
     // 检查需要的列是否存在
     const columns = await tursoClient.execute("PRAGMA table_info(gateways)");
-    const hasApiVersion = columns.rows.some(row => row.name === "api_version");
-    const hasSignType = columns.rows.some(row => row.name === "sign_type");
-    const hasRsaPrivateKey = columns.rows.some(row => row.name === "epay_rsa_private_key");
-    const hasUseSubmitPhp = columns.rows.some(row => row.name === "use_submit_php");
+    const hasApiVersion = columns.rows.some((row) => row.name === "api_version");
+    const hasSignType = columns.rows.some((row) => row.name === "sign_type");
+    const hasRsaPrivateKey = columns.rows.some((row) => row.name === "epay_rsa_private_key");
+    const hasUseSubmitPhp = columns.rows.some((row) => row.name === "use_submit_php");
 
     if (!hasApiVersion) {
       await tursoClient.execute(`
@@ -192,12 +192,12 @@ async function migrateApiVersionFields() {
       await tursoClient.execute(`
         ALTER TABLE gateways ADD COLUMN use_submit_php INTEGER
       `);
-      
+
       // 为现有记录设置默认值
       await tursoClient.execute(`
         UPDATE gateways SET use_submit_php = 0 WHERE use_submit_php IS NULL
       `);
-      
+
       console.log("✅ 添加 use_submit_php 字段");
     }
 
