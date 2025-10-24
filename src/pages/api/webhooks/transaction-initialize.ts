@@ -426,14 +426,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         transactionId: transaction.id,
         saleorApiUrl,
         status: "pending",
+        // 初始化时设置 paymentResponse 为 null
+        paymentResponse: null,
         createdAt: now,
         updatedAt: now,
       };
       await db.insert(orderMappings).values(orderMapping);
-      logger.info(`订单映射已保存: ${orderNo} -> ${transaction.id}`);
+      logger.info("订单映射已保存: " + orderNo + " -> " + transaction.id);
     } catch (mappingError) {
       logger.error(
-        `保存订单映射失败: ${mappingError instanceof Error ? mappingError.message : "未知错误"}`,
+        {
+          error: mappingError instanceof Error ? mappingError.message : "未知错误",
+          stack: mappingError instanceof Error ? mappingError.stack : undefined,
+        },
+        "保存订单映射失败",
       );
       // 不阻止支付流程，只记录错误
     }
@@ -597,6 +603,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         );
 
         // 更新订单映射记录，添加支付响应数据
+        // 使用更明确的参数传递方式
         await db
           .update(orderMappings)
           .set({
