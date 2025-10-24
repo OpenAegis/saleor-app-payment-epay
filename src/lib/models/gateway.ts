@@ -11,11 +11,12 @@ const BaseGatewaySchema = z.object({
   epayPid: z.string().min(1, "易支付商户ID不能为空"), // 易支付商户ID
   epayKey: z.string().min(1, "易支付密钥不能为空"), // 易支付密钥 (MD5签名使用)
   epayRsaPrivateKey: z.string().optional(), // RSA私钥 (RSA签名使用)
-  
+
   // API 版本配置
   apiVersion: z.enum(["v1", "v2"]).default("v1"), // API 版本
   signType: z.enum(["MD5", "RSA"]).default("MD5"), // 签名类型
-  
+  useSubmitPhp: z.boolean().default(false), // 是否使用 /submit.php 而不是 /mapi.php (v1 API)
+
   icon: z.string().optional(), // 图标URL
   enabled: z.boolean().default(true),
   priority: z.number().int().min(0).default(0), // 优先级，数字越大优先级越高
@@ -30,23 +31,26 @@ const BaseGatewaySchema = z.object({
 });
 
 // 添加验证的完整 Schema
-export const GatewaySchema = BaseGatewaySchema.refine((data) => {
-  // v1 API 必须使用 MD5 签名
-  if (data.apiVersion === "v1" && data.signType !== "MD5") {
-    return false;
-  }
-  // v2 API 必须使用 RSA 签名
-  if (data.apiVersion === "v2" && data.signType !== "RSA") {
-    return false;
-  }
-  // RSA 签名时必须提供 RSA 私钥
-  if (data.signType === "RSA" && !data.epayRsaPrivateKey?.trim()) {
-    return false;
-  }
-  return true;
-}, {
-  message: "API 版本与签名类型不匹配，或 RSA 签名缺少私钥",
-});
+export const GatewaySchema = BaseGatewaySchema.refine(
+  (data) => {
+    // v1 API 必须使用 MD5 签名
+    if (data.apiVersion === "v1" && data.signType !== "MD5") {
+      return false;
+    }
+    // v2 API 必须使用 RSA 签名
+    if (data.apiVersion === "v2" && data.signType !== "RSA") {
+      return false;
+    }
+    // RSA 签名时必须提供 RSA 私钥
+    if (data.signType === "RSA" && !data.epayRsaPrivateKey?.trim()) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "API 版本与签名类型不匹配，或 RSA 签名缺少私钥",
+  },
+);
 
 export type Gateway = z.infer<typeof GatewaySchema>;
 
@@ -54,54 +58,62 @@ export const CreateGatewaySchema = BaseGatewaySchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
-}).refine((data) => {
-  // 同样的验证逻辑
-  if (data.apiVersion === "v1" && data.signType !== "MD5") {
-    return false;
-  }
-  if (data.apiVersion === "v2" && data.signType !== "RSA") {
-    return false;
-  }
-  if (data.signType === "RSA" && !data.epayRsaPrivateKey?.trim()) {
-    return false;
-  }
-  return true;
-}, {
-  message: "API 版本与签名类型不匹配，或 RSA 签名缺少私钥",
-});
-
-export type CreateGatewayInput = z.infer<typeof CreateGatewaySchema>;
-
-// 用于API的创建接口类型，allowedUsers是字符串数组
-export type CreateGatewayAPIInput = Omit<CreateGatewayInput, 'allowedUsers'> & {
-  allowedUsers: string[];
-};
-
-export const UpdateGatewaySchema = BaseGatewaySchema.partial().omit({
-  id: true,
-  createdAt: true,
-}).refine((data) => {
-  // 更新时的验证逻辑，但都是可选的
-  if (data.apiVersion && data.signType) {
+}).refine(
+  (data) => {
+    // 同样的验证逻辑
     if (data.apiVersion === "v1" && data.signType !== "MD5") {
       return false;
     }
     if (data.apiVersion === "v2" && data.signType !== "RSA") {
       return false;
     }
-  }
-  if (data.signType === "RSA" && !data.epayRsaPrivateKey?.trim()) {
-    return false;
-  }
-  return true;
-}, {
-  message: "API 版本与签名类型不匹配，或 RSA 签名缺少私钥",
-});
+    if (data.signType === "RSA" && !data.epayRsaPrivateKey?.trim()) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "API 版本与签名类型不匹配，或 RSA 签名缺少私钥",
+  },
+);
+
+export type CreateGatewayInput = z.infer<typeof CreateGatewaySchema>;
+
+// 用于API的创建接口类型，allowedUsers是字符串数组
+export type CreateGatewayAPIInput = Omit<CreateGatewayInput, "allowedUsers"> & {
+  allowedUsers: string[];
+};
+
+export const UpdateGatewaySchema = BaseGatewaySchema.partial()
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .refine(
+    (data) => {
+      // 更新时的验证逻辑，但都是可选的
+      if (data.apiVersion && data.signType) {
+        if (data.apiVersion === "v1" && data.signType !== "MD5") {
+          return false;
+        }
+        if (data.apiVersion === "v2" && data.signType !== "RSA") {
+          return false;
+        }
+      }
+      if (data.signType === "RSA" && !data.epayRsaPrivateKey?.trim()) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "API 版本与签名类型不匹配，或 RSA 签名缺少私钥",
+    },
+  );
 
 export type UpdateGatewayInput = z.infer<typeof UpdateGatewaySchema>;
 
 // 用于API的更新接口类型，allowedUsers是字符串数组
-export type UpdateGatewayAPIInput = Omit<UpdateGatewayInput, 'allowedUsers'> & {
+export type UpdateGatewayAPIInput = Omit<UpdateGatewayInput, "allowedUsers"> & {
   allowedUsers?: string[];
 };
 

@@ -66,6 +66,7 @@ export interface EpayConfig {
   apiUrl: string;
   apiVersion?: "v1" | "v2"; // API 版本
   signType?: "MD5" | "RSA"; // 签名类型
+  useSubmitPhp?: boolean; // 是否使用 /submit.php 而不是 /mapi.php (v1 API)
 }
 
 export interface CreateOrderParams {
@@ -276,8 +277,9 @@ export class EpayClient {
     };
 
     // 添加可选参数
+    // 对于 /submit.php 接口，productDesc 应该映射为 param
     if (params.productDesc) {
-      requestData.desc = params.productDesc;
+      requestData.param = params.productDesc;
     }
     if (params.clientIp) {
       requestData.clientip = params.clientIp;
@@ -291,7 +293,11 @@ export class EpayClient {
     try {
       // 确保正确的 URL 拼接，避免双斜杠问题
       const baseUrl = this.config.apiUrl.replace(/\/+$/, ""); // 移除尾部斜杠
-      const apiEndpoint = `${baseUrl}/mapi.php`;
+
+      // 检查是否需要使用 /submit.php 而不是 /mapi.php
+      // 有些支付接口只支持 /submit.php
+      const useSubmitPhp = this.config.useSubmitPhp ?? false;
+      const apiEndpoint = useSubmitPhp ? `${baseUrl}/submit.php` : `${baseUrl}/mapi.php`;
 
       console.log("[EpayClient] 使用 v1 API 发起支付请求", {
         endpoint: apiEndpoint,
@@ -301,6 +307,7 @@ export class EpayClient {
         payType: params.payType,
         hasClientIp: !!params.clientIp,
         signPreview: sign.substring(0, 8) + "...",
+        useSubmitPhp,
       });
 
       const response = await fetch(apiEndpoint, {
@@ -311,13 +318,35 @@ export class EpayClient {
           "User-Agent": "Saleor-Epay-Client/1.0",
         },
         body: new URLSearchParams(requestData).toString(),
+        redirect: "manual", // 手动处理重定向
       });
 
       console.log("[EpayClient] v1 API 响应状态", {
         status: response.status,
         statusText: response.statusText,
         contentType: response.headers.get("content-type"),
+        location: response.headers.get("location"), // 获取跳转地址
       });
+
+      // 检查是否是重定向响应 (30x)
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (location) {
+          console.log("[EpayClient] 检测到重定向响应", {
+            statusCode: response.status,
+            location,
+          });
+
+          // 对于 /submit.php 接口，30x 跳转是正常的，跳转地址就是支付链接
+          return {
+            code: 1,
+            msg: "success",
+            payUrl: location, // 使用跳转地址作为支付链接
+            tradeNo: params.orderNo, // 使用我们自己的订单号作为交易号
+            type: params.payType || "unknown",
+          };
+        }
+      }
 
       if (!response.ok) {
         const errorText = await response.text();

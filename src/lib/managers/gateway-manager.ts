@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, sql, inArray } from "drizzle-orm";
+import { eq, desc, asc, inArray } from "drizzle-orm";
 import { db } from "../db/turso-client";
 import { gateways, channels, type Gateway, type NewGateway } from "../db/schema";
 import { randomId } from "../random-id";
@@ -24,13 +24,14 @@ export class GatewayManager {
       epayRsaPrivateKey: input.epayRsaPrivateKey || null,
       apiVersion: input.apiVersion || "v1",
       signType: input.signType || "MD5",
+      useSubmitPhp: input.useSubmitPhp ?? false, // 添加 useSubmitPhp 字段
       icon: input.icon,
       enabled: input.enabled ?? true,
       priority: input.priority || 0,
       isMandatory: input.isMandatory || false,
       isGlobal: input.isGlobal ?? true,
       // 确保allowedUsers是JSON字符串
-      allowedUsers: Array.isArray(input.allowedUsers) 
+      allowedUsers: Array.isArray(input.allowedUsers)
         ? JSON.stringify(input.allowedUsers)
         : JSON.stringify(input.allowedUsers || []),
       createdAt: now,
@@ -38,7 +39,7 @@ export class GatewayManager {
     };
 
     await db.insert(gateways).values(gateway);
-    
+
     // 返回时解析allowedUsers
     return {
       ...gateway,
@@ -52,7 +53,7 @@ export class GatewayManager {
   async get(id: string): Promise<Gateway | null> {
     const result = await db.select().from(gateways).where(eq(gateways.id, id)).limit(1);
     const gateway = result[0];
-    
+
     if (!gateway) return null;
 
     // 解析allowedUsers JSON
@@ -70,9 +71,9 @@ export class GatewayManager {
       .select()
       .from(gateways)
       .orderBy(desc(gateways.priority), asc(gateways.createdAt));
-    
+
     // 解析allowedUsers JSON
-    return result.map(gateway => ({
+    return result.map((gateway) => ({
       ...gateway,
       allowedUsers: JSON.parse(gateway.allowedUsers),
     })) as Gateway[];
@@ -86,20 +87,20 @@ export class GatewayManager {
     const usedGatewayIds = await db
       .selectDistinct({ gatewayId: channels.gatewayId })
       .from(channels);
-    
+
     if (usedGatewayIds.length === 0) {
       return [];
     }
-    
-    const gatewayIds = usedGatewayIds.map(c => c.gatewayId);
+
+    const gatewayIds = usedGatewayIds.map((c) => c.gatewayId);
     const result = await db
       .select()
       .from(gateways)
       .where(inArray(gateways.id, gatewayIds))
       .orderBy(desc(gateways.priority), asc(gateways.createdAt));
-    
+
     // 解析allowedUsers JSON
-    return result.map(gateway => ({
+    return result.map((gateway) => ({
       ...gateway,
       allowedUsers: JSON.parse(gateway.allowedUsers),
     })) as Gateway[];
@@ -114,9 +115,9 @@ export class GatewayManager {
       .from(gateways)
       .where(eq(gateways.enabled, true))
       .orderBy(desc(gateways.priority), asc(gateways.createdAt));
-    
+
     // 解析allowedUsers JSON
-    return result.map(gateway => ({
+    return result.map((gateway) => ({
       ...gateway,
       allowedUsers: JSON.parse(gateway.allowedUsers),
     })) as Gateway[];
@@ -125,9 +126,12 @@ export class GatewayManager {
   /**
    * 获取用户可访问的通道
    */
-  async getAccessibleGateways(userIdentifier: string | null, isAdmin: boolean = false): Promise<Gateway[]> {
+  async getAccessibleGateways(
+    userIdentifier: string | null,
+    isAdmin: boolean = false,
+  ): Promise<Gateway[]> {
     const all = await this.getAll();
-    
+
     if (isAdmin) {
       return all;
     }
@@ -151,21 +155,31 @@ export class GatewayManager {
    * 更新通道
    */
   async update(id: string, input: UpdateGatewayAPIInput): Promise<Gateway | null> {
-    const updateData: any = {
-      ...input,
+    const updateData: Partial<NewGateway> = {
       updatedAt: new Date().toISOString(),
     };
 
-    // 如果更新allowedUsers，确保是JSON字符串
+    // 更新各个字段
+    if (input.name !== undefined) updateData.name = input.name;
+    if (input.description !== undefined) updateData.description = input.description;
+    if (input.epayUrl !== undefined) updateData.epayUrl = input.epayUrl;
+    if (input.epayPid !== undefined) updateData.epayPid = input.epayPid;
+    if (input.epayKey !== undefined) updateData.epayKey = input.epayKey;
+    if (input.epayRsaPrivateKey !== undefined)
+      updateData.epayRsaPrivateKey = input.epayRsaPrivateKey;
+    if (input.apiVersion !== undefined) updateData.apiVersion = input.apiVersion;
+    if (input.signType !== undefined) updateData.signType = input.signType;
+    if (input.useSubmitPhp !== undefined) updateData.useSubmitPhp = input.useSubmitPhp;
+    if (input.icon !== undefined) updateData.icon = input.icon;
+    if (input.enabled !== undefined) updateData.enabled = input.enabled;
+    if (input.priority !== undefined) updateData.priority = input.priority;
+    if (input.isMandatory !== undefined) updateData.isMandatory = input.isMandatory;
+    if (input.isGlobal !== undefined) updateData.isGlobal = input.isGlobal;
     if (input.allowedUsers !== undefined) {
       updateData.allowedUsers = JSON.stringify(input.allowedUsers);
     }
 
-    const result = await db
-      .update(gateways)
-      .set(updateData)
-      .where(eq(gateways.id, id))
-      .returning();
+    const result = await db.update(gateways).set(updateData).where(eq(gateways.id, id)).returning();
 
     const gateway = result[0];
     if (!gateway) return null;
@@ -184,7 +198,6 @@ export class GatewayManager {
     const result = await db.delete(gateways).where(eq(gateways.id, id)).returning();
     return result.length > 0;
   }
-
 
   /**
    * 切换通道启用状态
@@ -215,21 +228,21 @@ export class GatewayManager {
       .select({ gatewayId: channels.gatewayId })
       .from(channels)
       .where(eq(channels.type, type));
-    
+
     if (channelResults.length === 0) {
       return [];
     }
-    
+
     // 获取这些通道使用的渠道
-    const gatewayIds = channelResults.map(c => c.gatewayId);
+    const gatewayIds = channelResults.map((c) => c.gatewayId);
     const result = await db
       .select()
       .from(gateways)
       .where(inArray(gateways.id, gatewayIds))
       .orderBy(desc(gateways.priority), asc(gateways.createdAt));
-    
+
     // 解析allowedUsers JSON
-    return result.map(gateway => ({
+    return result.map((gateway) => ({
       ...gateway,
       allowedUsers: JSON.parse(gateway.allowedUsers),
     })) as Gateway[];

@@ -17,6 +17,7 @@ export const gateways = sqliteTable("gateways", {
   // API 版本配置
   apiVersion: text("api_version").notNull().default("v1"), // v1 或 v2
   signType: text("sign_type").notNull().default("MD5"), // MD5 或 RSA
+  useSubmitPhp: integer("use_submit_php", { mode: "boolean" }).notNull().default(false), // 是否使用 /submit.php 而不是 /mapi.php (v1 API)
 
   icon: text("icon"),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),

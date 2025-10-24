@@ -113,6 +113,7 @@ async function getEpayConfig(
                 apiUrl: gateway.epayUrl,
                 apiVersion: (gateway.apiVersion as "v1" | "v2") || "v1",
                 signType: (gateway.signType as "MD5" | "RSA") || "MD5",
+                useSubmitPhp: gateway.useSubmitPhp || false, // 添加 useSubmitPhp 字段
               },
               returnUrl: null, // 目前数据库结构中没有 returnUrl 字段
             };
@@ -171,6 +172,7 @@ async function getEpayConfig(
           apiUrl: firstGateway.epayUrl,
           apiVersion: (firstGateway.apiVersion as "v1" | "v2") || "v1",
           signType: (firstGateway.signType as "MD5" | "RSA") || "MD5",
+          useSubmitPhp: firstGateway.useSubmitPhp || false, // 添加 useSubmitPhp 字段
         },
         returnUrl: null,
       };
