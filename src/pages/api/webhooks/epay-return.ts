@@ -181,7 +181,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           tradeNo,
           tradeStatus,
         },
-        "支付成功，准备返回成功状态",
+        "支付成功，准备跳转",
       );
 
       // 首先尝试从支付响应数据中获取returnUrl
@@ -191,7 +191,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             orderNo,
             returnUrl: paymentResponse.returnUrl,
           },
-          "支付成功，返回成功状态和returnUrl",
+          "支付成功，跳转到客户端提供的returnUrl",
         );
 
         // 处理URL中的占位符
@@ -200,12 +200,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           orderMapping?.transactionId || orderNo,
         );
 
-        // 返回支付成功状态和returnUrl，让前端处理跳转
-        return res.status(200).json({
-          status: "SUCCESS",
-          message: "支付成功",
-          returnUrl: processedReturnUrl,
-        });
+        // 执行302跳转到客户端提供的returnUrl
+        return res.redirect(302, processedReturnUrl);
       }
 
       // 如果支付响应中没有returnUrl，尝试使用全局配置的returnUrl
@@ -221,29 +217,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               orderNo,
               globalReturnUrl,
             },
-            "使用全局returnUrl配置",
+            "支付成功，跳转到全局returnUrl配置",
           );
 
-          // 返回支付成功状态和全局returnUrl，让前端处理跳转
-          return res.status(200).json({
-            status: "SUCCESS",
-            message: "支付成功",
-            returnUrl: globalReturnUrl,
-          });
+          // 执行302跳转到全局returnUrl
+          return res.redirect(302, globalReturnUrl);
         }
       }
 
-      // 如果都没有returnUrl，返回成功状态但不包含returnUrl
+      // 如果都没有returnUrl，关闭页面
       logger.info(
         {
           orderNo,
         },
-        "支付成功，但未找到returnUrl",
+        "支付成功，但未找到returnUrl，关闭页面",
       );
-      return res.status(200).json({
-        status: "SUCCESS",
-        message: "支付成功",
-      });
+      // 返回HTML页面，包含关闭页面的JavaScript代码
+      return res.status(200).send(`
+<!DOCTYPE html>
+<html>
+<head>
+    <title>支付成功</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <script>
+        // 支付成功，关闭当前页面
+        window.close();
+        // 如果无法关闭（比如在浏览器标签页中打开），则显示成功信息
+        document.body.innerHTML = '<h2>支付成功</h2><p>请手动关闭此页面</p>';
+    </script>
+</body>
+</html>
+`);
     } else {
       // 支付失败或其他状态
       logger.warn(
