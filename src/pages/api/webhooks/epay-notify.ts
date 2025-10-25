@@ -293,7 +293,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       try {
         // 从数据库获取应用 token（用于服务端调用）
         const { saleorApp } = await import("@/saleor-app");
-        
+
         // 添加调试信息
         logger.info(
           {
@@ -303,10 +303,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           },
           "准备从数据库获取认证数据",
         );
-        
+
         const authData = await saleorApp.apl.get(saleorApiUrl);
         const appToken = authData?.token;
-        
+
         // 添加更多调试信息
         logger.info(
           {
@@ -394,6 +394,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       // 只有在处理完所有逻辑后才返回 success 给易支付
+      logger.info(
+        {
+          transactionId,
+          orderNo: params.out_trade_no,
+          tradeNo: params.trade_no,
+        },
+        "处理完毕，返回 success 给易支付",
+      );
       return res.status(200).send("success");
     }
 
