@@ -3,14 +3,30 @@ import { createServerClient } from "@/lib/create-graphq-client";
 import { type EpayNotifyParams, type EpayConfig } from "@/lib/epay/client";
 import { siteManager } from "@/lib/managers/site-manager";
 import { createLogger } from "@/lib/logger";
-import { createPrivateSettingsManager } from "@/modules/app-configuration/metadata-manager";
-import { EpayConfigManager } from "@/modules/payment-app-configuration/epay-config-manager";
-import { type EpayConfigEntry } from "@/modules/payment-app-configuration/epay-config";
 import { db } from "@/lib/db/turso-client";
 import { orderMappings } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
 const logger = createLogger({ component: "EpayNotifyWebhook" });
+
+/**
+ * 易支付回调接口
+ *
+ * 请求方式：GET
+ * 回调 URL：{APP_URL}/api/webhooks/epay-notify
+ *
+ * v1 和 v2 的回调参数基本一致，主要字段：
+ * - pid: 商户ID
+ * - trade_no: 平台订单号
+ * - out_trade_no: 商户订单号
+ * - type: 支付方式
+ * - trade_status: 交易状态（TRADE_SUCCESS 表示成功）
+ * - money: 订单金额
+ * - sign: 签名字符串
+ * - sign_type: 签名类型（MD5 或 RSA）
+ *
+ * 响应要求：返回 "success" 表示接收成功
+ */
 
 // Saleor GraphQL mutations
 const TRANSACTION_EVENT_REPORT = `
@@ -29,35 +45,6 @@ const TRANSACTION_EVENT_REPORT = `
     }
   }
 `;
-
-// 获取支付配置的函数
-async function getEpayConfig(saleorApiUrl: string, token: string): Promise<EpayConfig | null> {
-  try {
-    // 从Saleor的metadata中获取配置
-    const client = createServerClient(saleorApiUrl, token);
-    const settingsManager = createPrivateSettingsManager(client);
-    const configManager = new EpayConfigManager(settingsManager, saleorApiUrl);
-
-    // 获取配置（这里简化处理，实际应该根据channel等信息获取对应配置）
-    const config = await configManager.getConfig();
-
-    // 获取第一个配置项作为默认配置
-    if (config.configurations && config.configurations.length > 0) {
-      const firstConfig = config.configurations[0] as EpayConfigEntry;
-      return {
-        pid: firstConfig.pid,
-        key: firstConfig.key,
-        apiUrl: firstConfig.apiUrl,
-      };
-    }
-  } catch (error) {
-    console.error("从Saleor metadata获取支付配置失败:", error);
-  }
-
-  // 不再回退到环境变量配置
-  console.warn("支付配置未找到，请在后台配置支付参数");
-  return null;
-}
 
 // 检查站点授权
 async function checkSiteAuthorization(saleorApiUrl: string): Promise<boolean> {
@@ -91,34 +78,116 @@ async function checkSiteAuthorization(saleorApiUrl: string): Promise<boolean> {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
+  // 易支付回调使用 GET 请求（v1 和 v2 都是）
+  if (req.method !== "GET") {
+    logger.warn({ method: req.method }, "收到非 GET 请求的回调");
     return res.status(405).send("fail");
   }
 
   try {
-    const params = req.body as EpayNotifyParams;
+    // 易支付回调参数通过 query string 传递
+    const params = req.query as unknown as EpayNotifyParams;
     logger.info(
       {
         tradeStatus: params.trade_status,
         orderNo: params.out_trade_no,
         tradeNo: params.trade_no,
         amount: params.money,
+        pid: params.pid,
+        signType: params.sign_type,
       },
-      "Received Epay notify payload",
+      "收到易支付回调通知",
     );
 
-    // 获取Saleor API信息
-    const saleorApiUrl = req.headers["saleor-api-url"] as string;
-    const authToken = req.headers["authorization"]?.replace("Bearer ", "");
+    // 易支付回调不会携带 Saleor 认证信息，需要从数据库获取
+    // 先通过订单号查找对应的 Saleor API 信息
+    let saleorApiUrl: string | null = null;
+    let transactionId: string | null = null;
 
-    // 验证必要参数
-    if (!saleorApiUrl || !authToken) {
-      logger.warn("缺少必要的Saleor API信息");
+    try {
+      // 从订单映射表查找订单信息
+      const mapping = await db
+        .select()
+        .from(orderMappings)
+        .where(eq(orderMappings.orderNo, params.out_trade_no))
+        .limit(1);
+
+      if (mapping.length > 0) {
+        saleorApiUrl = mapping[0].saleorApiUrl;
+        transactionId = mapping[0].transactionId;
+        logger.info(
+          {
+            orderNo: params.out_trade_no,
+            transactionId,
+            saleorApiUrl,
+          },
+          "从数据库查找到订单映射信息",
+        );
+      } else {
+        logger.error(
+          {
+            orderNo: params.out_trade_no,
+          },
+          "未找到订单映射信息",
+        );
+        return res.status(400).send("fail");
+      }
+    } catch (dbError) {
+      logger.error(
+        {
+          error: dbError instanceof Error ? dbError.message : "未知错误",
+          orderNo: params.out_trade_no,
+        },
+        "查询订单映射失败",
+      );
+      return res.status(500).send("fail");
+    }
+
+    if (!saleorApiUrl || !transactionId) {
+      logger.error("订单映射数据不完整");
       return res.status(400).send("fail");
     }
 
-    // 获取支付配置以进行签名验证
-    const epayConfig = await getEpayConfig(saleorApiUrl, authToken);
+    // 从本地数据库获取支付配置以进行签名验证
+    let epayConfig: EpayConfig | null = null;
+
+    try {
+      const { gatewayManager } = await import("@/lib/managers/gateway-manager");
+      const enabledGateways = await gatewayManager.getEnabled();
+
+      if (enabledGateways.length > 0) {
+        // 找到匹配 pid 的网关配置
+        const matchedGateway = enabledGateways.find((g) => g.epayPid === params.pid);
+        const gateway = matchedGateway || enabledGateways[0];
+
+        epayConfig = {
+          pid: gateway.epayPid,
+          key: gateway.epayKey,
+          rsaPrivateKey: gateway.epayRsaPrivateKey || undefined,
+          apiUrl: gateway.epayUrl,
+          apiVersion: (gateway.apiVersion as "v1" | "v2") || "v1",
+          signType: (gateway.signType as "MD5" | "RSA") || "MD5",
+        };
+
+        logger.info(
+          {
+            gatewayId: gateway.id,
+            gatewayName: gateway.name,
+            pid: gateway.epayPid,
+            matchedByPid: !!matchedGateway,
+          },
+          "从本地数据库获取支付配置",
+        );
+      }
+    } catch (configError) {
+      logger.error(
+        {
+          error: configError instanceof Error ? configError.message : "未知错误",
+        },
+        "获取支付配置失败",
+      );
+    }
+
     if (!epayConfig) {
       logger.error("支付配置未找到，请在后台配置支付参数");
       return res.status(400).send("fail");
@@ -126,120 +195,146 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 创建epay客户端以进行签名验证
     const { createEpayClient } = await import("@/lib/epay/client");
-    logger.info(
-      {
-        saleorApiUrl,
-      },
-      "Loaded Epay configuration for notify",
-    );
-
     const epayClient = createEpayClient(epayConfig);
 
-    // 验证签名
+    // 验证签名 - 从 query string 参数构建验证参数
     const paramsForVerify: Record<string, string> = {};
-    for (const [key, value] of Object.entries(req.body as Record<string, unknown>)) {
-      if (key !== "sign" && key !== "sign_type") {
+    for (const [key, value] of Object.entries(req.query)) {
+      // 排除 sign 和 sign_type
+      if (key !== "sign" && key !== "sign_type" && value) {
         paramsForVerify[key] = String(value);
       }
     }
 
+    // 添加签名用于验证
+    const receivedSign = params.sign;
+    paramsForVerify.sign = receivedSign;
+
+    logger.info(
+      {
+        paramsKeys: Object.keys(paramsForVerify),
+        signType: params.sign_type,
+        receivedSignPreview: receivedSign.substring(0, 16) + "...",
+      },
+      "准备验证签名",
+    );
+
     if (!epayClient.verifyNotify(paramsForVerify)) {
-      logger.warn("签名验证失败");
+      logger.warn(
+        {
+          orderNo: params.out_trade_no,
+          signType: params.sign_type,
+          paramsKeys: Object.keys(paramsForVerify),
+        },
+        "签名验证失败",
+      );
       return res.status(400).send("fail");
     }
+
     logger.info(
       {
         orderNo: params.out_trade_no,
         tradeNo: params.trade_no,
       },
-      "Epay notify signature verified",
+      "签名验证成功",
     );
-// 检查支付状态
+    // 检查支付状态
     if (params.trade_status === "TRADE_SUCCESS") {
-      // 支付成功，更新 Saleor 订单
-      // 这里需要调用 Saleor transactionEventReport mutation
-
       logger.info(
-        `支付成功: orderNo=${params.out_trade_no}, tradeNo=${params.trade_no}, amount=${params.money}`,
+        {
+          orderNo: params.out_trade_no,
+          tradeNo: params.trade_no,
+          amount: params.money,
+          transactionId,
+        },
+        "支付成功，准备更新 Saleor 订单",
       );
 
-      // Saleor API信息已在前面获取
+      // 检查站点授权
+      const isSiteAuthorized = await checkSiteAuthorization(saleorApiUrl);
+      if (!isSiteAuthorized) {
+        logger.warn({ saleorApiUrl }, "站点未授权访问支付功能");
+        // 即使站点未授权，也返回 success 给易支付，避免重复回调
+        return res.status(200).send("success");
+      }
 
-      if (saleorApiUrl && authToken) {
-        // 检查是否已经处理过此订单（防重复处理）
-        // 注意：在生产环境中，应该使用数据库来存储已处理的订单号
-        // 这里简化处理，仅记录日志
-        logger.info(`准备处理订单: ${params.out_trade_no}`);
-        // 检查站点授权
-        const isSiteAuthorized = await checkSiteAuthorization(saleorApiUrl);
-        if (!isSiteAuthorized) {
-          logger.warn("站点未授权访问支付功能");
-          return res.status(403).send("fail");
+      // 更新订单状态为已支付
+      try {
+        await db
+          .update(orderMappings)
+          .set({
+            status: "paid",
+            updatedAt: new Date().toISOString(),
+          })
+          .where(eq(orderMappings.orderNo, params.out_trade_no));
+
+        logger.info(
+          {
+            orderNo: params.out_trade_no,
+          },
+          "更新订单状态为已支付",
+        );
+      } catch (updateError) {
+        logger.error(
+          {
+            error: updateError instanceof Error ? updateError.message : "未知错误",
+            orderNo: params.out_trade_no,
+          },
+          "更新订单状态失败",
+        );
+      }
+
+      // 调用 Saleor API 报告交易成功
+      // 注意：易支付回调不会携带认证 token，需要使用应用的权限
+      try {
+        // 从环境变量获取应用 token（用于服务端调用）
+        const { env } = await import("@/lib/env.mjs");
+        const appToken = env.SALEOR_APP_TOKEN;
+
+        if (!appToken) {
+          logger.error("缺少 SALEOR_APP_TOKEN，无法调用 Saleor API");
+          // 返回 success 给易支付，避免重复回调
+          return res.status(200).send("success");
         }
 
-        try {
-          const client = createServerClient(saleorApiUrl, authToken);
+        const client = createServerClient(saleorApiUrl, appToken);
 
-          // 从out_trade_no中提取Saleor transaction ID
-          // 新格式: ORDER-{timestamp}-{random}-{hash8} 
-          // 旧格式: ORDER-{timestamp}-{random}-{transactionId}
-          const orderParts = params.out_trade_no.split("-");
-          const lastPart = orderParts.pop() || params.out_trade_no;
-          
-          let transactionId: string;
-          if (lastPart.length === 8 && !/[=+/]/.test(lastPart)) {
-            // 新格式：8位哈希值，从数据库查找对应的 transaction ID
-            try {
-              const mapping = await db
-                .select()
-                .from(orderMappings)
-                .where(eq(orderMappings.orderHash, lastPart))
-                .limit(1);
-              
-              if (mapping.length > 0) {
-                transactionId = mapping[0].transactionId;
-                logger.info(`通过哈希查找到交易ID: ${lastPart} -> ${transactionId}`);
-              } else {
-                logger.error(`未找到哈希值对应的交易ID: ${lastPart}`);
-                return res.status(400).send("fail");
-              }
-            } catch (dbError) {
-              logger.error(`查找交易ID映射失败: ${dbError instanceof Error ? dbError.message : '未知错误'}`);
-              return res.status(500).send("fail");
-            }
-          } else {
-            // 旧格式：直接使用最后一部分作为 transaction ID
-            transactionId = lastPart;
-          }
+        const result = await client.mutation(TRANSACTION_EVENT_REPORT, {
+          transactionId,
+          amount: params.money,
+          type: "CHARGE_SUCCESS",
+          message: `支付成功，易支付交易号: ${params.trade_no}`,
+        });
 
-          const result = await client.mutation(TRANSACTION_EVENT_REPORT, {
-            transactionId,
-            amount: params.money,
-            type: "CHARGE_SUCCESS",
-            message: `支付成功，交易号: ${params.trade_no}`,
-          });
-
-          // 检查Saleor API调用结果
-          if (result.error) {
-            logger.error(`Saleor API调用错误: ${JSON.stringify(result.error)}`);
-            // 根据业务需求决定是否返回失败
-          } else {
-            logger.info(`成功更新Saleor交易状态: ${transactionId}`);
-          }
-        } catch (saleorError) {
+        // 检查Saleor API调用结果
+        if (result.error) {
           logger.error(
-            `更新Saleor交易状态失败: ${
-              saleorError instanceof Error ? saleorError.message : "未知错误"
-            }`,
+            {
+              error: JSON.stringify(result.error),
+              transactionId,
+            },
+            "Saleor API 调用错误",
           );
-
-          // 记录错误堆栈（如果需要调试）
-          if (saleorError instanceof Error && saleorError.stack) {
-            logger.debug(saleorError.stack);
-          }
-          // 不返回错误给支付网关，因为这已经是异步处理
-          // 支付网关只关心是否收到"success"响应
+        } else {
+          logger.info(
+            {
+              transactionId,
+              orderNo: params.out_trade_no,
+              tradeNo: params.trade_no,
+            },
+            "成功更新 Saleor 交易状态",
+          );
         }
+      } catch (saleorError) {
+        logger.error(
+          {
+            error: saleorError instanceof Error ? saleorError.message : "未知错误",
+            stack: saleorError instanceof Error ? saleorError.stack : undefined,
+            transactionId,
+          },
+          "更新 Saleor 交易状态失败",
+        );
+        // 即使失败，也返回 success 给易支付，避免重复回调
       }
 
       return res.status(200).send("success");

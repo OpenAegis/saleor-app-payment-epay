@@ -8,6 +8,7 @@ export const env = createEnv({
   server: {
     APP_URL: z.string().url().default("http://localhost:3000"),
     APP_API_BASE_URL: z.string().url().optional(),
+    APP_CALLBACK_URL: z.string().url().optional(), // 回调地址（可选），用于反向代理，不填则使用 APP_URL
     TURSO_DATABASE_URL: z.string().url().default("libsql://localhost"),
     TURSO_AUTH_TOKEN: z.string().default(""),
     PLUGIN_ADMIN_USERNAME: z.string().default("admin"),
@@ -32,6 +33,8 @@ export const env = createEnv({
    */
   runtimeEnv: {
     APP_URL: process.env.APP_URL,
+    APP_API_BASE_URL: process.env.APP_API_BASE_URL,
+    APP_CALLBACK_URL: process.env.APP_CALLBACK_URL,
     TURSO_DATABASE_URL: process.env.TURSO_DATABASE_URL,
     TURSO_AUTH_TOKEN: process.env.TURSO_AUTH_TOKEN,
     PLUGIN_ADMIN_USERNAME: process.env.PLUGIN_ADMIN_USERNAME,

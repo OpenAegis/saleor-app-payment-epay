@@ -509,10 +509,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
 
     // 创建彩虹易支付订单
+    // 使用 APP_CALLBACK_URL（如果设置）或回退到 APP_URL
+    const callbackBaseUrl = env.APP_CALLBACK_URL || env.APP_URL;
+
     const createOrderParams = {
       amount: amountValue,
       orderNo,
-      notifyUrl: `${env.APP_URL}/api/webhooks/epay-notify`,
+      notifyUrl: `${callbackBaseUrl}/api/webhooks/epay-notify`,
       returnUrl: returnUrl || `${env.APP_URL}/checkout/success`,
       payType,
       productName,

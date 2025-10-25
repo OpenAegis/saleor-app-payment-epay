@@ -36,8 +36,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ) {
         logger.info("Fixing placeholder URL for domain: " + authData.domain);
 
-        // 使用默认的正确URL
-        const appUrl = "https://saleor-app-payment-epay.studyapp.tk";
+        // 使用环境变量中的应用 URL
+        const { env } = await import("@/lib/env.mjs");
+        const appUrl = env.APP_URL;
         const correctSaleorApiUrl = `${appUrl}/graphql/`;
         const correctDomain = new URL(appUrl).hostname;
 

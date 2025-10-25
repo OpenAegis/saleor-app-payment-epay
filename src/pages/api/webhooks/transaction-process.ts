@@ -5,6 +5,18 @@ import { createLogger } from "@/lib/logger";
 
 const logger = createLogger({ component: "TransactionProcessWebhook" });
 
+/**
+ * Transaction Process Webhook
+ *
+ * 这个接口只负责查询订单状态和返回支付链接，不创建新订单。
+ * 订单创建由 transaction-initialize 接口负责。
+ *
+ * 主要功能：
+ * 1. 查询易支付订单状态
+ * 2. 返回已存储的支付链接（从数据库或 parsedData）
+ * 3. 根据订单状态返回相应的响应
+ */
+
 // 定义事件数据接口
 interface TransactionProcessEvent {
   action: {
@@ -39,6 +51,107 @@ function parseEventData(raw: unknown): Record<string, unknown> {
   }
 
   return {};
+}
+
+/**
+ * 从数据库或 parsedData 中获取支付响应数据
+ * 这个函数不会创建新订单，只返回已存储的支付链接
+ */
+async function getStoredPaymentResponse(
+  transactionId: string,
+  parsedData: Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
+  // 1. 优先从 parsedData 中获取（initialize 阶段传递过来的）
+  if (parsedData["paymentResponse"]) {
+    const paymentResponse = parsedData["paymentResponse"] as Record<string, unknown>;
+    if (paymentResponse["paymentUrl"] || paymentResponse["qrcode"]) {
+      logger.info(
+        {
+          transactionId,
+          source: "parsedData",
+          hasPaymentUrl: !!paymentResponse["paymentUrl"],
+          hasQrcode: !!paymentResponse["qrcode"],
+        },
+        "从 parsedData 获取支付链接",
+      );
+      return paymentResponse;
+    }
+  }
+
+  // 2. 从数据库中获取（initialize 阶段存储的）
+  try {
+    const { db } = await import("@/lib/db/turso-client");
+    const { orderMappings } = await import("@/lib/db/schema");
+    const { eq } = await import("drizzle-orm");
+
+    const mapping = await db
+      .select()
+      .from(orderMappings)
+      .where(eq(orderMappings.transactionId, transactionId))
+      .limit(1);
+
+    if (mapping.length > 0 && mapping[0].paymentResponse) {
+      try {
+        const paymentResponse = JSON.parse(mapping[0].paymentResponse) as Record<
+          string,
+          unknown
+        >;
+        if (paymentResponse["paymentUrl"] || paymentResponse["qrcode"]) {
+          logger.info(
+            {
+              transactionId,
+              source: "database",
+              hasPaymentUrl: !!paymentResponse["paymentUrl"],
+              hasQrcode: !!paymentResponse["qrcode"],
+            },
+            "从数据库获取支付链接",
+          );
+          return paymentResponse;
+        }
+      } catch (parseError) {
+        logger.error(
+          {
+            transactionId,
+            error: parseError instanceof Error ? parseError.message : "未知错误",
+          },
+          "解析数据库中的支付响应数据失败",
+        );
+      }
+    }
+  } catch (dbError) {
+    logger.error(
+      {
+        transactionId,
+        error: dbError instanceof Error ? dbError.message : "未知错误",
+      },
+      "查询数据库支付响应数据失败",
+    );
+  }
+
+  return null;
+}
+
+/**
+ * 构造支付链接响应（统一的响应格式）
+ * 不创建新订单，只返回已存储的支付信息
+ */
+function buildPaymentLinkResponse(
+  paymentResponse: Record<string, unknown>,
+  amountValue: number,
+) {
+  return {
+    result: "CHARGE_ACTION_REQUIRED" as const,
+    amount: amountValue,
+    externalUrl:
+      ((paymentResponse["paymentUrl"] as string) || "").substring(0, 200) || undefined,
+    data: {
+      payType: paymentResponse["payType"],
+      paymentUrl: paymentResponse["paymentUrl"],
+      qrcode: paymentResponse["qrcode"],
+      epayOrderNo: paymentResponse["epayOrderNo"],
+      saleorOrderNo: paymentResponse["saleorOrderNo"],
+    },
+  };
 }
 
 // 检查站点授权
@@ -358,10 +471,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    // ========================================
+    // 注意：以下代码只查询订单状态，不创建新订单
+    // 订单创建由 transaction-initialize 接口负责
+    // ========================================
+
     // 使用 out_trade_no 参数查询我们自己生成的订单号
     // epayOrderNo 是我们自己生成的订单号，应该作为 out_trade_no 参数传递
 
-    // 检查是否在初始化后的10秒内，如果是则直接返回支付链接而不查询
+    // 优化：检查是否在初始化后的10秒内，如果是则直接返回支付链接而不查询（减少API调用）
     let shouldUseCachedPaymentLink = false;
     let cachedPaymentResponse: Record<string, unknown> | null = null;
     let orderNoForCache: string | null = null; // 保存订单号用于验证
