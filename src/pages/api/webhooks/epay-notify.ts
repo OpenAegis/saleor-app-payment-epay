@@ -1,6 +1,6 @@
 import { type NextApiRequest, type NextApiResponse } from "next";
 import { eq } from "drizzle-orm";
-import { createClient } from "@/lib/create-graphq-client";
+import { createServerClient } from "@/lib/create-graphq-client";
 import { type EpayNotifyParams, type EpayConfig } from "@/lib/epay/client";
 import { siteManager } from "@/lib/managers/site-manager";
 import { createLogger } from "@/lib/logger";
@@ -8,6 +8,30 @@ import { db } from "@/lib/db/turso-client";
 import { orderMappings } from "@/lib/db/schema";
 
 const logger = createLogger({ component: "EpayNotifyWebhook" });
+
+async function updateOrderStatus(orderNo: string, status: "paid" | "failed") {
+  try {
+    await db
+      .update(orderMappings)
+      .set({
+        status,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(orderMappings.orderNo, orderNo));
+    logger.info({ orderNo, status }, "订单状态已更新");
+    return true;
+  } catch (error) {
+    logger.error(
+      {
+        orderNo,
+        status,
+        error: error instanceof Error ? error.message : "未知错误",
+      },
+      "更新订单状态失败",
+    );
+    return false;
+  }
+}
 
 /**
  * 易支付回调接口
@@ -258,34 +282,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const isSiteAuthorized = await checkSiteAuthorization(saleorApiUrl);
       if (!isSiteAuthorized) {
         logger.warn({ saleorApiUrl }, "站点未授权访问支付功能");
-        // 即使站点未授权，也返回 success 给易支付，避免重复回调
-        return res.status(200).send("success");
-      }
-
-      // 更新订单状态为已支付
-      try {
-        await db
-          .update(orderMappings)
-          .set({
-            status: "paid",
-            updatedAt: new Date().toISOString(),
-          })
-          .where(eq(orderMappings.orderNo, params.out_trade_no));
-
-        logger.info(
-          {
-            orderNo: params.out_trade_no,
-          },
-          "更新订单状态为已支付",
-        );
-      } catch (updateError) {
-        logger.error(
-          {
-            error: updateError instanceof Error ? updateError.message : "未知错误",
-            orderNo: params.out_trade_no,
-          },
-          "更新订单状态失败",
-        );
+        await updateOrderStatus(params.out_trade_no, "failed");
+        return res.status(403).send("fail");
       }
 
       // 调用 Saleor API 报告交易成功
@@ -326,33 +324,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             },
             "缺少 SALEOR_APP_TOKEN，无法调用 Saleor API",
           );
-          // 即使缺少token，也要返回 success 给易支付，避免重复回调
-          return res.status(200).send("success");
+          await updateOrderStatus(params.out_trade_no, "failed");
+          return res.status(500).send("fail");
         }
 
-        // 在调用Saleor API之前，先手动刷新一次token
-        console.log("[DEBUG] Manually refreshing token before Saleor API call");
-        const freshAuthData = await saleorApp.apl.get(saleorApiUrl);
-        const freshToken = freshAuthData?.token;
-
-        if (!freshToken) {
-          logger.error(
-            {
-              saleorApiUrl,
-              authDataKeys: freshAuthData ? Object.keys(freshAuthData) : "null",
-            },
-            "无法获取新鲜的 SALEOR_APP_TOKEN，无法调用 Saleor API",
-          );
-          // 即使缺少token，也要返回 success 给易支付，避免重复回调
-          return res.status(200).send("success");
-        }
-
-        console.log("[DEBUG] Got fresh token, length: " + freshToken.length);
-        // 记录token的部分信息用于调试（不记录完整token）
-        console.log("[DEBUG] Fresh token preview: " + freshToken.substring(0, 20) + "...");
-
-        // 使用Saleor App SDK推荐的方式创建客户端
-        const client = createClient(saleorApiUrl, saleorApiUrl);
+        // 使用服务端客户端并注入当前token
+        const client = createServerClient(saleorApiUrl, appToken);
 
         // 记录调用Saleor API前的信息
         logger.info(
@@ -368,22 +345,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           "准备调用 Saleor API 更新交易状态",
         );
 
-        const result = await client.mutation(TRANSACTION_EVENT_REPORT, {
-          id: transactionId, // 修复：参数名应该是id而不是transactionId
-          amount: params.money,
-          availableActions: [], // 添加必需的availableActions参数
-          externalUrl: "", // 添加必需的externalUrl参数
-          message: `支付成功，易支付交易号: ${params.trade_no}`,
-          pspReference: params.trade_no, // 使用易支付的交易号作为pspReference
-          time: new Date().toISOString(), // 添加必需的time参数
-          type: "CHARGE_SUCCESS",
-        });
+        const result = await client
+          .mutation(TRANSACTION_EVENT_REPORT, {
+            id: transactionId, // 修复：参数名应该是id而不是transactionId
+            amount: params.money,
+            availableActions: [], // 添加必需的availableActions参数
+            externalUrl: "", // 添加必需的externalUrl参数
+            message: `支付成功，易支付交易号: ${params.trade_no}`,
+            pspReference: params.trade_no, // 使用易支付的交易号作为pspReference
+            time: new Date().toISOString(), // 添加必需的time参数
+            type: "CHARGE_SUCCESS",
+          })
+          .toPromise();
 
         // 检查Saleor API调用结果
-        if (result.error) {
+        const saleorErrors = result?.data?.transactionEventReport?.errors || [];
+        if (!result || result.error || saleorErrors.length > 0) {
           logger.error(
             {
-              error: JSON.stringify(result.error),
+              error: result?.error ? JSON.stringify(result.error) : "未知错误",
+              saleorErrors,
               transactionId,
               orderNo: params.out_trade_no,
               tradeNo: params.trade_no,
@@ -391,8 +372,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             },
             "Saleor API 调用错误",
           );
-          // Saleor API调用失败，仍然返回 success 给易支付，避免重复回调
-          // 但记录错误以便后续处理
+          await updateOrderStatus(params.out_trade_no, "failed");
+          return res.status(500).send("fail");
         } else {
           logger.info(
             {
@@ -403,6 +384,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             "成功更新 Saleor 交易状态",
           );
         }
+
+        await updateOrderStatus(params.out_trade_no, "paid");
       } catch (saleorError) {
         logger.error(
           {
@@ -412,7 +395,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           },
           "更新 Saleor 交易状态失败",
         );
-        // 即使出现异常，也返回 success 给易支付，避免重复回调
+        await updateOrderStatus(params.out_trade_no, "failed");
+        return res.status(500).send("fail");
       }
 
       // 只有在处理完所有逻辑后才返回 success 给易支付
