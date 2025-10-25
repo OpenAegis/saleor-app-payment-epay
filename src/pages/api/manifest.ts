@@ -17,7 +17,7 @@ export default createManifestHandler({
     logger.info("Using API base URL: " + apiBaseURL);
 
     const manifest: AppManifest = {
-      name: packageJson.name,
+      name: "易支付",
       tokenTargetUrl: `${apiBaseURL}/api/register`,
       appUrl: `${apiBaseURL}/config`,
       permissions: [
@@ -31,15 +31,12 @@ export default createManifestHandler({
       requiredSaleorVersion: ">=3.13", // 修改为支持3.13及以上版本
       about:
         "App that allows merchants using the Saleor e-commerce platform to accept online payments from customers using Epay as their payment processor.",
-      author: "Epay Payment App",
+      author: "OpenAegis",
       brand: {
         logo: {
           default: `${apiBaseURL}/logo.png`,
         },
       },
-      dataPrivacyUrl: `${apiBaseURL}/privacy`,
-      homepageUrl: "https://github.com/your-org/saleor-app-payment-epay",
-      supportUrl: `${apiBaseURL}/support`,
       webhooks: [
         {
           name: "List Payment Gateways",
