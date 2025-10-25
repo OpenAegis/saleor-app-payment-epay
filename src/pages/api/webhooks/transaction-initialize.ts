@@ -239,7 +239,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         error: dbError instanceof Error ? dbError.message : "未知错误",
         stack: dbError instanceof Error ? dbError.stack : undefined,
       },
-      "数据库初始化失败"
+      "数据库初始化失败",
     );
     return res.status(500).json({
       result: "CHARGE_FAILURE",
@@ -468,7 +468,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           orderHash: transactionHash,
           error: mappingError instanceof Error ? mappingError.message : "未知错误",
           stack: mappingError instanceof Error ? mappingError.stack : undefined,
-          errorCode: mappingError instanceof Error && 'code' in mappingError ? mappingError.code : undefined,
+          errorCode:
+            mappingError instanceof Error && "code" in mappingError ? mappingError.code : undefined,
         },
         "保存订单映射失败: " + (mappingError instanceof Error ? mappingError.message : "未知错误"),
       );
@@ -512,19 +513,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 使用 APP_CALLBACK_URL（如果设置）或回退到 APP_URL
     const callbackBaseUrl = env.APP_CALLBACK_URL || env.APP_URL;
 
-    const createOrderParams = {
+    // 优先使用前端传入的 returnUrl（支持多种常见字段名），其次使用数据库/配置中的 returnUrl，最后回退到站点默认
+    const frontendReturnUrl =
+      // body 可能是 TransactionEvent 或 包含 event 的外层对象
+      (body as any).returnUrl ||
+      (body as any).return_url ||
+      (data as any)?.returnUrl ||
+      (data as any)?.return_url ||
+      (sourceObject as any)?.returnUrl ||
+      (sourceObject as any)?.return_url ||
+      null;
+
+    // 仅当前端显式提供 returnUrl 时才传给易支付；严禁把 APP_URL 作为默认 returnUrl 传回给前端/易支付
+    const baseOrderParams: Record<string, any> = {
       amount: amountValue,
       orderNo,
+      // notifyUrl 始终使用 APP_CALLBACK_URL（或回退到 APP_URL）——这是服务器回调，不会泄露站点前端地址
       notifyUrl: `${callbackBaseUrl}/api/webhooks/epay-notify`,
-      returnUrl: returnUrl || `${env.APP_URL}/checkout/success`,
       payType,
       productName,
       productDesc: `订单号: ${sourceObject?.number || "未知"}`,
       clientIp: Array.isArray(clientIp) ? clientIp[0] : clientIp.split(",")[0].trim(),
-
       // v2 API 额外参数
       method: epayConfig.apiVersion === "v2" ? recommendedMethod : undefined,
       device: epayConfig.apiVersion === "v2" ? device : undefined,
+    };
+
+    const createOrderParams: any = {
+      ...baseOrderParams,
+      // 仅当前端传入时包含 returnUrl，避免回退到 APP_URL
+      ...(frontendReturnUrl ? { returnUrl: frontendReturnUrl } : {}),
     };
 
     logger.info(
@@ -666,10 +684,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             orderNo,
             error: storageError instanceof Error ? storageError.message : "未知错误",
             stack: storageError instanceof Error ? storageError.stack : undefined,
-            errorCode: storageError instanceof Error && 'code' in storageError ? storageError.code : undefined,
-            sqliteError: storageError instanceof Error && 'cause' in storageError ? storageError.cause : undefined,
+            errorCode:
+              storageError instanceof Error && "code" in storageError
+                ? storageError.code
+                : undefined,
+            sqliteError:
+              storageError instanceof Error && "cause" in storageError
+                ? storageError.cause
+                : undefined,
           },
-          "存储支付响应数据到数据库失败: " + (storageError instanceof Error ? storageError.message : "未知错误"),
+          "存储支付响应数据到数据库失败: " +
+            (storageError instanceof Error ? storageError.message : "未知错误"),
         );
         // 即使存储失败，也不影响支付流程继续，但需要记录详细错误信息以便调试
       }
