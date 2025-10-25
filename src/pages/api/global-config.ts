@@ -56,7 +56,41 @@ export default createProtectedHandler(
 
         case "PUT":
           try {
-            const { returnUrl } = req.body as { returnUrl?: string | null };
+            // 检查请求体是否存在
+            if (!req.body) {
+              logger.error("Request body is empty");
+              return res.status(400).json({ error: "Request body is empty" });
+            }
+
+            let returnUrl: string | null = null;
+
+            // 处理不同的请求体格式
+            if (typeof req.body === "string") {
+              try {
+                const parsedBody = JSON.parse(req.body) as { returnUrl?: string | null };
+                returnUrl = parsedBody.returnUrl !== undefined ? parsedBody.returnUrl : null;
+              } catch (parseError) {
+                logger.error(
+                  "Failed to parse request body as JSON: " +
+                    (parseError instanceof Error ? parseError.message : "Unknown error"),
+                );
+                return res.status(400).json({ error: "Invalid JSON in request body" });
+              }
+            } else if (typeof req.body === "object") {
+              const body = req.body as { returnUrl?: string | null };
+              returnUrl = body.returnUrl !== undefined ? body.returnUrl : null;
+            } else {
+              logger.error("Invalid request body type");
+              return res.status(400).json({ error: "Invalid request body format" });
+            }
+
+            logger.info(
+              {
+                returnUrl: returnUrl,
+                returnUrlType: typeof returnUrl,
+              },
+              "Processing returnUrl update",
+            );
 
             // 获取现有配置
             const existingConfigStr = await settingsManager.get(saleorApiUrl, GLOBAL_CONFIG_KEY);
@@ -77,12 +111,15 @@ export default createProtectedHandler(
             if (returnUrl === null) {
               // 移除returnUrl
               delete config.returnUrl;
+              logger.info("Removing returnUrl from global config");
             } else if (returnUrl) {
               // 设置returnUrl
               config.returnUrl = returnUrl;
+              logger.info({ returnUrl }, "Setting returnUrl in global config");
             } else {
               // 空字符串，移除returnUrl
               delete config.returnUrl;
+              logger.info("Removing returnUrl due to empty string");
             }
 
             // 保存配置
@@ -92,6 +129,7 @@ export default createProtectedHandler(
               domain: saleorApiUrl,
             });
 
+            logger.info("Global config updated successfully");
             return res.status(200).json({ success: true });
           } catch (error) {
             logger.error(
