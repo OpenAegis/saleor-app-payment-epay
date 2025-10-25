@@ -360,10 +360,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       "Notify received non-success trade status",
     );
 
-    return res.status(200).send("fail");
+    // 失败时返回5xx状态码
+    return res.status(500).send("fail");
   } catch (error) {
     logger.error(`Notify handler error: ${error instanceof Error ? error.message : "未知错误"}`);
-    // 发生未处理的错误时，也返回 fail，让易支付知道处理失败
-    return res.status(200).send("fail");
+    // 发生未处理的错误时，返回5xx状态码
+    return res.status(500).send("fail");
   }
 }
