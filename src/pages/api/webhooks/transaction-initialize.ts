@@ -764,6 +764,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           epayOrderNo: result.tradeNo,
           saleorOrderNo: orderNo,
           payType: result.type,
+          // 添加pspReference用于后续查询
+          pspReference: result.tradeNo,
           // 只有当客户端提供了 returnUrl 时才返回，避免暴露默认的 APP_URL
           ...(frontendReturnUrl && { returnUrl: frontendReturnUrl }),
           // 不再传递完整的 paymentResponse 对象

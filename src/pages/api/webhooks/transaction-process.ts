@@ -92,10 +92,7 @@ async function getStoredPaymentResponse(
 
     if (mapping.length > 0 && mapping[0].paymentResponse) {
       try {
-        const paymentResponse = JSON.parse(mapping[0].paymentResponse) as Record<
-          string,
-          unknown
-        >;
+        const paymentResponse = JSON.parse(mapping[0].paymentResponse) as Record<string, unknown>;
         if (paymentResponse["paymentUrl"] || paymentResponse["qrcode"]) {
           logger.info(
             {
@@ -135,15 +132,11 @@ async function getStoredPaymentResponse(
  * 构造支付链接响应（统一的响应格式）
  * 不创建新订单，只返回已存储的支付信息
  */
-function buildPaymentLinkResponse(
-  paymentResponse: Record<string, unknown>,
-  amountValue: number,
-) {
+function buildPaymentLinkResponse(paymentResponse: Record<string, unknown>, amountValue: number) {
   return {
     result: "CHARGE_ACTION_REQUIRED" as const,
     amount: amountValue,
-    externalUrl:
-      ((paymentResponse["paymentUrl"] as string) || "").substring(0, 200) || undefined,
+    externalUrl: ((paymentResponse["paymentUrl"] as string) || "").substring(0, 200) || undefined,
     data: {
       payType: paymentResponse["payType"],
       paymentUrl: paymentResponse["paymentUrl"],
