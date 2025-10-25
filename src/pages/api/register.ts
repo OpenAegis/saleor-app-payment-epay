@@ -94,6 +94,15 @@ async function fetchRemoteJwks(saleorApiUrl: string): Promise<string | undefined
   }
 }
 
+interface GraphQLErrorDetail {
+  message?: string;
+  extensions?: {
+    exception?: {
+      code?: string;
+    };
+  };
+}
+
 interface AppTokenCreateResponse {
   data?: {
     appTokenCreate?: {
@@ -101,6 +110,7 @@ interface AppTokenCreateResponse {
       errors?: Array<{ field?: string | null; message?: string | null; code?: string | null }>;
     };
   };
+  errors?: GraphQLErrorDetail[];
 }
 
 async function createPermanentAppToken(
@@ -147,9 +157,14 @@ async function createPermanentAppToken(
 
     const body = (await response.json()) as AppTokenCreateResponse;
     const result = body.data?.appTokenCreate;
+    const hasPermissionError = body.errors?.some(
+      (error: GraphQLErrorDetail) =>
+        (typeof error.message === "string" && error.message.includes("MANAGE_APPS")) ||
+        error.extensions?.exception?.code === "PermissionDenied",
+    );
+
     if (!result) {
-      const permissionError = body.errors?.find((error) => error.message?.includes("MANAGE_APPS"));
-      if (permissionError) {
+      if (hasPermissionError) {
         logger.error(
           {
             permissions: ["MANAGE_APPS"],
@@ -165,8 +180,12 @@ async function createPermanentAppToken(
     }
 
     if (result.errors && result.errors.length > 0) {
-      const permissionError = result.errors.find((error) => error.code === "MANAGE_APPS");
-      if (permissionError) {
+      const resultHasPermissionError = result.errors.some(
+        (error) =>
+          (typeof error?.message === "string" && error.message.includes("MANAGE_APPS")) ||
+          error?.code === "PermissionDenied",
+      );
+      if (resultHasPermissionError || hasPermissionError) {
         logger.error(
           {
             permissions: ["MANAGE_APPS"],

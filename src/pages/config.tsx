@@ -87,7 +87,8 @@ const ConfigPage: NextPage = () => {
   const [siteName, setSiteName] = useState<string>("");
   const [savingSiteName, setSavingSiteName] = useState(false);
   const [channels, setChannels] = useState<Channel[]>([]); // 添加通道状态
-  const [globalReturnUrl, setGlobalReturnUrl] = useState<string>(""); // 添加全局returnUrl状态
+  const [globalReturnUrl, setGlobalReturnUrl] = useState<string>(""); // 表单中的returnUrl
+  const [savedGlobalReturnUrl, setSavedGlobalReturnUrl] = useState<string>(""); // 已保存的returnUrl
   const [savingReturnUrl, setSavingReturnUrl] = useState(false); // 添加保存状态
 
   // 页面加载时获取现有配置
@@ -175,7 +176,9 @@ const ConfigPage: NextPage = () => {
         });
         if (globalConfigResponse.ok) {
           const globalConfigData = (await globalConfigResponse.json()) as GlobalConfigResponse;
-          setGlobalReturnUrl(globalConfigData.returnUrl || "");
+          const fetchedReturnUrl = globalConfigData.returnUrl || "";
+          setGlobalReturnUrl(fetchedReturnUrl);
+          setSavedGlobalReturnUrl(fetchedReturnUrl);
         } else {
           console.error("Failed to fetch global config");
         }
@@ -271,6 +274,7 @@ const ConfigPage: NextPage = () => {
 
     setSavingReturnUrl(true);
     try {
+      const trimmedReturnUrl = globalReturnUrl.trim();
       const response = await fetch("/api/global-config", {
         method: "PUT",
         headers: {
@@ -279,11 +283,12 @@ const ConfigPage: NextPage = () => {
           authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          returnUrl: globalReturnUrl.trim() || null, // 如果为空则传null
+          returnUrl: trimmedReturnUrl || null, // 如果为空则传null
         }),
       });
 
       if (response.ok) {
+        setSavedGlobalReturnUrl(trimmedReturnUrl);
         setSyncMessage("全局返回地址已成功更新");
       } else {
         const error = await response.json();
@@ -392,11 +397,13 @@ const ConfigPage: NextPage = () => {
                             authorization: `Bearer ${token}`,
                           },
                         });
-                        if (globalConfigResponse.ok) {
-                          const globalConfigData =
-                            (await globalConfigResponse.json()) as GlobalConfigResponse;
-                          setGlobalReturnUrl(globalConfigData.returnUrl || "");
-                        }
+        if (globalConfigResponse.ok) {
+          const globalConfigData =
+            (await globalConfigResponse.json()) as GlobalConfigResponse;
+          const fetchedReturnUrl = globalConfigData.returnUrl || "";
+          setGlobalReturnUrl(fetchedReturnUrl);
+          setSavedGlobalReturnUrl(fetchedReturnUrl);
+        }
                       } catch (error) {
                         console.error("Failed to refresh status:", error);
                       } finally {
@@ -529,9 +536,7 @@ const ConfigPage: NextPage = () => {
               type="button"
               variant="primary"
               disabled={
-                savingReturnUrl ||
-                globalReturnUrl ===
-                  (siteAuth?.site?.domain ? `https://${siteAuth.site.domain}/checkout/success` : "")
+                savingReturnUrl || globalReturnUrl.trim() === savedGlobalReturnUrl
               }
               onClick={() => {
                 void handleReturnUrlUpdate();
@@ -540,12 +545,17 @@ const ConfigPage: NextPage = () => {
               {savingReturnUrl ? "保存中..." : "保存"}
             </Button>
           </Box>
-          {globalReturnUrl && (
-            <Box padding={2} backgroundColor="success1" borderRadius={4}>
-              <p>✅ 全局返回地址已设置：{globalReturnUrl}</p>
+          {globalReturnUrl.trim() !== savedGlobalReturnUrl && (
+            <Box padding={2} backgroundColor="warning1" borderRadius={4}>
+              <p>⚠️ 全局返回地址已修改，请点击“保存”按钮保存更改</p>
             </Box>
           )}
-          {!globalReturnUrl && (
+          {savedGlobalReturnUrl && (
+            <Box padding={2} backgroundColor="success1" borderRadius={4}>
+              <p>✅ 全局返回地址已设置：{savedGlobalReturnUrl}</p>
+            </Box>
+          )}
+          {!savedGlobalReturnUrl && (
             <Box padding={2} backgroundColor="info1" borderRadius={4}>
               <p>ℹ️ 未设置全局返回地址，如果前端未传入return_url则不会添加return_url参数</p>
             </Box>
