@@ -1,11 +1,11 @@
 import { authExchange } from "@urql/exchange-auth";
-import {
-  cacheExchange,
-  createClient as urqlCreateClient,
-  fetchExchange,
-  debugExchange,
+import { 
+  cacheExchange, 
+  createClient as urqlCreateClient, 
+  fetchExchange, 
+  debugExchange, 
   type Operation,
-  type CombinedError,
+  type CombinedError
 } from "@urql/core";
 import { saleorApp } from "@/saleor-app";
 
@@ -25,11 +25,11 @@ async function fetchLatestToken(saleorApiUrl: string): Promise<string> {
     try {
       const authData = await saleorApp.apl.get(saleorApiUrl);
       const token = authData?.token;
-
+      
       if (!token) {
         throw new Error("无法获取认证token");
       }
-
+      
       // cachedToken = token;
       return token;
     } finally {
@@ -50,11 +50,11 @@ export const createClient = (url: string, saleorApiUrl: string) =>
       authExchange(async (utils) => {
         // 获取初始token
         const token = await fetchLatestToken(saleorApiUrl);
-
+        
         return {
           addAuthToOperation: (operation: Operation) => {
             return utils.appendHeaders(operation, {
-              Authorization: `Bearer ${token}`,
+              "Authorization": `Bearer ${token}`,
             });
           },
           didAuthError: (error: CombinedError) => {
@@ -83,20 +83,21 @@ export function createServerClient(saleorApiUrl: string, token: string) {
   // 对于服务器端调用，我们直接使用token
   return urqlCreateClient({
     url: saleorApiUrl,
-    exchanges: [debugExchange, cacheExchange, fetchExchange],
+    exchanges: [
+      debugExchange,
+      cacheExchange,
+      fetchExchange,
+    ],
     fetchOptions: {
       headers: {
-        Authorization: `Bearer ${token}`,
+        "Authorization": `Bearer ${token}`,
       },
     },
   });
 }
 
 // 添加支持异步token获取的版本
-export const createClientWithAsyncToken = (
-  url: string,
-  getToken: () => Promise<{ token: string }>,
-) =>
+export const createClientWithAsyncToken = (url: string, getToken: () => Promise<{ token: string }>) =>
   urqlCreateClient({
     url,
     exchanges: [
@@ -107,7 +108,7 @@ export const createClientWithAsyncToken = (
         return {
           addAuthToOperation: (operation: Operation) => {
             return utils.appendHeaders(operation, {
-              Authorization: `Bearer ${token}`,
+              "Authorization": `Bearer ${token}`,
             });
           },
           didAuthError: (error: CombinedError) => {

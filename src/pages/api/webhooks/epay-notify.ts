@@ -330,6 +330,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           return res.status(200).send("success");
         }
 
+        // 在调用Saleor API之前，先手动刷新一次token
+        console.log("[DEBUG] Manually refreshing token before Saleor API call");
+        const freshAuthData = await saleorApp.apl.get(saleorApiUrl);
+        const freshToken = freshAuthData?.token;
+        
+        if (!freshToken) {
+          logger.error(
+            {
+              saleorApiUrl,
+              authDataKeys: freshAuthData ? Object.keys(freshAuthData) : "null",
+            },
+            "无法获取新鲜的 SALEOR_APP_TOKEN，无法调用 Saleor API",
+          );
+          // 即使缺少token，也要返回 success 给易支付，避免重复回调
+          return res.status(200).send("success");
+        }
+        
+        console.log("[DEBUG] Got fresh token, length: " + freshToken.length);
+        // 记录token的部分信息用于调试（不记录完整token）
+        console.log("[DEBUG] Fresh token preview: " + freshToken.substring(0, 20) + "...");
+
+        // 使用Saleor App SDK推荐的方式创建客户端
         const client = createClient(saleorApiUrl, saleorApiUrl);
 
         // 记录调用Saleor API前的信息
