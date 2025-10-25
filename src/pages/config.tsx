@@ -69,6 +69,11 @@ interface ChannelsResponse {
   channels: Channel[];
 }
 
+// 添加全局配置响应接口
+interface GlobalConfigResponse {
+  returnUrl?: string;
+}
+
 const ConfigPage: NextPage = () => {
   const { appBridgeState } = useAppBridge();
   const { token, saleorApiUrl } = appBridgeState ?? {};
@@ -82,6 +87,8 @@ const ConfigPage: NextPage = () => {
   const [siteName, setSiteName] = useState<string>("");
   const [savingSiteName, setSavingSiteName] = useState(false);
   const [channels, setChannels] = useState<Channel[]>([]); // 添加通道状态
+  const [globalReturnUrl, setGlobalReturnUrl] = useState<string>(""); // 添加全局returnUrl状态
+  const [savingReturnUrl, setSavingReturnUrl] = useState(false); // 添加保存状态
 
   // 页面加载时获取现有配置
   useEffect(() => {
@@ -157,6 +164,20 @@ const ConfigPage: NextPage = () => {
           setChannels(channelsData.channels || []);
         } else {
           console.error("Failed to fetch channels");
+        }
+
+        // 获取全局returnUrl配置
+        const globalConfigResponse = await fetch("/api/global-config", {
+          headers: {
+            "saleor-api-url": saleorApiUrl || "",
+            authorization: `Bearer ${token}`,
+          },
+        });
+        if (globalConfigResponse.ok) {
+          const globalConfigData = (await globalConfigResponse.json()) as GlobalConfigResponse;
+          setGlobalReturnUrl(globalConfigData.returnUrl || "");
+        } else {
+          console.error("Failed to fetch global config");
         }
       } catch (error) {
         console.error("获取配置失败:", error);
@@ -241,6 +262,38 @@ const ConfigPage: NextPage = () => {
       setAuthError("更新站点名称失败，请重试");
     } finally {
       setSavingSiteName(false);
+    }
+  };
+
+  // 添加处理全局returnUrl更新的函数
+  const handleReturnUrlUpdate = async () => {
+    if (!token) return;
+
+    setSavingReturnUrl(true);
+    try {
+      const response = await fetch("/api/global-config", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "saleor-api-url": saleorApiUrl || "",
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          returnUrl: globalReturnUrl.trim() || null, // 如果为空则传null
+        }),
+      });
+
+      if (response.ok) {
+        setSyncMessage("全局返回地址已成功更新");
+      } else {
+        const error = await response.json();
+        setAuthError(`更新全局返回地址失败: ${(error as ErrorResponse).error || "未知错误"}`);
+      }
+    } catch (error) {
+      console.error("Failed to update return url:", error);
+      setAuthError("更新全局返回地址失败，请重试");
+    } finally {
+      setSavingReturnUrl(false);
     }
   };
 
@@ -330,6 +383,19 @@ const ConfigPage: NextPage = () => {
                         if (channelsResponse.ok) {
                           const channelsData = (await channelsResponse.json()) as ChannelsResponse;
                           setChannels(channelsData.channels || []);
+                        }
+
+                        // 刷新全局配置
+                        const globalConfigResponse = await fetch("/api/global-config", {
+                          headers: {
+                            "saleor-api-url": saleorApiUrl || "",
+                            authorization: `Bearer ${token}`,
+                          },
+                        });
+                        if (globalConfigResponse.ok) {
+                          const globalConfigData =
+                            (await globalConfigResponse.json()) as GlobalConfigResponse;
+                          setGlobalReturnUrl(globalConfigData.returnUrl || "");
                         }
                       } catch (error) {
                         console.error("Failed to refresh status:", error);
@@ -445,6 +511,46 @@ const ConfigPage: NextPage = () => {
             )}
           </Box>
         )}
+
+        {/* 全局返回地址配置 */}
+        <Box display="flex" flexDirection="column" gap={2}>
+          <h3>全局返回地址配置</h3>
+          <Box display="flex" gap={2} alignItems="end">
+            <Box style={{ flex: 1 }}>
+              <Input
+                label="全局返回地址"
+                value={globalReturnUrl}
+                onChange={(e) => setGlobalReturnUrl(e.target.value)}
+                placeholder="https://your-store-domain.com/checkout/success"
+                helperText="支付完成后跳转的默认地址，如果前端未传入return_url则使用此地址，留空则移除return_url参数"
+              />
+            </Box>
+            <Button
+              type="button"
+              variant="primary"
+              disabled={
+                savingReturnUrl ||
+                globalReturnUrl ===
+                  (siteAuth?.site?.domain ? `https://${siteAuth.site.domain}/checkout/success` : "")
+              }
+              onClick={() => {
+                void handleReturnUrlUpdate();
+              }}
+            >
+              {savingReturnUrl ? "保存中..." : "保存"}
+            </Button>
+          </Box>
+          {globalReturnUrl && (
+            <Box padding={2} backgroundColor="success1" borderRadius={4}>
+              <p>✅ 全局返回地址已设置：{globalReturnUrl}</p>
+            </Box>
+          )}
+          {!globalReturnUrl && (
+            <Box padding={2} backgroundColor="info1" borderRadius={4}>
+              <p>ℹ️ 未设置全局返回地址，如果前端未传入return_url则不会添加return_url参数</p>
+            </Box>
+          )}
+        </Box>
 
         {/* 支付通道列表预览 */}
         <Box display="flex" flexDirection="column" gap={2}>

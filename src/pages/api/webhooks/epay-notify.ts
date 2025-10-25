@@ -30,12 +30,13 @@ const logger = createLogger({ component: "EpayNotifyWebhook" });
 
 // Saleor GraphQL mutations
 const TRANSACTION_EVENT_REPORT = `
-  mutation TransactionEventReport($transactionId: ID!, $amount: PositiveDecimal!, $type: TransactionEventTypeEnum!, $message: String) {
+  mutation TransactionEventReport($transactionId: ID!, $amount: PositiveDecimal!, $type: TransactionEventTypeEnum!, $message: String, $pspReference: String!) {
     transactionEventReport(
       transactionId: $transactionId
       amount: $amount
       type: $type
       message: $message
+      pspReference: $pspReference
     ) {
       errors {
         field
@@ -294,7 +295,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         if (!appToken) {
           logger.error("缺少 SALEOR_APP_TOKEN，无法调用 Saleor API");
-          // 返回 success 给易支付，避免重复回调
+          // 即使缺少token，也要返回 success 给易支付，避免重复回调
           return res.status(200).send("success");
         }
 
@@ -305,6 +306,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           amount: params.money,
           type: "CHARGE_SUCCESS",
           message: `支付成功，易支付交易号: ${params.trade_no}`,
+          pspReference: params.trade_no, // 使用易支付的交易号作为pspReference
         });
 
         // 检查Saleor API调用结果
@@ -316,6 +318,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             },
             "Saleor API 调用错误",
           );
+          // Saleor API调用失败，仍然返回 success 给易支付，避免重复回调
+          // 但记录错误以便后续处理
         } else {
           logger.info(
             {
@@ -335,9 +339,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           },
           "更新 Saleor 交易状态失败",
         );
-        // 即使失败，也返回 success 给易支付，避免重复回调
+        // 即使出现异常，也返回 success 给易支付，避免重复回调
       }
 
+      // 只有在处理完所有逻辑后才返回 success 给易支付
       return res.status(200).send("success");
     }
 
@@ -352,6 +357,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).send("fail");
   } catch (error) {
     logger.error(`Notify handler error: ${error instanceof Error ? error.message : "未知错误"}`);
+    // 发生未处理的错误时，也返回 fail，让易支付知道处理失败
     return res.status(200).send("fail");
   }
 }

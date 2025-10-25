@@ -27,6 +27,7 @@ interface TransactionEvent {
     lines?: Array<{
       productName?: string;
     }>;
+    returnUrl?: string; // 添加 returnUrl 字段
   };
   data?: {
     channelId?: string;
@@ -34,12 +35,14 @@ interface TransactionEvent {
     payType?: string;
     gatewayId?: string;
     paymentMethodId?: string;
+    returnUrl?: string; // 添加 returnUrl 字段
   };
 }
 
 // 获取支付配置的函数
 async function getEpayConfig(
   channelIdFromRequest?: string,
+  saleorApiUrl?: string, // 添加saleorApiUrl参数
 ): Promise<{ config: EpayConfig | null; returnUrl: string | null }> {
   try {
     logger.info(
@@ -106,6 +109,12 @@ async function getEpayConfig(
               "找到完整的支付配置",
             );
 
+            // 获取全局returnUrl配置
+            let globalReturnUrl: string | null = null;
+            if (saleorApiUrl) {
+              globalReturnUrl = await getGlobalReturnUrl(saleorApiUrl);
+            }
+
             return {
               config: {
                 pid: gateway.epayPid,
@@ -116,7 +125,7 @@ async function getEpayConfig(
                 signType: (gateway.signType as "MD5" | "RSA") || "MD5",
                 useSubmitPhp: gateway.useSubmitPhp || false, // 添加 useSubmitPhp 字段
               },
-              returnUrl: null, // 目前数据库结构中没有 returnUrl 字段
+              returnUrl: globalReturnUrl, // 使用全局returnUrl配置
             };
           } else {
             logger.warn(
@@ -166,6 +175,12 @@ async function getEpayConfig(
         "使用回退网关配置",
       );
 
+      // 获取全局returnUrl配置
+      let globalReturnUrl: string | null = null;
+      if (saleorApiUrl) {
+        globalReturnUrl = await getGlobalReturnUrl(saleorApiUrl);
+      }
+
       return {
         config: {
           pid: firstGateway.epayPid,
@@ -175,7 +190,7 @@ async function getEpayConfig(
           signType: (firstGateway.signType as "MD5" | "RSA") || "MD5",
           useSubmitPhp: firstGateway.useSubmitPhp || false, // 添加 useSubmitPhp 字段
         },
-        returnUrl: null,
+        returnUrl: globalReturnUrl,
       };
     } else {
       logger.warn("没有找到任何启用的网关配置");
@@ -192,6 +207,25 @@ async function getEpayConfig(
 
   logger.warn("支付配置未找到，请在后台配置支付参数");
   return { config: null, returnUrl: null };
+}
+
+// 添加获取全局returnUrl配置的函数
+async function getGlobalReturnUrl(saleorApiUrl: string): Promise<string | null> {
+  try {
+    // 由于在webhook中无法直接访问认证信息，我们暂时返回null
+    // 后续可以通过其他方式实现全局配置的获取
+    return null;
+  } catch (error) {
+    logger.error(
+      {
+        error: error instanceof Error ? error.message : "未知错误",
+        saleorApiUrl,
+      },
+      "获取全局returnUrl配置失败",
+    );
+  }
+
+  return null;
 }
 
 // 检查站点授权
@@ -239,7 +273,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         error: dbError instanceof Error ? dbError.message : "未知错误",
         stack: dbError instanceof Error ? dbError.stack : undefined,
       },
-      "数据库初始化失败"
+      "数据库初始化失败",
     );
     return res.status(500).json({
       result: "CHARGE_FAILURE",
@@ -374,7 +408,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 获取支付配置 - 使用请求中的 gatewayId
     const requestGatewayId = data?.gatewayId || data?.paymentMethodId;
-    const { config: epayConfig, returnUrl } = await getEpayConfig(requestGatewayId);
+    const { config: epayConfig, returnUrl } = await getEpayConfig(requestGatewayId, saleorApiUrl);
 
     if (!epayConfig) {
       return res.status(200).json({
@@ -468,7 +502,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           orderHash: transactionHash,
           error: mappingError instanceof Error ? mappingError.message : "未知错误",
           stack: mappingError instanceof Error ? mappingError.stack : undefined,
-          errorCode: mappingError instanceof Error && "code" in mappingError ? mappingError.code : undefined,
+          errorCode:
+            mappingError instanceof Error && "code" in mappingError ? mappingError.code : undefined,
         },
         "保存订单映射失败: " + (mappingError instanceof Error ? mappingError.message : "未知错误"),
       );
@@ -512,11 +547,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 使用 APP_CALLBACK_URL（如果设置）或回退到 APP_URL
     const callbackBaseUrl = env.APP_CALLBACK_URL || env.APP_URL;
 
+    // 从请求数据中获取前端传入的 returnUrl
+    const frontendReturnUrl = data?.returnUrl || sourceObject?.returnUrl;
+
     const createOrderParams = {
       amount: amountValue,
       orderNo,
       notifyUrl: `${callbackBaseUrl}/api/webhooks/epay-notify`,
-      returnUrl: returnUrl || `${env.APP_URL}/checkout/success`,
+      returnUrl: frontendReturnUrl || returnUrl || `${env.APP_URL}/checkout/success`,
       payType,
       productName,
       productDesc: `订单号: ${sourceObject?.number || "未知"}`,
@@ -620,6 +658,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         epayOrderNo: result.tradeNo,
         saleorOrderNo: orderNo,
         payType: result.type,
+        // 添加客户端传入的 returnUrl
+        returnUrl: frontendReturnUrl,
       };
 
       // 将支付响应数据存储到数据库
@@ -666,10 +706,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             orderNo,
             error: storageError instanceof Error ? storageError.message : "未知错误",
             stack: storageError instanceof Error ? storageError.stack : undefined,
-            errorCode: storageError instanceof Error && "code" in storageError ? storageError.code : undefined,
-            sqliteError: storageError instanceof Error && "cause" in storageError ? storageError.cause : undefined,
+            errorCode:
+              storageError instanceof Error && "code" in storageError
+                ? storageError.code
+                : undefined,
+            sqliteError:
+              storageError instanceof Error && "cause" in storageError
+                ? storageError.cause
+                : undefined,
           },
-          "存储支付响应数据到数据库失败: " + (storageError instanceof Error ? storageError.message : "未知错误"),
+          "存储支付响应数据到数据库失败: " +
+            (storageError instanceof Error ? storageError.message : "未知错误"),
         );
         // 即使存储失败，也不影响支付流程继续，但需要记录详细错误信息以便调试
       }
@@ -685,6 +732,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           epayOrderNo: result.tradeNo,
           saleorOrderNo: orderNo,
           payType: result.type,
+          // 只有当客户端提供了 returnUrl 时才返回，避免暴露默认的 APP_URL
+          ...(frontendReturnUrl && { returnUrl: frontendReturnUrl }),
           // 不再传递完整的 paymentResponse 对象
         },
       });
