@@ -20,7 +20,12 @@ export default createManifestHandler({
       name: packageJson.name,
       tokenTargetUrl: `${apiBaseURL}/api/register`,
       appUrl: `${apiBaseURL}/config`,
-      permissions: ["HANDLE_PAYMENTS", "MANAGE_ORDERS", "MANAGE_CHECKOUTS", "MANAGE_APPS"],
+      permissions: [
+        "HANDLE_PAYMENTS",
+        "MANAGE_ORDERS",
+        "MANAGE_CHECKOUTS",
+        "MANAGE_APPS" as AppManifest["permissions"][number],
+      ],
       id: "saleor.app.epay",
       version: packageJson.version,
       requiredSaleorVersion: ">=3.13", // 修改为支持3.13及以上版本
