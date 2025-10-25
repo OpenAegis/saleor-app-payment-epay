@@ -258,14 +258,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           tradeNo,
           tradeStatus,
         },
-        "支付失败或未知状态",
+        "支付失败或未知状态，返回轮询页面",
       );
 
-      // 返回未支付状态
-      return res.status(200).json({
-        status: "UNPAID",
-        message: "支付未完成",
-      });
+      // 返回HTML页面，包含轮询逻辑
+      return res.status(200).send(`
+<!DOCTYPE html>
+<html>
+<head>
+    <title>支付处理中</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <div style="text-align: center; margin-top: 50px;">
+        <h2>支付处理中...</h2>
+        <p>请稍候，系统正在确认您的支付状态。</p>
+        <div id="countdown">60</div>
+        <p>秒后自动刷新</p>
+    </div>
+    
+    <script>
+        // 轮询逻辑
+        let countdown = 60;
+        const countdownElement = document.getElementById('countdown');
+        
+        const interval = setInterval(() => {
+            countdown--;
+            countdownElement.textContent = countdown;
+            
+            if (countdown <= 0) {
+                clearInterval(interval);
+                // 重新加载页面以检查支付状态
+                location.reload();
+            }
+        }, 1000);
+        
+        // 页面加载后5秒开始检查支付状态
+        setTimeout(() => {
+            // 这里可以添加检查支付状态的逻辑
+            // 为简化起见，我们直接重新加载页面
+            location.reload();
+        }, 5000);
+    </script>
+</body>
+</html>
+`);
     }
   } catch (error) {
     logger.error(
