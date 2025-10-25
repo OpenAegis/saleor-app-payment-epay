@@ -1,6 +1,6 @@
 import { type NextApiRequest, type NextApiResponse } from "next";
 import { eq } from "drizzle-orm";
-import { createServerClient } from "@/lib/create-graphq-client";
+import { createClient } from "@/lib/create-graphq-client";
 import { type EpayNotifyParams, type EpayConfig } from "@/lib/epay/client";
 import { siteManager } from "@/lib/managers/site-manager";
 import { createLogger } from "@/lib/logger";
@@ -330,7 +330,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           return res.status(200).send("success");
         }
 
-        const client = createServerClient(saleorApiUrl, appToken);
+        const client = createClient(saleorApiUrl, saleorApiUrl);
 
         // 记录调用Saleor API前的信息
         logger.info(
