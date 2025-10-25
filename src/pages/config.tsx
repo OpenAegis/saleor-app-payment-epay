@@ -522,7 +522,7 @@ const ConfigPage: NextPage = () => {
                 value={globalReturnUrl}
                 onChange={(e) => setGlobalReturnUrl(e.target.value)}
                 placeholder="https://your-store-domain.com/checkout/success"
-                helperText="支付完成后跳转的默认地址，如果前端未传入return_url则使用此地址，留空则移除return_url参数"
+                helperText="支付完成后跳转的默认地址，如果前端未传入return_url则使用此地址，留空则移除return_url参数。支持占位符：{transaction_id} 会在跳转时替换为实际的交易ID"
               />
             </Box>
             <Button
@@ -550,6 +550,12 @@ const ConfigPage: NextPage = () => {
               <p>ℹ️ 未设置全局返回地址，如果前端未传入return_url则不会添加return_url参数</p>
             </Box>
           )}
+          <Box padding={2} backgroundColor="info1" borderRadius={4}>
+            <p>
+              💡
+              提示：您可以在URL中使用占位符，例如：https://your-store-domain.com/checkout/success/&#123;transaction_id&#125;
+            </p>
+          </Box>
         </Box>
 
         {/* 支付通道列表预览 */}

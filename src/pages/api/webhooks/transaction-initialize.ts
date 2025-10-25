@@ -212,9 +212,41 @@ async function getEpayConfig(
 // 添加获取全局returnUrl配置的函数
 async function getGlobalReturnUrl(saleorApiUrl: string): Promise<string | null> {
   try {
-    // 由于在webhook中无法直接访问认证信息，我们暂时返回null
-    // 后续可以通过其他方式实现全局配置的获取
-    return null;
+    // 导入必要的模块
+    const { createServerClient } = await import("@/lib/create-graphq-client");
+    const { createPrivateSettingsManager } = await import(
+      "@/modules/app-configuration/metadata-manager"
+    );
+    const { saleorApp } = await import("@/saleor-app");
+
+    // 从APL获取认证信息
+    const authData = await saleorApp.apl.get(saleorApiUrl);
+    const token = authData?.token;
+
+    if (!token) {
+      logger.warn("SALEOR_APP_TOKEN not found in APL");
+      return null;
+    }
+
+    // 创建GraphQL客户端和设置管理器
+    const client = createServerClient(saleorApiUrl, token);
+    const settingsManager = createPrivateSettingsManager(client);
+
+    // 全局配置的metadata key
+    const GLOBAL_CONFIG_KEY = "global_payment_config";
+
+    // 获取全局配置
+    const configStr = await settingsManager.get(saleorApiUrl, GLOBAL_CONFIG_KEY);
+    if (configStr && typeof configStr === "string") {
+      try {
+        const config = JSON.parse(configStr) as { returnUrl?: string };
+        return config.returnUrl || null;
+      } catch (e) {
+        logger.error(
+          "Failed to parse global config: " + (e instanceof Error ? e.message : "Unknown error"),
+        );
+      }
+    }
   } catch (error) {
     logger.error(
       {
@@ -554,7 +586,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       amount: amountValue,
       orderNo,
       notifyUrl: `${callbackBaseUrl}/api/webhooks/epay-notify`,
-      returnUrl: frontendReturnUrl || returnUrl || `${env.APP_URL}/checkout/success`,
+      returnUrl: `${callbackBaseUrl}/api/webhooks/epay-return`, // 统一使用我们的回调处理接口
       payType,
       productName,
       productDesc: `订单号: ${sourceObject?.number || "未知"}`,
@@ -658,8 +690,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         epayOrderNo: result.tradeNo,
         saleorOrderNo: orderNo,
         payType: result.type,
-        // 添加客户端传入的 returnUrl
-        returnUrl: frontendReturnUrl,
+        // 只有当客户端提供了 returnUrl 时才存储，避免暴露默认的 APP_URL
+        ...(frontendReturnUrl && { returnUrl: frontendReturnUrl }),
       };
 
       // 将支付响应数据存储到数据库

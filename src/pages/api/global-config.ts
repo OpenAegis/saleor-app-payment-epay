@@ -33,15 +33,18 @@ export default createProtectedHandler(
             // 获取全局配置
             const configStr = await settingsManager.get(saleorApiUrl, GLOBAL_CONFIG_KEY);
             let config: GlobalConfig = {};
-            
+
             if (configStr) {
               try {
                 config = JSON.parse(configStr) as GlobalConfig;
               } catch (e) {
-                logger.error("Failed to parse global config: " + (e instanceof Error ? e.message : "Unknown error"));
+                logger.error(
+                  "Failed to parse global config: " +
+                    (e instanceof Error ? e.message : "Unknown error"),
+                );
               }
             }
-            
+
             return res.status(200).json(config);
           } catch (error) {
             logger.error(
@@ -54,19 +57,22 @@ export default createProtectedHandler(
         case "PUT":
           try {
             const { returnUrl } = req.body as { returnUrl?: string | null };
-            
+
             // 获取现有配置
             const existingConfigStr = await settingsManager.get(saleorApiUrl, GLOBAL_CONFIG_KEY);
             let config: GlobalConfig = {};
-            
+
             if (existingConfigStr) {
               try {
                 config = JSON.parse(existingConfigStr) as GlobalConfig;
               } catch (e) {
-                logger.error("Failed to parse existing global config: " + (e instanceof Error ? e.message : "Unknown error"));
+                logger.error(
+                  "Failed to parse existing global config: " +
+                    (e instanceof Error ? e.message : "Unknown error"),
+                );
               }
             }
-            
+
             // 更新returnUrl
             if (returnUrl === null) {
               // 移除returnUrl
@@ -78,14 +84,14 @@ export default createProtectedHandler(
               // 空字符串，移除returnUrl
               delete config.returnUrl;
             }
-            
+
             // 保存配置
             await settingsManager.set({
               key: GLOBAL_CONFIG_KEY,
               value: JSON.stringify(config),
               domain: saleorApiUrl,
             });
-            
+
             return res.status(200).json({ success: true });
           } catch (error) {
             logger.error(
