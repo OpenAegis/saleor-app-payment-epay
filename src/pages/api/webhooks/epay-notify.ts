@@ -30,13 +30,16 @@ const logger = createLogger({ component: "EpayNotifyWebhook" });
 
 // Saleor GraphQL mutations
 const TRANSACTION_EVENT_REPORT = `
-  mutation TransactionEventReport($transactionId: ID!, $amount: PositiveDecimal!, $type: TransactionEventTypeEnum!, $message: String, $pspReference: String!) {
+  mutation TransactionEventReport($id: ID!, $amount: PositiveDecimal!, $availableActions: [TransactionActionEnum!]!, $externalUrl: String, $message: String, $pspReference: String!, $time: DateTime!, $type: TransactionEventTypeEnum!) {
     transactionEventReport(
-      transactionId: $transactionId
+      id: $id
       amount: $amount
-      type: $type
+      availableActions: $availableActions
+      externalUrl: $externalUrl
       message: $message
       pspReference: $pspReference
+      time: $time
+      type: $type
     ) {
       errors {
         field
@@ -302,11 +305,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const client = createServerClient(saleorApiUrl, appToken);
 
         const result = await client.mutation(TRANSACTION_EVENT_REPORT, {
-          transactionId,
+          id: transactionId, // 修复：参数名应该是id而不是transactionId
           amount: params.money,
-          type: "CHARGE_SUCCESS",
+          availableActions: [], // 添加必需的availableActions参数
+          externalUrl: "", // 添加必需的externalUrl参数
           message: `支付成功，易支付交易号: ${params.trade_no}`,
           pspReference: params.trade_no, // 使用易支付的交易号作为pspReference
+          time: new Date().toISOString(), // 添加必需的time参数
+          type: "CHARGE_SUCCESS",
         });
 
         // 检查Saleor API调用结果
