@@ -1,22 +1,19 @@
 import { authExchange } from "@urql/exchange-auth";
-import { cacheExchange, createClient as urqlCreateClient, fetchExchange, Operation } from "@urql/core";
-import { debugExchange } from "@urql/core";
-
-interface IAuthState {
-  token: string;
-}
+import {
+  cacheExchange,
+  createClient as urqlCreateClient,
+  fetchExchange,
+  debugExchange,
+  type Operation,
+} from "@urql/core";
 
 export const createClient = (url: string, token: string) =>
   urqlCreateClient({
     url,
-    exchanges: [
-      debugExchange,
-      cacheExchange,
-      fetchExchange,
-    ],
+    exchanges: [debugExchange, cacheExchange, fetchExchange],
     fetchOptions: {
       headers: {
-        "Authorization-Bearer": token,
+        Authorization: `Bearer ${token}`,
       },
     },
   });
@@ -26,7 +23,10 @@ export function createServerClient(saleorApiUrl: string, token: string) {
 }
 
 // 添加支持异步token获取的版本
-export const createClientWithAsyncToken = (url: string, getToken: () => Promise<{ token: string }>) =>
+export const createClientWithAsyncToken = (
+  url: string,
+  getToken: () => Promise<{ token: string }>,
+) =>
   urqlCreateClient({
     url,
     exchanges: [
@@ -37,7 +37,7 @@ export const createClientWithAsyncToken = (url: string, getToken: () => Promise<
         return {
           addAuthToOperation: (operation: Operation) => {
             return utils.appendHeaders(operation, {
-              "Authorization-Bearer": token,
+              Authorization: `Bearer ${token}`,
             });
           },
           didAuthError: () => false,
