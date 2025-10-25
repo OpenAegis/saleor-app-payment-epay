@@ -148,12 +148,41 @@ async function createPermanentAppToken(
     const body = (await response.json()) as AppTokenCreateResponse;
     const result = body.data?.appTokenCreate;
     if (!result) {
+      const permissionError = body.errors?.find((error) => error.message?.includes("MANAGE_APPS"));
+      if (permissionError) {
+        logger.error(
+          {
+            permissions: ["MANAGE_APPS"],
+            errors: body.errors,
+          },
+          "创建永久 App Token 失败: 缺少 MANAGE_APPS 权限，请在 Saleor 后台为应用授予该权限后重新安装",
+        );
+        return null;
+      }
+
       logger.error({ body }, "创建永久 App Token 失败: 返回体缺少 appTokenCreate 字段");
       return null;
     }
 
     if (result.errors && result.errors.length > 0) {
-      logger.error({ errors: result.errors }, "创建永久 App Token 失败: GraphQL 返回错误");
+      const permissionError = result.errors.find((error) => error.code === "MANAGE_APPS");
+      if (permissionError) {
+        logger.error(
+          {
+            permissions: ["MANAGE_APPS"],
+            errors: result.errors,
+          },
+          "创建永久 App Token 失败: 缺少 MANAGE_APPS 权限，请在 Saleor 后台为应用授予该权限后重新安装",
+        );
+        return null;
+      }
+
+      logger.error(
+        {
+          errors: result.errors,
+        },
+        "创建永久 App Token 失败: GraphQL 返回错误",
+      );
       return null;
     }
 
