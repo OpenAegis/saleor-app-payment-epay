@@ -334,7 +334,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         console.log("[DEBUG] Manually refreshing token before Saleor API call");
         const freshAuthData = await saleorApp.apl.get(saleorApiUrl);
         const freshToken = freshAuthData?.token;
-        
+
         if (!freshToken) {
           logger.error(
             {
@@ -346,7 +346,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           // 即使缺少token，也要返回 success 给易支付，避免重复回调
           return res.status(200).send("success");
         }
-        
+
         console.log("[DEBUG] Got fresh token, length: " + freshToken.length);
         // 记录token的部分信息用于调试（不记录完整token）
         console.log("[DEBUG] Fresh token preview: " + freshToken.substring(0, 20) + "...");
