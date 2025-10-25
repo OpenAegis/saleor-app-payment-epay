@@ -1,4 +1,4 @@
-import { type NextApiRequest, type NextApiResponse } from "next";
+import type { NextApiRequest, NextApiResponse } from "next";
 import { saleorApp } from "../../saleor-app";
 import { createLogger } from "../../lib/logger";
 import { siteManager } from "../../lib/managers/site-manager";
@@ -94,7 +94,85 @@ async function fetchRemoteJwks(saleorApiUrl: string): Promise<string | undefined
   }
 }
 
-/**
+interface AppTokenCreateResponse {
+  data?: {
+    appTokenCreate?: {
+      authToken?: string;
+      errors?: Array<{ field?: string | null; message?: string | null; code?: string | null }>;
+    };
+  };
+}
+
+async function createPermanentAppToken(
+  saleorApiUrl: string,
+  token: string,
+  appId: string,
+): Promise<string | null> {
+  const mutation = `
+    mutation AppTokenCreate($appId: ID!, $name: String!) {
+      appTokenCreate(input: { app: $appId, name: $name }) {
+        authToken
+        errors {
+          field
+          message
+          code
+        }
+      }
+    }
+  `;
+
+  try {
+    const response = await fetch(saleorApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        query: mutation,
+        variables: {
+          appId,
+          name: `RainbowEpay-${new Date().toISOString()}`,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      logger.error(
+        { status: response.status, statusText: response.statusText },
+        "创建永久 App Token 失败: 响应状态异常",
+      );
+      return null;
+    }
+
+    const body = (await response.json()) as AppTokenCreateResponse;
+    const result = body.data?.appTokenCreate;
+    if (!result) {
+      logger.error({ body }, "创建永久 App Token 失败: 返回体缺少 appTokenCreate 字段");
+      return null;
+    }
+
+    if (result.errors && result.errors.length > 0) {
+      logger.error({ errors: result.errors }, "创建永久 App Token 失败: GraphQL 返回错误");
+      return null;
+    }
+
+    if (!result.authToken) {
+      logger.error("创建永久 App Token 失败: 未返回 authToken");
+      return null;
+    }
+
+    logger.info("成功创建永久 App Token");
+    return result.authToken;
+  } catch (error) {
+    logger.error(
+      "创建永久 App Token 时发生异常: " + (error instanceof Error ? error.message : "未知错误"),
+    );
+    return null;
+  }
+}
+
+/** 
  * Required endpoint, called by Saleor to install app.
  * It will exchange tokens with app, so saleorApp.apl will contain token
  */
@@ -207,10 +285,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
+    // 使用短期token交换长期token（若可行）
+    let tokenToStore = authToken;
+    if (appId && appId !== "app-placeholder-id") {
+      // 优先使用修正后的URL尝试，失败则回退原始URL
+      const potentialToken =
+        (await createPermanentAppToken(saleorApiUrl, authToken, appId)) ||
+        (correctedUrl !== saleorApiUrl
+          ? await createPermanentAppToken(correctedUrl, authToken, appId)
+          : null);
+
+      if (potentialToken) {
+        tokenToStore = potentialToken;
+      } else {
+        logger.warn("无法创建永久 App Token，保留原始安装 token");
+      }
+    } else {
+      logger.warn("缺少有效的 appId，无法创建永久 App Token");
+    }
+
     // 构建认证数据（如果有站点则关联站点ID）
     const authData: ExtendedAuthData = {
       domain: saleorDomain as string | undefined,
-      token: authToken,
+      token: tokenToStore,
       saleorApiUrl: saleorApiUrl, // 使用原始URL，让自动检测机制处理
       appId,
       jwks,
@@ -224,6 +321,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           saleorApiUrl: "***",
           appId,
           siteId: site?.id || "未关联",
+          tokenPreview: tokenToStore?.substring(0, 10) + "...",
         }),
     );
 

@@ -359,7 +359,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .toPromise();
 
         // 检查Saleor API调用结果
-        const saleorErrors = result?.data?.transactionEventReport?.errors || [];
+        const saleorErrors =
+          (result?.data?.transactionEventReport?.errors as Array<{ code?: string | null }> | undefined) ||
+          [];
+        const hasExpiredSignature =
+          saleorErrors.some((errorItem) => errorItem?.code === "ExpiredSignatureError") ||
+          result?.error?.graphQLErrors?.some((graphError: {
+            message?: string;
+            extensions?: { exception?: { code?: string } };
+          }) => {
+            const graphErrorCode = graphError.extensions?.exception?.code;
+            return (
+              graphError.message?.includes("Signature has expired") ||
+              graphErrorCode === "ExpiredSignatureError"
+            );
+          }) ||
+          false;
+
         if (!result || result.error || saleorErrors.length > 0) {
           logger.error(
             {
@@ -372,6 +388,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             },
             "Saleor API 调用错误",
           );
+          if (hasExpiredSignature) {
+            logger.warn(
+              {
+                saleorApiUrl,
+                appId: authData?.appId,
+              },
+              "检测到 Saleor App Token 已过期，请在 Saleor 后台重新安装或使用修复脚本更新凭证",
+            );
+          }
           await updateOrderStatus(params.out_trade_no, "failed");
           return res.status(500).send("fail");
         } else {
