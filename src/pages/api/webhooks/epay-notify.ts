@@ -293,16 +293,58 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       try {
         // 从数据库获取应用 token（用于服务端调用）
         const { saleorApp } = await import("@/saleor-app");
+        
+        // 添加调试信息
+        logger.info(
+          {
+            saleorApiUrl,
+            transactionId,
+            orderNo: params.out_trade_no,
+          },
+          "准备从数据库获取认证数据",
+        );
+        
         const authData = await saleorApp.apl.get(saleorApiUrl);
         const appToken = authData?.token;
+        
+        // 添加更多调试信息
+        logger.info(
+          {
+            hasAuthData: !!authData,
+            hasToken: !!appToken,
+            tokenPreview: appToken ? appToken.substring(0, 10) + "..." : "null",
+            saleorApiUrl,
+          },
+          "认证数据获取结果",
+        );
 
         if (!appToken) {
-          logger.error("缺少 SALEOR_APP_TOKEN，无法调用 Saleor API");
+          logger.error(
+            {
+              saleorApiUrl,
+              authDataKeys: authData ? Object.keys(authData) : "null",
+            },
+            "缺少 SALEOR_APP_TOKEN，无法调用 Saleor API",
+          );
           // 即使缺少token，也要返回 success 给易支付，避免重复回调
           return res.status(200).send("success");
         }
 
         const client = createServerClient(saleorApiUrl, appToken);
+
+        // 记录调用Saleor API前的信息
+        logger.info(
+          {
+            transactionId,
+            orderNo: params.out_trade_no,
+            tradeNo: params.trade_no,
+            amount: params.money,
+            saleorApiUrl,
+            // 记录token的部分信息用于调试（不记录完整token）
+            tokenPreview: appToken.substring(0, 10) + "...",
+          },
+          "准备调用 Saleor API 更新交易状态",
+        );
 
         const result = await client.mutation(TRANSACTION_EVENT_REPORT, {
           id: transactionId, // 修复：参数名应该是id而不是transactionId
@@ -321,6 +363,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             {
               error: JSON.stringify(result.error),
               transactionId,
+              orderNo: params.out_trade_no,
+              tradeNo: params.trade_no,
+              saleorApiUrl,
             },
             "Saleor API 调用错误",
           );
