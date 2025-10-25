@@ -430,10 +430,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // 创建订单号（包含交易ID的哈希值以便回调时识别，避免特殊字符）
+    // 易支付要求：只能为英文或数字，且最低十个字符
     const transactionHash = createHash("md5").update(transaction.id).digest("hex").substring(0, 8);
-    const orderNo = `ORDER-${Date.now()}-${Math.random()
-      .toString(36)
-      .substr(2, 9)}-${transactionHash}`;
+    const timestamp = Date.now().toString();
+    const randomStr = Math.random().toString(36).substring(2, 11); // 9位随机字符
+    const orderNo = `ORDER${timestamp}${randomStr}${transactionHash}`.toUpperCase();
 
     // 保存订单映射关系到数据库
     try {
