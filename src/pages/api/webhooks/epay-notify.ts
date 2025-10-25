@@ -1,11 +1,11 @@
 import { type NextApiRequest, type NextApiResponse } from "next";
+import { eq } from "drizzle-orm";
 import { createServerClient } from "@/lib/create-graphq-client";
 import { type EpayNotifyParams, type EpayConfig } from "@/lib/epay/client";
 import { siteManager } from "@/lib/managers/site-manager";
 import { createLogger } from "@/lib/logger";
 import { db } from "@/lib/db/turso-client";
 import { orderMappings } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 
 const logger = createLogger({ component: "EpayNotifyWebhook" });
 
@@ -287,9 +287,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // 调用 Saleor API 报告交易成功
       // 注意：易支付回调不会携带认证 token，需要使用应用的权限
       try {
-        // 从环境变量获取应用 token（用于服务端调用）
-        const { env } = await import("@/lib/env.mjs");
-        const appToken = env.SALEOR_APP_TOKEN;
+        // 从数据库获取应用 token（用于服务端调用）
+        const { saleorApp } = await import("@/saleor-app");
+        const authData = await saleorApp.apl.get(saleorApiUrl);
+        const appToken = authData?.token;
 
         if (!appToken) {
           logger.error("缺少 SALEOR_APP_TOKEN，无法调用 Saleor API");

@@ -468,7 +468,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           orderHash: transactionHash,
           error: mappingError instanceof Error ? mappingError.message : "未知错误",
           stack: mappingError instanceof Error ? mappingError.stack : undefined,
-          errorCode: mappingError instanceof Error && 'code' in mappingError ? mappingError.code : undefined,
+          errorCode: mappingError instanceof Error && "code" in mappingError ? mappingError.code : undefined,
         },
         "保存订单映射失败: " + (mappingError instanceof Error ? mappingError.message : "未知错误"),
       );
@@ -666,8 +666,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             orderNo,
             error: storageError instanceof Error ? storageError.message : "未知错误",
             stack: storageError instanceof Error ? storageError.stack : undefined,
-            errorCode: storageError instanceof Error && 'code' in storageError ? storageError.code : undefined,
-            sqliteError: storageError instanceof Error && 'cause' in storageError ? storageError.cause : undefined,
+            errorCode: storageError instanceof Error && "code" in storageError ? storageError.code : undefined,
+            sqliteError: storageError instanceof Error && "cause" in storageError ? storageError.cause : undefined,
           },
           "存储支付响应数据到数据库失败: " + (storageError instanceof Error ? storageError.message : "未知错误"),
         );
