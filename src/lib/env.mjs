@@ -16,9 +16,6 @@ export const env = createEnv({
     PLUGIN_SESSION_SECRET: z.string().default("secret"),
     APP_DEBUG: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
     SECRET_KEY: z.string().default("secret"),
-    // Saleor 管理员凭据（可选）：用于安装时自动创建永久 App Token，避免 JWT 过期问题
-    SALEOR_ADMIN_EMAIL: z.string().email().optional(),
-    SALEOR_ADMIN_PASSWORD: z.string().optional(),
     // 测试环境变量
     CI: z.string().optional(),
   },
@@ -45,8 +42,6 @@ export const env = createEnv({
     PLUGIN_SESSION_SECRET: process.env.PLUGIN_SESSION_SECRET,
     APP_DEBUG: process.env.APP_DEBUG,
     SECRET_KEY: process.env.SECRET_KEY,
-    SALEOR_ADMIN_EMAIL: process.env.SALEOR_ADMIN_EMAIL,
-    SALEOR_ADMIN_PASSWORD: process.env.SALEOR_ADMIN_PASSWORD,
     CI: process.env.CI,
     NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
     NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION,
