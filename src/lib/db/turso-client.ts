@@ -130,6 +130,9 @@ export async function initializeDatabase() {
         order_hash TEXT NOT NULL UNIQUE,
         transaction_id TEXT NOT NULL,
         saleor_api_url TEXT NOT NULL,
+        saleor_order_id TEXT,
+        saleor_order_number TEXT,
+        epay_trade_no TEXT,
         status TEXT NOT NULL DEFAULT 'pending',
         payment_response TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -151,6 +154,9 @@ export async function initializeDatabase() {
     
     // 数据库迁移：添加 payment_response 字段
     await migratePaymentResponseField();
+
+    // 数据库迁移：添加订单追踪字段
+    await migrateOrderMappingTraceFields();
 
     console.log("✅ 数据库表初始化成功");
   } catch (error) {
@@ -234,5 +240,54 @@ async function migratePaymentResponseField() {
   } catch (error) {
     console.error("❌ order_mappings 表迁移失败:", error);
     // 不抛出错误，避免影响整个初始化过程
+  }
+}
+
+/**
+ * 数据库迁移：为 order_mappings 表添加订单追踪字段
+ */
+async function migrateOrderMappingTraceFields() {
+  try {
+    const columns = await tursoClient.execute("PRAGMA table_info(order_mappings)");
+    const hasSaleorOrderId = columns.rows.some((row) => row.name === "saleor_order_id");
+    const hasSaleorOrderNumber = columns.rows.some((row) => row.name === "saleor_order_number");
+    const hasEpayTradeNo = columns.rows.some((row) => row.name === "epay_trade_no");
+
+    if (!hasSaleorOrderId) {
+      await tursoClient.execute(`
+        ALTER TABLE order_mappings ADD COLUMN saleor_order_id TEXT
+      `);
+      console.log("✅ 添加 saleor_order_id 字段到 order_mappings 表");
+    }
+
+    if (!hasSaleorOrderNumber) {
+      await tursoClient.execute(`
+        ALTER TABLE order_mappings ADD COLUMN saleor_order_number TEXT
+      `);
+      console.log("✅ 添加 saleor_order_number 字段到 order_mappings 表");
+    }
+
+    if (!hasEpayTradeNo) {
+      await tursoClient.execute(`
+        ALTER TABLE order_mappings ADD COLUMN epay_trade_no TEXT
+      `);
+      console.log("✅ 添加 epay_trade_no 字段到 order_mappings 表");
+    }
+
+    await tursoClient.execute(`
+      CREATE INDEX IF NOT EXISTS order_mappings_saleor_order_id_idx ON order_mappings(saleor_order_id)
+    `);
+    await tursoClient.execute(`
+      CREATE INDEX IF NOT EXISTS order_mappings_saleor_order_number_idx ON order_mappings(saleor_order_number)
+    `);
+    await tursoClient.execute(`
+      CREATE INDEX IF NOT EXISTS order_mappings_epay_trade_no_idx ON order_mappings(epay_trade_no)
+    `);
+
+    if (hasSaleorOrderId && hasSaleorOrderNumber && hasEpayTradeNo) {
+      console.log("ℹ️ order_mappings 追踪字段已存在，跳过迁移");
+    }
+  } catch (error) {
+    console.error("❌ order_mappings 追踪字段迁移失败:", error);
   }
 }

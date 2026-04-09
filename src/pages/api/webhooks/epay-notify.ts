@@ -5,7 +5,7 @@ import { type EpayNotifyParams, type EpayConfig } from "@/lib/epay/client";
 import { siteManager } from "@/lib/managers/site-manager";
 import { createLogger } from "@/lib/logger";
 import { db } from "@/lib/db/turso-client";
-import { orderMappings } from "@/lib/db/schema";
+import { orderMappings, type OrderMapping } from "@/lib/db/schema";
 
 const logger = createLogger({ component: "EpayNotifyWebhook" });
 
@@ -131,6 +131,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 先通过订单号查找对应的 Saleor API 信息
     let saleorApiUrl: string | null = null;
     let transactionId: string | null = null;
+    let orderMappingRecord: OrderMapping | null = null;
 
     try {
       // 从订单映射表查找订单信息
@@ -141,13 +142,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .limit(1);
 
       if (mapping.length > 0) {
-        saleorApiUrl = mapping[0].saleorApiUrl;
-        transactionId = mapping[0].transactionId;
+        orderMappingRecord = mapping[0];
+        saleorApiUrl = orderMappingRecord.saleorApiUrl;
+        transactionId = orderMappingRecord.transactionId;
         logger.info(
           {
             orderNo: params.out_trade_no,
             transactionId,
             saleorApiUrl,
+            saleorOrderId: orderMappingRecord.saleorOrderId,
+            saleorOrderNumber: orderMappingRecord.saleorOrderNumber,
+            epayTradeNo: orderMappingRecord.epayTradeNo,
           },
           "从数据库查找到订单映射信息",
         );
@@ -279,13 +284,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       );
 
       // 幂等性检查：订单已支付则直接返回 success，防止重复上报
-      const existingMapping = await db
-        .select()
-        .from(orderMappings)
-        .where(eq(orderMappings.orderNo, params.out_trade_no))
-        .limit(1);
+      if (params.trade_no && orderMappingRecord && orderMappingRecord.epayTradeNo !== params.trade_no) {
+        await db
+          .update(orderMappings)
+          .set({
+            epayTradeNo: params.trade_no,
+            updatedAt: new Date().toISOString(),
+          })
+          .where(eq(orderMappings.orderNo, params.out_trade_no));
 
-      if (existingMapping[0]?.status === "paid") {
+        orderMappingRecord = {
+          ...orderMappingRecord,
+          epayTradeNo: params.trade_no,
+        };
+      }
+
+      if (orderMappingRecord?.status === "paid") {
         logger.info(
           { orderNo: params.out_trade_no, transactionId },
           "订单已处理（幂等），直接返回 success",

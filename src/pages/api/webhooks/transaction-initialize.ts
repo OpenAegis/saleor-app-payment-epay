@@ -22,13 +22,7 @@ interface TransactionEvent {
   transaction: {
     id: string;
   };
-  sourceObject?: {
-    number?: string;
-    lines?: Array<{
-      productName?: string;
-    }>;
-    returnUrl?: string; // 添加 returnUrl 字段
-  };
+  sourceObject?: TransactionSourceObject;
   data?: {
     channelId?: string;
     channelType?: string;
@@ -37,6 +31,52 @@ interface TransactionEvent {
     paymentMethodId?: string;
     returnUrl?: string; // 添加 returnUrl 字段
   };
+}
+
+interface TransactionSourceObjectLine {
+  productName?: string;
+  variant?: {
+    name?: string;
+    product?: {
+      name?: string;
+    };
+  };
+}
+
+interface TransactionSourceObject {
+  __typename?: "Order" | "Checkout";
+  id?: string;
+  number?: string;
+  redirectUrl?: string;
+  lines?: TransactionSourceObjectLine[];
+}
+
+function getSaleorOrderTrace(sourceObject?: TransactionSourceObject): {
+  saleorOrderId: string | null;
+  saleorOrderNumber: string | null;
+} {
+  return {
+    saleorOrderId: sourceObject?.__typename === "Order" ? sourceObject.id || null : null,
+    saleorOrderNumber: sourceObject?.number || null,
+  };
+}
+
+function getSourceObjectProductName(sourceObject?: TransactionSourceObject): string {
+  const firstLine = sourceObject?.lines?.[0];
+
+  if (!firstLine) {
+    return "订单支付";
+  }
+
+  if (firstLine.productName) {
+    return firstLine.productName;
+  }
+
+  const checkoutLineName = [firstLine.variant?.product?.name, firstLine.variant?.name]
+    .filter((value): value is string => Boolean(value && value.trim()))
+    .join(" - ");
+
+  return checkoutLineName || "订单支付";
 }
 
 // 获取支付配置的函数
@@ -410,6 +450,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         amount: amountValue,
         payType: data?.payType || action.paymentMethodType,
         channelId: data?.channelId,
+        sourceObjectType: sourceObject?.__typename,
+        saleorOrderId: sourceObject?.__typename === "Order" ? sourceObject.id : undefined,
+        saleorOrderNumber: sourceObject?.number,
       },
       "Parsed transaction initialize payload",
     );
@@ -529,6 +572,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const timestamp = Date.now().toString();
     const randomStr = Math.random().toString(36).substring(2, 11); // 9位随机字符
     const orderNo = `ORDER${timestamp}${randomStr}${transactionHash}`.toUpperCase();
+    const { saleorOrderId, saleorOrderNumber } = getSaleorOrderTrace(sourceObject);
 
     // 保存订单映射关系到数据库
     try {
@@ -539,6 +583,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         orderHash: transactionHash,
         transactionId: transaction.id,
         saleorApiUrl,
+        saleorOrderId,
+        saleorOrderNumber,
+        epayTradeNo: null,
         status: "pending",
         // 初始化时设置 paymentResponse 为 null
         paymentResponse: null,
@@ -551,6 +598,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           transactionId: transaction.id,
           orderNo,
           orderHash: transactionHash,
+          saleorOrderId,
+          saleorOrderNumber,
         },
         "订单映射已保存到数据库",
       );
@@ -576,7 +625,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // 获取商品名称（从订单信息中）
-    const productName = sourceObject?.lines?.[0]?.productName || "订单支付";
+    const productName = getSourceObjectProductName(sourceObject);
 
     // 获取客户端 IP 地址
     const clientIp =
@@ -608,7 +657,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const callbackBaseUrl = env.APP_CALLBACK_URL || env.APP_URL;
 
     // 从请求数据中获取前端传入的 returnUrl
-    const frontendReturnUrl = data?.returnUrl || sourceObject?.returnUrl;
+    const frontendReturnUrl = data?.returnUrl || sourceObject?.redirectUrl;
 
     const createOrderParams = {
       amount: amountValue,
@@ -617,7 +666,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       returnUrl: `${callbackBaseUrl}/api/webhooks/epay-return`, // 统一使用我们的回调处理接口
       payType,
       productName,
-      productDesc: `订单号: ${sourceObject?.number || "未知"}`,
+      productDesc: `订单号: ${saleorOrderNumber || "未知"}`,
       clientIp: Array.isArray(clientIp) ? clientIp[0] : clientIp.split(",")[0].trim(),
 
       // v2 API 额外参数
@@ -717,6 +766,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         qrcode: result.qrcode,
         epayOrderNo: result.tradeNo,
         saleorOrderNo: orderNo,
+        saleorOrderId,
+        saleorOrderNumber,
         payType: result.type,
         // 只有当客户端提供了 returnUrl 时才存储，避免暴露默认的 APP_URL
         ...(frontendReturnUrl && { returnUrl: frontendReturnUrl }),
@@ -745,6 +796,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const updateResult = await db
           .update(orderMappings)
           .set({
+            epayTradeNo: result.tradeNo || null,
             paymentResponse: paymentResponseStr,
             updatedAt: new Date().toISOString(),
           })
@@ -791,6 +843,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           // 只传递必要的信息，避免数据过长
           epayOrderNo: result.tradeNo,
           saleorOrderNo: orderNo,
+          ...(saleorOrderId && { saleorOrderId }),
+          ...(saleorOrderNumber && { saleorOrderNumber }),
           payType: result.type,
           // 添加pspReference用于后续查询，使用易支付的交易号
           pspReference: result.tradeNo,

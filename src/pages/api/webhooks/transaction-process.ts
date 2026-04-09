@@ -143,6 +143,8 @@ function buildPaymentLinkResponse(paymentResponse: Record<string, unknown>, amou
       qrcode: paymentResponse["qrcode"],
       epayOrderNo: paymentResponse["epayOrderNo"],
       saleorOrderNo: paymentResponse["saleorOrderNo"],
+      saleorOrderId: paymentResponse["saleorOrderId"],
+      saleorOrderNumber: paymentResponse["saleorOrderNumber"],
     },
   };
 }
@@ -904,6 +906,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                   // 只传递必要的信息，避免数据过长
                   epayOrderNo: paymentResponse["epayOrderNo"],
                   saleorOrderNo: paymentResponse["saleorOrderNo"],
+                  saleorOrderId: paymentResponse["saleorOrderId"],
+                  saleorOrderNumber: paymentResponse["saleorOrderNumber"],
                   payType: paymentResponse["payType"],
                   paymentUrl: paymentResponse["paymentUrl"],
                   qrcode: paymentResponse["qrcode"],

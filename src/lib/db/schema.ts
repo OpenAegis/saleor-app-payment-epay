@@ -123,6 +123,9 @@ export const orderMappings = sqliteTable("order_mappings", {
   orderHash: text("order_hash").notNull().unique(), // 订单号中的哈希部分 (8位)
   transactionId: text("transaction_id").notNull(), // Saleor transaction ID
   saleorApiUrl: text("saleor_api_url").notNull(), // 关联的 Saleor API URL
+  saleorOrderId: text("saleor_order_id"), // Saleor 订单 ID（仅当 sourceObject 为 Order 时可用）
+  saleorOrderNumber: text("saleor_order_number"), // Saleor 订单号（非 ORDER...）
+  epayTradeNo: text("epay_trade_no"), // 易支付平台交易号
   status: text("status").notNull().default("pending"), // pending, paid, failed
 
   // 添加支付响应数据字段

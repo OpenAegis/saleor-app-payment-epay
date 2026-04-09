@@ -47,8 +47,47 @@ export default createManifestHandler({
         {
           name: "Transaction Initialize",
           syncEvents: ["TRANSACTION_INITIALIZE_SESSION"],
-          query:
-            "subscription { event { __typename ... on TransactionInitializeSession { action { amount, currency, actionType }, data, transaction { id } } } }",
+          query: `
+            subscription {
+              event {
+                __typename
+                ... on TransactionInitializeSession {
+                  action {
+                    amount
+                    currency
+                    actionType
+                    paymentMethodType
+                  }
+                  data
+                  transaction {
+                    id
+                  }
+                  sourceObject {
+                    __typename
+                    ... on Order {
+                      id
+                      number
+                      redirectUrl
+                      lines {
+                        productName
+                      }
+                    }
+                    ... on Checkout {
+                      id
+                      lines {
+                        variant {
+                          name
+                          product {
+                            name
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          `,
           targetUrl: `${apiBaseURL}/api/webhooks/transaction-initialize`,
           isActive: true,
         },
