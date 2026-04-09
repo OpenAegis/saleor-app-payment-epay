@@ -24,7 +24,6 @@ export default createManifestHandler({
         "HANDLE_PAYMENTS",
         "MANAGE_ORDERS",
         "MANAGE_CHECKOUTS",
-        "MANAGE_APPS" as AppManifest["permissions"][number],
       ],
       id: "saleor.app.epay",
       version: packageJson.version,
