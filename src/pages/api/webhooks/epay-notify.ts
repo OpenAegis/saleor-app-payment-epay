@@ -411,13 +411,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             "Saleor API 调用错误",
           );
           if (hasExpiredSignature) {
-            logger.warn(
+            // Token 已过期：通知易支付"成功"以停止重试，订单留为 pending 状态等待人工处理
+            logger.error(
               {
                 saleorApiUrl,
                 appId: authData?.appId,
+                orderNo: params.out_trade_no,
+                tradeNo: params.trade_no,
+                transactionId,
               },
-              "检测到 Saleor App Token 已过期，请在 Saleor 后台重新安装或使用修复脚本更新凭证",
+              "CRITICAL: Saleor App Token 已过期，请立即在 Saleor 后台重新安装应用或使用 fix-auth-data.js 脚本更新凭证。" +
+                "订单已保留为 pending 状态，Token 修复后可手动触发 Saleor 状态同步。",
             );
+            // 返回 200 success 停止易支付重试（重试也会因为 Token 失效而继续失败）
+            // 不更新订单为 failed，保持 pending 以便修复后可以手动处理
+            return res.status(200).send("success");
           }
           await updateOrderStatus(params.out_trade_no, "failed");
           return res.status(500).send("fail");
