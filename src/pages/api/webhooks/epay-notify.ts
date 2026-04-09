@@ -423,7 +423,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           if (hasExpiredSignature) {
             logger.error(
               { saleorApiUrl, appId: authData?.appId, orderNo: params.out_trade_no, transactionId },
-              "CRITICAL: Saleor App Token 已过期，请在 Saleor 后台重新安装应用或运行 create-permanent-token.js。" +
+              "CRITICAL: Saleor App Token 已过期，请进入应用 config 页面，使用管理员账号在前端生成并保存永久 Token。" +
                 "订单保留为 pending 状态，Token 修复后可手动同步。",
             );
           }
@@ -431,7 +431,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             logger.error(
               { saleorApiUrl, appId: authData?.appId, orderNo: params.out_trade_no, transactionId },
               "CRITICAL: Saleor App Token 缺少 HANDLE_PAYMENTS 权限。" +
-                "请运行 node create-permanent-token.js 以管理员账号创建含正确权限的永久 Token，" +
+                "请在应用 config 页面使用管理员账号在前端生成并保存永久 Token，" +
                 "或在 Saleor 后台 Apps → 该 App → Permissions 确认权限已授予后重新安装。" +
                 "订单保留为 pending 状态，Token 修复后可手动同步。",
             );

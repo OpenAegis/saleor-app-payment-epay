@@ -2,17 +2,14 @@ import { createProtectedHandler } from "@saleor/app-sdk/handlers/next";
 import { type NextApiRequest, type NextApiResponse } from "next";
 import { saleorApp } from "../../saleor-app";
 import { createLogger } from "../../lib/logger";
+import { GLOBAL_CONFIG_KEY, parseGlobalConfig } from "../../lib/global-config";
 import { createPrivateSettingsManager } from "../../modules/app-configuration/metadata-manager";
 
 const logger = createLogger({ component: "GlobalConfigAPI" });
 
-// 定义全局配置类型
-interface GlobalConfig {
-  returnUrl?: string;
+interface GlobalConfigUpdateBody {
+  returnUrl?: string | null;
 }
-
-// 全局配置的metadata key
-const GLOBAL_CONFIG_KEY = "global_payment_config";
 
 export default createProtectedHandler(
   async (req: NextApiRequest, res: NextApiResponse, { authData }) => {
@@ -32,18 +29,7 @@ export default createProtectedHandler(
           try {
             // 获取全局配置
             const configStr = await settingsManager.get(saleorApiUrl, GLOBAL_CONFIG_KEY);
-            let config: GlobalConfig = {};
-
-            if (configStr) {
-              try {
-                config = JSON.parse(configStr) as GlobalConfig;
-              } catch (e) {
-                logger.error(
-                  "Failed to parse global config: " +
-                    (e instanceof Error ? e.message : "Unknown error"),
-                );
-              }
-            }
+            const config = parseGlobalConfig(configStr);
 
             return res.status(200).json(config);
           } catch (error) {
@@ -62,27 +48,14 @@ export default createProtectedHandler(
               return res.status(400).json({ error: "Request body is empty" });
             }
 
-            let returnUrl: string | null = null;
+            const body = parseRequestBody(req.body);
+            const hasReturnUrl = Object.prototype.hasOwnProperty.call(body, "returnUrl");
 
-            // 处理不同的请求体格式
-            if (typeof req.body === "string") {
-              try {
-                const parsedBody = JSON.parse(req.body) as { returnUrl?: string | null };
-                returnUrl = parsedBody.returnUrl !== undefined ? parsedBody.returnUrl : null;
-              } catch (parseError) {
-                logger.error(
-                  "Failed to parse request body as JSON: " +
-                    (parseError instanceof Error ? parseError.message : "Unknown error"),
-                );
-                return res.status(400).json({ error: "Invalid JSON in request body" });
-              }
-            } else if (typeof req.body === "object") {
-              const body = req.body as { returnUrl?: string | null };
-              returnUrl = body.returnUrl !== undefined ? body.returnUrl : null;
-            } else {
-              logger.error("Invalid request body type");
-              return res.status(400).json({ error: "Invalid request body format" });
+            if (!hasReturnUrl) {
+              return res.status(400).json({ error: "No supported config fields provided" });
             }
+
+            const returnUrl = body.returnUrl !== undefined ? body.returnUrl : null;
 
             logger.info(
               {
@@ -94,32 +67,20 @@ export default createProtectedHandler(
 
             // 获取现有配置
             const existingConfigStr = await settingsManager.get(saleorApiUrl, GLOBAL_CONFIG_KEY);
-            let config: GlobalConfig = {};
-
-            if (existingConfigStr) {
-              try {
-                config = JSON.parse(existingConfigStr) as GlobalConfig;
-              } catch (e) {
-                logger.error(
-                  "Failed to parse existing global config: " +
-                    (e instanceof Error ? e.message : "Unknown error"),
-                );
-              }
-            }
+            const config = parseGlobalConfig(existingConfigStr);
 
             // 更新returnUrl
-            if (returnUrl === null) {
-              // 移除returnUrl
-              delete config.returnUrl;
-              logger.info("Removing returnUrl from global config");
-            } else if (returnUrl) {
-              // 设置returnUrl
-              config.returnUrl = returnUrl;
-              logger.info({ returnUrl }, "Setting returnUrl in global config");
-            } else {
-              // 空字符串，移除returnUrl
-              delete config.returnUrl;
-              logger.info("Removing returnUrl due to empty string");
+            if (hasReturnUrl) {
+              if (returnUrl === null) {
+                delete config.returnUrl;
+                logger.info("Removing returnUrl from global config");
+              } else if (returnUrl) {
+                config.returnUrl = returnUrl;
+                logger.info({ returnUrl }, "Setting returnUrl in global config");
+              } else {
+                delete config.returnUrl;
+                logger.info("Removing returnUrl due to empty string");
+              }
             }
 
             // 保存配置
@@ -130,7 +91,10 @@ export default createProtectedHandler(
             });
 
             logger.info("Global config updated successfully");
-            return res.status(200).json({ success: true });
+            return res.status(200).json({
+              success: true,
+              config,
+            });
           } catch (error) {
             logger.error(
               "Error saving global config: " +
@@ -157,4 +121,16 @@ export default createProtectedHandler(
 async function createServerClient(saleorApiUrl: string, token: string) {
   const { createServerClient } = await import("@/lib/create-graphq-client");
   return createServerClient(saleorApiUrl, token);
+}
+
+function parseRequestBody(body: NextApiRequest["body"]): GlobalConfigUpdateBody {
+  if (typeof body === "string") {
+    return JSON.parse(body) as GlobalConfigUpdateBody;
+  }
+
+  if (typeof body === "object" && body !== null) {
+    return body as GlobalConfigUpdateBody;
+  }
+
+  throw new Error("Invalid request body format");
 }

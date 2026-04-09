@@ -2,6 +2,7 @@ import { useAppBridge, withAuthorization } from "@saleor/app-sdk/app-bridge";
 import { useState, useEffect } from "react";
 import { Box, Input, Button } from "@saleor/macaw-ui";
 import { type NextPage } from "next";
+import { createPermanentAppTokenWithAdminCredentials } from "@/lib/saleor-app-token";
 import { AppLayout } from "@/modules/ui/templates/AppLayout";
 
 // 定义API响应接口
@@ -90,6 +91,15 @@ const ConfigPage: NextPage = () => {
   const [globalReturnUrl, setGlobalReturnUrl] = useState<string>(""); // 表单中的returnUrl
   const [savedGlobalReturnUrl, setSavedGlobalReturnUrl] = useState<string>(""); // 已保存的returnUrl
   const [savingReturnUrl, setSavingReturnUrl] = useState(false); // 添加保存状态
+  const [saleorAdminEmail, setSaleorAdminEmail] = useState<string>("");
+  const [saleorAdminPassword, setSaleorAdminPassword] = useState<string>("");
+  const [generatingPermanentToken, setGeneratingPermanentToken] = useState(false);
+
+  const applyGlobalConfig = (config: GlobalConfigResponse) => {
+    const fetchedReturnUrl = config.returnUrl || "";
+    setGlobalReturnUrl(fetchedReturnUrl);
+    setSavedGlobalReturnUrl(fetchedReturnUrl);
+  };
 
   // 页面加载时获取现有配置
   useEffect(() => {
@@ -176,9 +186,7 @@ const ConfigPage: NextPage = () => {
         });
         if (globalConfigResponse.ok) {
           const globalConfigData = (await globalConfigResponse.json()) as GlobalConfigResponse;
-          const fetchedReturnUrl = globalConfigData.returnUrl || "";
-          setGlobalReturnUrl(fetchedReturnUrl);
-          setSavedGlobalReturnUrl(fetchedReturnUrl);
+          applyGlobalConfig(globalConfigData);
         } else {
           console.error("Failed to fetch global config");
         }
@@ -302,6 +310,61 @@ const ConfigPage: NextPage = () => {
     }
   };
 
+  const handleCreatePermanentToken = async () => {
+    if (!token) return;
+
+    setGeneratingPermanentToken(true);
+    try {
+      setAuthError(null);
+      const currentSaleorApiUrl = siteAuth?.authData.saleorApiUrl || saleorApiUrlState || saleorApiUrl;
+      const appId = siteAuth?.authData.appId;
+
+      if (!currentSaleorApiUrl || !appId) {
+        setAuthError("无法获取当前 Saleor API URL 或 App ID");
+        return;
+      }
+
+      if (!saleorAdminEmail.trim() || !saleorAdminPassword.trim()) {
+        setAuthError("请填写 Saleor 管理员邮箱和密码");
+        return;
+      }
+
+      const permanentTokenResult = await createPermanentAppTokenWithAdminCredentials({
+        saleorApiUrl: currentSaleorApiUrl,
+        appId,
+        adminEmail: saleorAdminEmail.trim(),
+        adminPassword: saleorAdminPassword,
+      });
+
+      const response = await fetch("/api/create-permanent-token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "saleor-api-url": saleorApiUrl || "",
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          permanentToken: permanentTokenResult.authToken,
+          appId,
+        }),
+      });
+
+      const responseBody = (await response.json()) as ErrorResponse & { message?: string };
+
+      if (response.ok) {
+        setSaleorAdminPassword("");
+        setSyncMessage(responseBody.message || "永久 Token 已生成并保存");
+      } else {
+        setAuthError(`生成永久 Token 失败: ${responseBody.error || "未知错误"}`);
+      }
+    } catch (error) {
+      console.error("Failed to create permanent token:", error);
+      setAuthError("生成永久 Token 失败，请重试");
+    } finally {
+      setGeneratingPermanentToken(false);
+    }
+  };
+
   return (
     <AppLayout title="">
       <Box display="flex" flexDirection="column" gap={4}>
@@ -397,13 +460,11 @@ const ConfigPage: NextPage = () => {
                             authorization: `Bearer ${token}`,
                           },
                         });
-        if (globalConfigResponse.ok) {
-          const globalConfigData =
-            (await globalConfigResponse.json()) as GlobalConfigResponse;
-          const fetchedReturnUrl = globalConfigData.returnUrl || "";
-          setGlobalReturnUrl(fetchedReturnUrl);
-          setSavedGlobalReturnUrl(fetchedReturnUrl);
-        }
+                        if (globalConfigResponse.ok) {
+                          const globalConfigData =
+                            (await globalConfigResponse.json()) as GlobalConfigResponse;
+                          applyGlobalConfig(globalConfigData);
+                        }
                       } catch (error) {
                         console.error("Failed to refresh status:", error);
                       } finally {
@@ -565,6 +626,44 @@ const ConfigPage: NextPage = () => {
               💡
               提示：您可以在URL中使用占位符，例如：https://your-store-domain.com/checkout/success/&#123;transaction_id&#125;
             </p>
+          </Box>
+        </Box>
+
+        <Box display="flex" flexDirection="column" gap={2}>
+          <h3>Saleor 管理员凭据（永久 Token）</h3>
+          <Input
+            label="管理员邮箱"
+            value={saleorAdminEmail}
+            onChange={(e) => setSaleorAdminEmail(e.target.value)}
+            placeholder="admin@example.com"
+            helperText="填写 Saleor 后台管理员邮箱。账号密码只在当前浏览器会话里使用。"
+          />
+          <Input
+            label="管理员密码"
+            type="password"
+            value={saleorAdminPassword}
+            onChange={(e) => setSaleorAdminPassword(e.target.value)}
+            placeholder="请输入管理员密码"
+            helperText="密码只在浏览器里用于直连 Saleor 生成永久 Token，不会保存到应用。"
+          />
+          <Box display="flex" gap={2} alignItems="end">
+            <Button
+              type="button"
+              variant="primary"
+              disabled={
+                generatingPermanentToken ||
+                !saleorAdminEmail.trim() ||
+                !saleorAdminPassword.trim()
+              }
+              onClick={() => {
+                void handleCreatePermanentToken();
+              }}
+            >
+              {generatingPermanentToken ? "生成中..." : "前端生成并保存永久 Token"}
+            </Button>
+          </Box>
+          <Box padding={2} backgroundColor="info1" borderRadius={4}>
+            <p>ℹ️ 管理员账号密码不会经过应用后端，也不会写入应用配置；前端只会把生成好的永久 Token 提交给应用保存。</p>
           </Box>
         </Box>
 

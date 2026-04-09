@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { saleorApp } from "../../saleor-app";
 import { createLogger } from "../../lib/logger";
+import { fetchCurrentAppId } from "../../lib/saleor-app-token";
 import { siteManager } from "../../lib/managers/site-manager";
 import { type ExtendedAuthData } from "../../lib/turso-apl";
 
@@ -28,52 +29,6 @@ function correctSaleorApiUrl(saleorApiUrl: string, _saleorDomain: string | undef
     const placeholderUrl = "https://your-saleor-instance.com/graphql/";
     logger.info("URL格式错误，使用占位符URL: " + placeholderUrl);
     return placeholderUrl;
-  }
-}
-
-/**
- * 获取App ID
- */
-async function getAppId(saleorApiUrl: string, token: string): Promise<string | undefined> {
-  try {
-    const response = await fetch(saleorApiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        query: `
-        {
-          app{
-            id
-          }
-        }
-        `,
-      }),
-    });
-
-    if (response.status !== 200) {
-      logger.error(`Could not get the app ID: Saleor API has response code ${response.status}`);
-      return undefined;
-    }
-
-    const body: unknown = await response.json();
-    if (body && typeof body === "object" && "data" in body) {
-      const data = body.data;
-      if (data && typeof data === "object" && "app" in data) {
-        const app = data.app;
-        if (app && typeof app === "object" && "id" in app) {
-          return app.id as string;
-        }
-      }
-    }
-    return undefined;
-  } catch (error) {
-    logger.error(
-      "Could not get the app ID: " + (error instanceof Error ? error.message : "未知错误"),
-    );
-    return undefined;
   }
 }
 
@@ -147,10 +102,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
 
     // 尝试获取App ID（先尝试原始URL，如果失败再尝试修正后的URL）
-    let appId = await getAppId(saleorApiUrl, authToken);
+    let appId = await fetchCurrentAppId(saleorApiUrl, authToken);
     if (!appId && correctedUrl !== saleorApiUrl) {
       logger.info("使用原始URL获取App ID失败，尝试修正后的URL");
-      appId = await getAppId(correctedUrl, authToken);
+      appId = await fetchCurrentAppId(correctedUrl, authToken);
     }
     if (!appId) {
       logger.warn(`无法获取App ID，使用默认ID。原始URL: ${saleorApiUrl}, 修正URL: ${correctedUrl}`);
@@ -207,7 +162,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    // 使用安装时 Saleor 下发的 token
     const tokenToStore = authToken;
 
     // 构建认证数据（如果有站点则关联站点ID）
