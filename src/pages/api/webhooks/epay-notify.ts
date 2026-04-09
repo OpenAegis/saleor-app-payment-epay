@@ -384,19 +384,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           (e) => e.code && alreadyProcessedCodes.includes(e.code),
         );
 
+        const graphQLErrors: Array<{
+          message?: string;
+          extensions?: { exception?: { code?: string } };
+        }> = result?.error?.graphQLErrors ?? [];
+
         const hasExpiredSignature =
           saleorErrors.some((errorItem) => errorItem?.code === "ExpiredSignatureError") ||
-          result?.error?.graphQLErrors?.some((graphError: {
-            message?: string;
-            extensions?: { exception?: { code?: string } };
-          }) => {
-            const graphErrorCode = graphError.extensions?.exception?.code;
+          graphQLErrors.some((e) => {
+            const code = e.extensions?.exception?.code;
+            return e.message?.includes("Signature has expired") || code === "ExpiredSignatureError";
+          });
+
+        const hasPermissionDenied =
+          graphQLErrors.some((e) => {
+            const code = e.extensions?.exception?.code;
             return (
-              graphError.message?.includes("Signature has expired") ||
-              graphErrorCode === "ExpiredSignatureError"
+              code === "PermissionDenied" ||
+              (typeof e.message === "string" && e.message.includes("HANDLE_PAYMENTS"))
             );
-          }) ||
-          false;
+          });
+
+        // 无法自动重试修复的致命认证错误 → 返回 200 停止易支付重试，保留 pending 等待人工处理
+        const hasFatalAuthError = hasExpiredSignature || hasPermissionDenied;
 
         if (!result || result.error || (saleorErrors.length > 0 && !isAlreadyProcessed)) {
           logger.error(
@@ -411,20 +421,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             "Saleor API 调用错误",
           );
           if (hasExpiredSignature) {
-            // Token 已过期：通知易支付"成功"以停止重试，订单留为 pending 状态等待人工处理
             logger.error(
-              {
-                saleorApiUrl,
-                appId: authData?.appId,
-                orderNo: params.out_trade_no,
-                tradeNo: params.trade_no,
-                transactionId,
-              },
-              "CRITICAL: Saleor App Token 已过期，请立即在 Saleor 后台重新安装应用或使用 fix-auth-data.js 脚本更新凭证。" +
-                "订单已保留为 pending 状态，Token 修复后可手动触发 Saleor 状态同步。",
+              { saleorApiUrl, appId: authData?.appId, orderNo: params.out_trade_no, transactionId },
+              "CRITICAL: Saleor App Token 已过期，请在 Saleor 后台重新安装应用或运行 create-permanent-token.js。" +
+                "订单保留为 pending 状态，Token 修复后可手动同步。",
             );
-            // 返回 200 success 停止易支付重试（重试也会因为 Token 失效而继续失败）
-            // 不更新订单为 failed，保持 pending 以便修复后可以手动处理
+          }
+          if (hasPermissionDenied) {
+            logger.error(
+              { saleorApiUrl, appId: authData?.appId, orderNo: params.out_trade_no, transactionId },
+              "CRITICAL: Saleor App Token 缺少 HANDLE_PAYMENTS 权限。" +
+                "请运行 node create-permanent-token.js 以管理员账号创建含正确权限的永久 Token，" +
+                "或在 Saleor 后台 Apps → 该 App → Permissions 确认权限已授予后重新安装。" +
+                "订单保留为 pending 状态，Token 修复后可手动同步。",
+            );
+          }
+          if (hasFatalAuthError) {
             return res.status(200).send("success");
           }
           await updateOrderStatus(params.out_trade_no, "failed");
