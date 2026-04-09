@@ -423,16 +423,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           if (hasExpiredSignature) {
             logger.error(
               { saleorApiUrl, appId: authData?.appId, orderNo: params.out_trade_no, transactionId },
-              "CRITICAL: Saleor App Token 已过期，请进入应用 config 页面，使用管理员账号在前端生成并保存永久 Token。" +
+              "CRITICAL: 当前保存的 Saleor App Token 已失效。" +
+                "这通常是旧版本把前端短期 JWT 覆盖进了 APL。" +
+                "请部署修复版本后重新安装 App，让 register 接口重新写入安装 Token。" +
                 "订单保留为 pending 状态，Token 修复后可手动同步。",
             );
           }
           if (hasPermissionDenied) {
             logger.error(
               { saleorApiUrl, appId: authData?.appId, orderNo: params.out_trade_no, transactionId },
-              "CRITICAL: Saleor App Token 缺少 HANDLE_PAYMENTS 权限。" +
-                "请在应用 config 页面使用管理员账号在前端生成并保存永久 Token，" +
-                "或在 Saleor 后台 Apps → 该 App → Permissions 确认权限已授予后重新安装。" +
+              "CRITICAL: 当前保存的 Saleor App Token 缺少 HANDLE_PAYMENTS 权限。" +
+                "请确认 Saleor 后台 Apps → 该 App → Permissions 已授予 HANDLE_PAYMENTS，" +
+                "并在部署修复版本后重新安装 App，刷新安装时写入的 Token。" +
                 "订单保留为 pending 状态，Token 修复后可手动同步。",
             );
           }
