@@ -306,11 +306,25 @@ const ConfigPage: NextPage = () => {
     }
   };
 
-  return (
-    <AppLayout title="">
-      <Box display="flex" flexDirection="column" gap={4}>
-        <h2>应用配置</h2>
+  const site = siteAuth?.site;
+  const siteNameDirty = Boolean(site && siteName.trim() && siteName !== site.name);
+  const returnUrlDirty = globalReturnUrl.trim() !== savedGlobalReturnUrl;
+  const unsavedItems = [siteNameDirty ? "站点名称" : null, returnUrlDirty ? "返回地址" : null].filter(
+    Boolean,
+  );
+  const enabledChannelsCount = channels.filter((channel) => channel.enabled).length;
+  const statusBackgroundColor = siteAuth
+    ? siteAuth.isAuthorized
+      ? "success1"
+      : getStatusColor(siteAuth.status)
+    : "default2";
 
+  return (
+    <AppLayout
+      title="应用配置"
+      description="先确认授权与连接状态，再完成基础支付配置。"
+    >
+      <Box display="flex" flexDirection="column" gap={4}>
         {authError && (
           <Box padding={2} backgroundColor="critical1" borderRadius={4}>
             <p>认证错误: {authError}</p>
@@ -328,7 +342,12 @@ const ConfigPage: NextPage = () => {
         {siteAuth && (
           <Box display="flex" flexDirection="column" gap={2}>
             <Box display="flex" justifyContent="space-between" alignItems="center">
-              <h3>站点授权状态</h3>
+              <Box display="flex" flexDirection="column" gap={1}>
+                <h3 style={{ margin: 0 }}>当前状态</h3>
+                <p style={{ margin: 0, opacity: 0.72, fontSize: "14px" }}>
+                  {siteAuth.isAuthorized ? "授权正常，可以继续配置。" : "请先处理授权问题，再继续配置。"}
+                </p>
+              </Box>
               <Button
                 type="button"
                 variant="secondary"
@@ -420,78 +439,76 @@ const ConfigPage: NextPage = () => {
             </Box>
             <Box
               padding={3}
-              backgroundColor={siteAuth.isAuthorized ? "success1" : getStatusColor(siteAuth.status)}
+              backgroundColor={statusBackgroundColor}
               borderRadius={4}
             >
               <h4 style={{ margin: "0 0 8px 0" }}>
-                {siteAuth.isAuthorized ? "🔐 已授权" : "🔒 未授权"}
+                {siteAuth.isAuthorized ? "已就绪" : "需要处理"}
               </h4>
               <p style={{ margin: "0 0 8px 0" }}>{siteAuth.message}</p>
-
-              {siteAuth.site && (
-                <Box display="flex" flexDirection="column" gap={1} marginTop={2}>
-                  <div>
-                    <strong>站点域名:</strong> {siteAuth.site.domain}
+              <Box
+                marginTop={2}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: "12px",
+                }}
+              >
+                <Box padding={2} backgroundColor="default2" borderRadius={4}>
+                  <strong>站点</strong>
+                  <div style={{ marginTop: "6px" }}>{site?.name || "-"}</div>
+                  <div style={{ marginTop: "4px", fontSize: "12px", opacity: 0.72 }}>
+                    {site?.domain || siteAuth.authData.domain || "-"}
                   </div>
-                  <div>
-                    <strong>站点名称:</strong> {siteAuth.site.name}
-                  </div>
-                  <div>
-                    <strong>状态:</strong> {siteAuth.site.status}
-                  </div>
-                  <div>
-                    <strong>申请时间:</strong> {formatDate(siteAuth.site.requestedAt)}
-                  </div>
-                  {siteAuth.site.approvedAt && (
-                    <div>
-                      <strong>批准时间:</strong> {formatDate(siteAuth.site.approvedAt)}
-                    </div>
-                  )}
-                  {siteAuth.site.approvedBy && (
-                    <div>
-                      <strong>批准人:</strong> {siteAuth.site.approvedBy}
-                    </div>
-                  )}
-                  {siteAuth.site.notes && (
-                    <div>
-                      <strong>备注:</strong> {siteAuth.site.notes}
+                </Box>
+                <Box padding={2} backgroundColor="default2" borderRadius={4}>
+                  <strong>授权状态</strong>
+                  <div style={{ marginTop: "6px" }}>{siteAuth.status}</div>
+                  {site?.approvedAt && (
+                    <div style={{ marginTop: "4px", fontSize: "12px", opacity: 0.72 }}>
+                      批准于 {formatDate(site.approvedAt)}
                     </div>
                   )}
                 </Box>
+                <Box padding={2} backgroundColor="default2" borderRadius={4}>
+                  <strong>Saleor API URL</strong>
+                  <div
+                    style={{
+                      marginTop: "6px",
+                      fontSize: "12px",
+                      lineHeight: 1.5,
+                      wordBreak: "break-all",
+                    }}
+                  >
+                    {saleorApiUrlState || siteAuth.authData.saleorApiUrl || "-"}
+                  </div>
+                </Box>
+                <Box padding={2} backgroundColor="default2" borderRadius={4}>
+                  <strong>已启用通道</strong>
+                  <div style={{ marginTop: "6px" }}>
+                    {enabledChannelsCount} / {channels.length}
+                  </div>
+                  <div style={{ marginTop: "4px", fontSize: "12px", opacity: 0.72 }}>
+                    {isPlaceholderUrl ? "URL 仍在等待自动校正" : "连接信息已完成自动检测"}
+                  </div>
+                </Box>
+              </Box>
+              {(site?.notes || !siteAuth.isAuthorized) && (
+                <p style={{ margin: "12px 0 0", fontSize: "12px", opacity: 0.8 }}>
+                  {site?.notes ? `备注：${site.notes}` : "授权未就绪时，先处理状态问题，再保存业务配置。"}
+                </p>
               )}
             </Box>
           </Box>
         )}
 
-        {/* Saleor API URL 配置 */}
         <Box display="flex" flexDirection="column" gap={2}>
-          <h3>Saleor API URL配置</h3>
-          <Input
-            label="Saleor API URL"
-            value={saleorApiUrlState}
-            readOnly
-            placeholder="https://your-saleor-instance.com/graphql/"
-            helperText={
-              isPlaceholderUrl
-                ? "系统将自动检测并更新为正确的Saleor实例URL"
-                : "当前配置的Saleor实例URL（自动检测）"
-            }
-          />
-          {isPlaceholderUrl ? (
-            <Box padding={2} backgroundColor="info1" borderRadius={4}>
-              <p>ℹ️ 系统会自动从请求头检测您的Saleor实例URL并更新配置</p>
-            </Box>
-          ) : (
-            <Box padding={2} backgroundColor="success1" borderRadius={4}>
-              <p>✅ Saleor API URL已自动配置完成</p>
-            </Box>
-          )}
-        </Box>
+          <h3 style={{ margin: 0 }}>基础配置</h3>
+          <p style={{ margin: 0, opacity: 0.72, fontSize: "14px" }}>
+            只保留完成支付接入所需的基础项，减少阅读负担。
+          </p>
 
-        {/* 站点名称配置 */}
-        {siteAuth?.site && (
-          <Box display="flex" flexDirection="column" gap={2}>
-            <h3>站点名称配置</h3>
+          {site && (
             <Box display="flex" gap={2} alignItems="end">
               <Box style={{ flex: 1 }}>
                 <Input
@@ -505,25 +522,15 @@ const ConfigPage: NextPage = () => {
               <Button
                 type="button"
                 variant="primary"
-                disabled={savingSiteName || !siteName.trim() || siteName === siteAuth.site.name}
+                disabled={savingSiteName || !siteName.trim() || siteName === site.name}
                 onClick={() => {
                   void handleSiteNameUpdate();
                 }}
               >
-                {savingSiteName ? "保存中..." : "保存"}
-              </Button>
-            </Box>
-            {siteName !== siteAuth.site.name && siteName.trim() && (
-              <Box padding={2} backgroundColor="warning1" borderRadius={4}>
-                <p>⚠️ 站点名称已修改，请点击&#34;保存&#34;按钮保存更改</p>
+                  {savingSiteName ? "保存中..." : "保存"}
+                </Button>
               </Box>
-            )}
-          </Box>
-        )}
-
-        {/* 全局返回地址配置 */}
-        <Box display="flex" flexDirection="column" gap={2}>
-          <h3>全局返回地址配置</h3>
+          )}
           <Box display="flex" gap={2} alignItems="end">
             <Box style={{ flex: 1 }}>
               <Input
@@ -547,74 +554,48 @@ const ConfigPage: NextPage = () => {
               {savingReturnUrl ? "保存中..." : "保存"}
             </Button>
           </Box>
-          {globalReturnUrl.trim() !== savedGlobalReturnUrl && (
+          {unsavedItems.length > 0 && (
             <Box padding={2} backgroundColor="warning1" borderRadius={4}>
-              <p>⚠️ 全局返回地址已修改，请点击“保存”按钮保存更改</p>
-            </Box>
-          )}
-          {savedGlobalReturnUrl && (
-            <Box padding={2} backgroundColor="success1" borderRadius={4}>
-              <p>✅ 全局返回地址已设置：{savedGlobalReturnUrl}</p>
-            </Box>
-          )}
-          {!savedGlobalReturnUrl && (
-            <Box padding={2} backgroundColor="info1" borderRadius={4}>
-              <p>ℹ️ 未设置全局返回地址，如果前端未传入return_url则不会添加return_url参数</p>
+              <p>有未保存的修改：{unsavedItems.join("、")}</p>
             </Box>
           )}
           <Box padding={2} backgroundColor="info1" borderRadius={4}>
             <p>
-              💡
-              提示：您可以在URL中使用占位符，例如：https://your-store-domain.com/checkout/success/&#123;transaction_id&#125;
+              当前版本仅使用安装时写入的 App Token。若当前站点从旧版本升级而来，请部署本版本后重新安装一次 App，以刷新安装 Token。
             </p>
-          </Box>
-        </Box>
-
-        <Box display="flex" flexDirection="column" gap={2}>
-          <h3>Saleor 认证说明</h3>
-          <Box padding={2} backgroundColor="info1" borderRadius={4}>
-            <p>当前版本只使用应用安装时写入的 App Token，不再提供手动生成或粘贴 Token 的入口。</p>
-            <p>如果当前站点是从旧版本升级上来的，请先部署本版本，再重新安装一次 App，让 register 接口重新写入正确的安装 Token。</p>
-          </Box>
-          <Box padding={2} backgroundColor="warning1" borderRadius={4}>
-            <p>如果 webhook 之前因为 token 过期或缺少 HANDLE_PAYMENTS 失败，修复版本部署并重新安装后，新的回调会恢复正常；旧订单仍会保留 pending，需要你按业务流程重新同步。</p>
           </Box>
         </Box>
 
         {/* 支付通道列表预览 */}
         <Box display="flex" flexDirection="column" gap={2}>
-          <h3>支付通道列表</h3>
+          <h3 style={{ margin: 0 }}>支付通道</h3>
+          <p style={{ margin: 0, opacity: 0.72, fontSize: "14px" }}>
+            用于快速核对当前前台可见的支付方式。
+          </p>
           {channels.length > 0 ? (
-            <Box display="flex" flexDirection="column" gap={2}>
+            <Box padding={2} backgroundColor="default2" borderRadius={4}>
               {channels.map((channel) => (
                 <Box
                   key={channel.id}
-                  padding={3}
-                  backgroundColor="default2"
-                  borderRadius={4}
                   display="flex"
                   justifyContent="space-between"
                   alignItems="center"
+                  style={{
+                    padding: "12px 0",
+                    borderTop:
+                      channels[0]?.id === channel.id ? "none" : "1px solid rgba(0, 0, 0, 0.08)",
+                  }}
                 >
                   <Box>
                     <div>
                       <strong>{channel.name}</strong>
                     </div>
-                    {channel.description && (
-                      <div style={{ marginTop: "4px", fontSize: "14px", color: "#666" }}>
-                        {channel.description}
-                      </div>
-                    )}
-                    <div style={{ marginTop: "4px", fontSize: "12px", color: "#999" }}>
-                      类型: {channel.type}
+                    <div style={{ marginTop: "4px", fontSize: "12px", opacity: 0.72 }}>
+                      类型：{channel.type}
+                      {channel.description ? ` · ${channel.description}` : ""}
                     </div>
                   </Box>
-                  <Box
-                    padding={1}
-                    backgroundColor={channel.enabled ? "success1" : "critical1"}
-                    borderRadius={2}
-                    fontSize={1}
-                  >
+                  <Box padding={1} backgroundColor={channel.enabled ? "success1" : "default1"} borderRadius={2} fontSize={1}>
                     {channel.enabled ? "启用" : "禁用"}
                   </Box>
                 </Box>
@@ -622,7 +603,7 @@ const ConfigPage: NextPage = () => {
             </Box>
           ) : (
             <Box padding={3} backgroundColor="default2" borderRadius={4}>
-              <p>暂无可用的支付通道</p>
+              <p>还没有可用通道。</p>
             </Box>
           )}
         </Box>
