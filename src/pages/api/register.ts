@@ -4,6 +4,108 @@ import { createLogger } from "../../lib/logger";
 import { siteManager } from "../../lib/managers/site-manager";
 import { type ExtendedAuthData } from "../../lib/turso-apl";
 
+/**
+ * 使用 Saleor 管理员账号为本 App 创建永久 Token。
+ * 要求 env: SALEOR_ADMIN_EMAIL, SALEOR_ADMIN_PASSWORD
+ */
+async function createPermanentTokenWithAdminCredentials(
+  saleorApiUrl: string,
+  appId: string,
+): Promise<string | null> {
+  const adminEmail = process.env.SALEOR_ADMIN_EMAIL;
+  const adminPassword = process.env.SALEOR_ADMIN_PASSWORD;
+
+  if (!adminEmail || !adminPassword) {
+    logger.warn(
+      "未配置 SALEOR_ADMIN_EMAIL / SALEOR_ADMIN_PASSWORD，跳过永久 Token 创建。" +
+        "安装 token 为 JWT，过期后将无法处理回调。建议配置管理员凭据。",
+    );
+    return null;
+  }
+
+  try {
+    // Step 1: 用管理员账号换取临时 staff token
+    const loginResp = await fetch(saleorApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: `
+          mutation Login($email: String!, $password: String!) {
+            tokenCreate(email: $email, password: $password) {
+              token
+              errors { field message code }
+            }
+          }
+        `,
+        variables: { email: adminEmail, password: adminPassword },
+      }),
+    });
+
+    if (!loginResp.ok) {
+      logger.error({ status: loginResp.status }, "管理员登录失败: HTTP 错误");
+      return null;
+    }
+
+    const loginBody = (await loginResp.json()) as {
+      data?: { tokenCreate?: { token?: string; errors?: { message?: string }[] } };
+    };
+    const staffToken = loginBody.data?.tokenCreate?.token;
+    const loginErrors = loginBody.data?.tokenCreate?.errors;
+
+    if (!staffToken) {
+      logger.error(
+        { errors: loginErrors },
+        "管理员登录失败: 未返回 token，请检查 SALEOR_ADMIN_EMAIL / SALEOR_ADMIN_PASSWORD",
+      );
+      return null;
+    }
+
+    // Step 2: 用 staff token 调用 appTokenCreate
+    const createResp = await fetch(saleorApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${staffToken}`,
+      },
+      body: JSON.stringify({
+        query: `
+          mutation AppTokenCreate($appId: ID!, $name: String!) {
+            appTokenCreate(input: { app: $appId, name: $name }) {
+              authToken
+              errors { field message code }
+            }
+          }
+        `,
+        variables: { appId, name: `epay-permanent-${Date.now()}` },
+      }),
+    });
+
+    if (!createResp.ok) {
+      logger.error({ status: createResp.status }, "appTokenCreate HTTP 错误");
+      return null;
+    }
+
+    const createBody = (await createResp.json()) as {
+      data?: { appTokenCreate?: { authToken?: string; errors?: { message?: string }[] } };
+    };
+    const permanentToken = createBody.data?.appTokenCreate?.authToken;
+    const createErrors = createBody.data?.appTokenCreate?.errors;
+
+    if (!permanentToken) {
+      logger.error({ errors: createErrors }, "appTokenCreate 失败: 未返回 authToken");
+      return null;
+    }
+
+    logger.info("✅ 成功创建永久 App Token（通过管理员账号）");
+    return permanentToken;
+  } catch (error) {
+    logger.error(
+      "创建永久 Token 异常: " + (error instanceof Error ? error.message : "未知错误"),
+    );
+    return null;
+  }
+}
+
 const logger = createLogger({ component: "RegisterAPI" });
 
 /**
@@ -207,8 +309,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    // 使用安装时 Saleor 下发的 token
-    const tokenToStore = authToken;
+    // 尝试用管理员账号创建永久 Token（需配置 SALEOR_ADMIN_EMAIL / SALEOR_ADMIN_PASSWORD）
+    let tokenToStore = authToken;
+    if (appId && appId !== "app-placeholder-id") {
+      const permanentToken = await createPermanentTokenWithAdminCredentials(saleorApiUrl, appId);
+      if (permanentToken) {
+        tokenToStore = permanentToken;
+        logger.info("将使用永久 Token 替换安装 JWT");
+      } else {
+        logger.warn(
+          "未能创建永久 Token，将存储安装 JWT（有效期较短，过期后回调处理将失败）",
+        );
+      }
+    }
 
     // 构建认证数据（如果有站点则关联站点ID）
     const authData: ExtendedAuthData = {
