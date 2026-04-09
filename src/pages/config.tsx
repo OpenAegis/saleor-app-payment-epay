@@ -1,6 +1,6 @@
 import { useAppBridge, withAuthorization } from "@saleor/app-sdk/app-bridge";
 import { useState, useEffect } from "react";
-import { Box, Input, Button } from "@saleor/macaw-ui";
+import { Box, Input, Button, Text } from "@saleor/macaw-ui";
 import { type NextPage } from "next";
 import { AppLayout } from "@/modules/ui/templates/AppLayout";
 
@@ -327,14 +327,22 @@ const ConfigPage: NextPage = () => {
       <Box display="flex" flexDirection="column" gap={4}>
         {authError && (
           <Box padding={2} backgroundColor="critical1" borderRadius={4}>
-            <p>认证错误: {authError}</p>
-            <p>请检查应用是否正确安装，或联系管理员。</p>
+            <Text size={3} fontWeight="bold">
+              认证错误
+            </Text>
+            <Text size={3}>{authError}</Text>
+            <Text size={2} color="default1">
+              请检查应用是否正确安装，或联系管理员。
+            </Text>
           </Box>
         )}
 
         {syncMessage && (
           <Box padding={2} backgroundColor="success1" borderRadius={4}>
-            <p>✅ {syncMessage}</p>
+            <Text size={3} fontWeight="bold">
+              已更新
+            </Text>
+            <Text size={3}>{syncMessage}</Text>
           </Box>
         )}
 
@@ -343,10 +351,12 @@ const ConfigPage: NextPage = () => {
           <Box display="flex" flexDirection="column" gap={2}>
             <Box display="flex" justifyContent="space-between" alignItems="center">
               <Box display="flex" flexDirection="column" gap={1}>
-                <h3 style={{ margin: 0 }}>当前状态</h3>
-                <p style={{ margin: 0, opacity: 0.72, fontSize: "14px" }}>
+                <Text as="h2" size={6} fontWeight="bold">
+                  当前状态
+                </Text>
+                <Text size={3} color="default1" style={{ marginTop: "-0.25rem", maxWidth: "60ch" }}>
                   {siteAuth.isAuthorized ? "授权正常，可以继续配置。" : "请先处理授权问题，再继续配置。"}
-                </p>
+                </Text>
               </Box>
               <Button
                 type="button"
@@ -442,10 +452,12 @@ const ConfigPage: NextPage = () => {
               backgroundColor={statusBackgroundColor}
               borderRadius={4}
             >
-              <h4 style={{ margin: "0 0 8px 0" }}>
+              <Text as="h3" size={5} fontWeight="bold" style={{ marginBottom: "0.5rem" }}>
                 {siteAuth.isAuthorized ? "已就绪" : "需要处理"}
-              </h4>
-              <p style={{ margin: "0 0 8px 0" }}>{siteAuth.message}</p>
+              </Text>
+              <Text size={3} style={{ maxWidth: "62ch", lineHeight: 1.55 }}>
+                {siteAuth.message}
+              </Text>
               <Box
                 marginTop={2}
                 style={{
@@ -455,58 +467,76 @@ const ConfigPage: NextPage = () => {
                 }}
               >
                 <Box padding={2} backgroundColor="default2" borderRadius={4}>
-                  <strong>站点</strong>
-                  <div style={{ marginTop: "6px" }}>{site?.name || "-"}</div>
-                  <div style={{ marginTop: "4px", fontSize: "12px", opacity: 0.72 }}>
+                  <Text size={2} color="default2">
+                    站点
+                  </Text>
+                  <Text size={4} fontWeight="bold" style={{ marginTop: "0.375rem" }}>
+                    {site?.name || "-"}
+                  </Text>
+                  <Text size={2} color="default2" style={{ marginTop: "0.25rem" }}>
                     {site?.domain || siteAuth.authData.domain || "-"}
-                  </div>
+                  </Text>
                 </Box>
                 <Box padding={2} backgroundColor="default2" borderRadius={4}>
-                  <strong>授权状态</strong>
-                  <div style={{ marginTop: "6px" }}>{siteAuth.status}</div>
+                  <Text size={2} color="default2">
+                    授权状态
+                  </Text>
+                  <Text size={4} fontWeight="bold" style={{ marginTop: "0.375rem" }}>
+                    {siteAuth.status}
+                  </Text>
                   {site?.approvedAt && (
-                    <div style={{ marginTop: "4px", fontSize: "12px", opacity: 0.72 }}>
+                    <Text size={2} color="default2" style={{ marginTop: "0.25rem" }}>
                       批准于 {formatDate(site.approvedAt)}
-                    </div>
+                    </Text>
                   )}
                 </Box>
                 <Box padding={2} backgroundColor="default2" borderRadius={4}>
-                  <strong>Saleor API URL</strong>
-                  <div
+                  <Text size={2} color="default2">
+                    Saleor API URL
+                  </Text>
+                  <Text
+                    size={2}
                     style={{
-                      marginTop: "6px",
-                      fontSize: "12px",
+                      marginTop: "0.375rem",
                       lineHeight: 1.5,
                       wordBreak: "break-all",
                     }}
                   >
                     {saleorApiUrlState || siteAuth.authData.saleorApiUrl || "-"}
-                  </div>
+                  </Text>
                 </Box>
                 <Box padding={2} backgroundColor="default2" borderRadius={4}>
-                  <strong>已启用通道</strong>
-                  <div style={{ marginTop: "6px" }}>
+                  <Text size={2} color="default2">
+                    已启用通道
+                  </Text>
+                  <Text
+                    size={4}
+                    fontWeight="bold"
+                    style={{ marginTop: "0.375rem", fontVariantNumeric: "tabular-nums" }}
+                  >
                     {enabledChannelsCount} / {channels.length}
-                  </div>
-                  <div style={{ marginTop: "4px", fontSize: "12px", opacity: 0.72 }}>
+                  </Text>
+                  <Text size={2} color="default2" style={{ marginTop: "0.25rem" }}>
                     {isPlaceholderUrl ? "URL 仍在等待自动校正" : "连接信息已完成自动检测"}
-                  </div>
+                  </Text>
                 </Box>
               </Box>
               {(site?.notes || !siteAuth.isAuthorized) && (
-                <p style={{ margin: "12px 0 0", fontSize: "12px", opacity: 0.8 }}>
+                <Text size={2} color="default1" style={{ marginTop: "0.75rem", maxWidth: "65ch" }}>
                   {site?.notes ? `备注：${site.notes}` : "授权未就绪时，先处理状态问题，再保存业务配置。"}
-                </p>
+                </Text>
               )}
             </Box>
           </Box>
         )}
 
         <Box display="flex" flexDirection="column" gap={2}>
-          <h3 style={{ margin: 0 }}>基础配置</h3>
-          <p style={{ margin: 0, opacity: 0.72, fontSize: "14px" }}>
+          <Text as="h2" size={6} fontWeight="bold">
+            基础配置
+          </Text>
+          <Text size={3} color="default1" style={{ marginTop: "-0.25rem", maxWidth: "60ch" }}>
             只保留完成支付接入所需的基础项，减少阅读负担。
-          </p>
+          </Text>
 
           {site && (
             <Box display="flex" gap={2} alignItems="end">
@@ -527,9 +557,9 @@ const ConfigPage: NextPage = () => {
                   void handleSiteNameUpdate();
                 }}
               >
-                  {savingSiteName ? "保存中..." : "保存"}
-                </Button>
-              </Box>
+                {savingSiteName ? "保存中..." : "保存"}
+              </Button>
+            </Box>
           )}
           <Box display="flex" gap={2} alignItems="end">
             <Box style={{ flex: 1 }}>
@@ -556,22 +586,24 @@ const ConfigPage: NextPage = () => {
           </Box>
           {unsavedItems.length > 0 && (
             <Box padding={2} backgroundColor="warning1" borderRadius={4}>
-              <p>有未保存的修改：{unsavedItems.join("、")}</p>
+              <Text size={3}>有未保存的修改：{unsavedItems.join("、")}</Text>
             </Box>
           )}
           <Box padding={2} backgroundColor="info1" borderRadius={4}>
-            <p>
+            <Text size={3} style={{ maxWidth: "65ch", lineHeight: 1.55 }}>
               当前版本仅使用安装时写入的 App Token。若当前站点从旧版本升级而来，请部署本版本后重新安装一次 App，以刷新安装 Token。
-            </p>
+            </Text>
           </Box>
         </Box>
 
         {/* 支付通道列表预览 */}
         <Box display="flex" flexDirection="column" gap={2}>
-          <h3 style={{ margin: 0 }}>支付通道</h3>
-          <p style={{ margin: 0, opacity: 0.72, fontSize: "14px" }}>
+          <Text as="h2" size={6} fontWeight="bold">
+            支付通道
+          </Text>
+          <Text size={3} color="default1" style={{ marginTop: "-0.25rem", maxWidth: "60ch" }}>
             用于快速核对当前前台可见的支付方式。
-          </p>
+          </Text>
           {channels.length > 0 ? (
             <Box padding={2} backgroundColor="default2" borderRadius={4}>
               {channels.map((channel) => (
@@ -587,23 +619,25 @@ const ConfigPage: NextPage = () => {
                   }}
                 >
                   <Box>
-                    <div>
-                      <strong>{channel.name}</strong>
-                    </div>
-                    <div style={{ marginTop: "4px", fontSize: "12px", opacity: 0.72 }}>
+                    <Text size={4} fontWeight="bold">
+                      {channel.name}
+                    </Text>
+                    <Text size={2} color="default2" style={{ marginTop: "0.25rem", maxWidth: "55ch" }}>
                       类型：{channel.type}
                       {channel.description ? ` · ${channel.description}` : ""}
-                    </div>
+                    </Text>
                   </Box>
-                  <Box padding={1} backgroundColor={channel.enabled ? "success1" : "default1"} borderRadius={2} fontSize={1}>
-                    {channel.enabled ? "启用" : "禁用"}
+                  <Box padding={1} backgroundColor={channel.enabled ? "success1" : "default2"} borderRadius={2}>
+                    <Text size={1} fontWeight="bold">
+                      {channel.enabled ? "启用" : "禁用"}
+                    </Text>
                   </Box>
                 </Box>
               ))}
             </Box>
           ) : (
             <Box padding={3} backgroundColor="default2" borderRadius={4}>
-              <p>还没有可用通道。</p>
+              <Text size={3}>还没有可用通道。</Text>
             </Box>
           )}
         </Box>
