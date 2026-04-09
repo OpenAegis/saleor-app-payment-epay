@@ -42,11 +42,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
       }
       
+      // 将支付类型加入config，供前端读取并在发起支付时回传
+      config.push({
+        field: "type",
+        value: channel.type,
+      });
+
       return {
         id: channel.id, // 使用通道ID作为支付方法ID
         name: channel.name, // 使用通道名称作为支付方法名称
         currencies: ["CNY"], // 默认使用CNY货币
-        config: config, // 包含图标URL的配置信息
+        config: config, // 包含图标URL和支付类型的配置信息
       };
     });
 
