@@ -43,7 +43,7 @@ interface TransactionEvent {
 async function getEpayConfig(
   channelIdFromRequest?: string,
   saleorApiUrl?: string, // 添加saleorApiUrl参数
-): Promise<{ config: EpayConfig | null; returnUrl: string | null; channelType: string | null }> {
+): Promise<{ config: EpayConfig | null; returnUrl: string | null; channelType: string | null; configError: string | null }> {
   try {
     logger.info(
       {
@@ -129,6 +129,7 @@ async function getEpayConfig(
               },
               returnUrl: globalReturnUrl, // 使用全局returnUrl配置
               channelType: channel.type, // 从通道配置读取支付类型
+              configError: null,
             };
           } else {
             logger.warn(
@@ -139,6 +140,12 @@ async function getEpayConfig(
               },
               "通道关联的网关未找到或未启用",
             );
+            return {
+              config: null,
+              returnUrl: null,
+              channelType: null,
+              configError: `通道 "${channel.name}" 关联的网关未找到或未启用`,
+            };
           }
         } else {
           logger.warn(
@@ -149,11 +156,17 @@ async function getEpayConfig(
             },
             "指定通道未找到或未启用",
           );
+          return {
+            config: null,
+            returnUrl: null,
+            channelType: null,
+            configError: `指定通道未找到或未启用 (id: ${channelId})`,
+          };
         }
       }
     }
 
-    // 回退方案：获取第一个启用的网关作为默认配置
+    // 未指定通道 ID 时，回退到第一个启用的网关
     const enabledGateways = await gatewayManager.getEnabled();
 
     logger.info(
@@ -195,6 +208,7 @@ async function getEpayConfig(
         },
         returnUrl: globalReturnUrl,
         channelType: null, // 回退方案无法确定支付类型
+        configError: null,
       };
     } else {
       logger.warn("没有找到任何启用的网关配置");
@@ -210,7 +224,7 @@ async function getEpayConfig(
   }
 
   logger.warn("支付配置未找到，请在后台配置支付参数");
-  return { config: null, returnUrl: null, channelType: null };
+  return { config: null, returnUrl: null, channelType: null, configError: null };
 }
 
 // 添加获取全局returnUrl配置的函数
@@ -444,13 +458,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 获取支付配置 - 使用请求中的 gatewayId
     const requestGatewayId = data?.gatewayId || data?.paymentMethodId;
-    const { config: epayConfig, returnUrl, channelType } = await getEpayConfig(requestGatewayId, saleorApiUrl);
+    const { config: epayConfig, returnUrl, channelType, configError } = await getEpayConfig(requestGatewayId, saleorApiUrl);
 
     if (!epayConfig) {
       return res.status(200).json({
         result: "CHARGE_FAILURE",
         amount: amountValue,
-        message: "支付配置未找到，请在后台配置支付参数",
+        message: configError || "支付配置未找到，请在后台配置支付参数",
       });
     }
 
@@ -487,10 +501,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       "签名生成测试",
     );
 
-    // 优先使用通道配置中的支付类型，其次是前端传入的，最后才是默认值
-    // 这样自定义通道的支付类型可以从数据库正确传递，无需前端感知
-    const supportedPayTypes = ["alipay", "wxpay", "qqpay", "bank", "jdpay"];
-    const payType = channelType || data?.payType || action?.paymentMethodType || "alipay";
+    // 优先使用通道配置中的支付类型，其次是前端传入的，再是 Saleor 传入的
+    // 不设固定默认值：类型无法确定时直接报错，避免误用
+    const payType = channelType || data?.payType || action?.paymentMethodType;
 
     logger.info(
       {
@@ -502,11 +515,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       "确定支付类型",
     );
 
-    // 如果传入的支付方式不在标准列表中，但仍需要支持（插件扩展的支付方式）
-    // 保持原样，因为项目要求支持自定义支付方式
-    // 这里仅记录日志，不阻止使用自定义支付方式
-    if (!supportedPayTypes.includes(payType)) {
-      logger.info(`使用自定义支付方式: ${payType ? payType : "unknown"}`);
+    if (!payType) {
+      return res.status(200).json({
+        result: "CHARGE_FAILURE",
+        amount: amountValue,
+        message: "未能确定支付类型，请检查通道配置中的支付类型字段",
+      });
     }
 
     // 创建订单号（包含交易ID的哈希值以便回调时识别，避免特殊字符）

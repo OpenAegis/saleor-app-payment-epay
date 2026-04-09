@@ -278,6 +278,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         "支付成功，准备更新 Saleor 订单",
       );
 
+      // 幂等性检查：订单已支付则直接返回 success，防止重复上报
+      const existingMapping = await db
+        .select()
+        .from(orderMappings)
+        .where(eq(orderMappings.orderNo, params.out_trade_no))
+        .limit(1);
+
+      if (existingMapping[0]?.status === "paid") {
+        logger.info(
+          { orderNo: params.out_trade_no, transactionId },
+          "订单已处理（幂等），直接返回 success",
+        );
+        return res.status(200).send("success");
+      }
+
       // 检查站点授权
       const isSiteAuthorized = await checkSiteAuthorization(saleorApiUrl);
       if (!isSiteAuthorized) {
@@ -349,7 +364,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .mutation(TRANSACTION_EVENT_REPORT, {
             id: transactionId, // 修复：参数名应该是id而不是transactionId
             amount: params.money,
-            availableActions: [], // 添加必需的availableActions参数
+            availableActions: ["REFUND"], // 成功收款后允许退款
             externalUrl: "", // 添加必需的externalUrl参数
             message: `支付成功，易支付交易号: ${params.trade_no}`,
             pspReference: params.trade_no, // 使用易支付的交易号作为pspReference
@@ -444,8 +459,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       "Notify received non-success trade status",
     );
 
-    // 失败时返回5xx状态码
-    return res.status(500).send("fail");
+    // 非成功状态：返回 200 "fail"，告知易支付已收到通知但支付未成功
+    // 不使用 5xx，否则易支付会无限重试
+    return res.status(200).send("fail");
   } catch (error) {
     logger.error(`Notify handler error: ${error instanceof Error ? error.message : "未知错误"}`);
     // 发生未处理的错误时，返回5xx状态码
