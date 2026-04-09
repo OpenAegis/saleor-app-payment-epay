@@ -375,8 +375,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         // 检查Saleor API调用结果
         const saleorErrors =
-          (result?.data?.transactionEventReport?.errors as Array<{ code?: string | null }> | undefined) ||
+          (result?.data?.transactionEventReport?.errors as Array<{ code?: string | null; message?: string | null }> | undefined) ||
           [];
+
+        // 如果已处理（pspReference 重复等），视为成功
+        const alreadyProcessedCodes = ["ALREADY_EXISTS", "ALREADY_PROCESSED", "UNIQUE"];
+        const isAlreadyProcessed = saleorErrors.some(
+          (e) => e.code && alreadyProcessedCodes.includes(e.code),
+        );
+
         const hasExpiredSignature =
           saleorErrors.some((errorItem) => errorItem?.code === "ExpiredSignatureError") ||
           result?.error?.graphQLErrors?.some((graphError: {
@@ -391,7 +398,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }) ||
           false;
 
-        if (!result || result.error || saleorErrors.length > 0) {
+        if (!result || result.error || (saleorErrors.length > 0 && !isAlreadyProcessed)) {
           logger.error(
             {
               error: result?.error ? JSON.stringify(result.error) : "未知错误",
@@ -415,14 +422,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           await updateOrderStatus(params.out_trade_no, "failed");
           return res.status(500).send("fail");
         } else {
-          logger.info(
-            {
-              transactionId,
-              orderNo: params.out_trade_no,
-              tradeNo: params.trade_no,
-            },
-            "成功更新 Saleor 交易状态",
-          );
+          if (isAlreadyProcessed) {
+            logger.info(
+              { saleorErrors, orderNo: params.out_trade_no },
+              "Saleor 交易事件已存在（幂等），视为成功",
+            );
+          } else {
+            logger.info(
+              {
+                transactionId,
+                orderNo: params.out_trade_no,
+                tradeNo: params.trade_no,
+              },
+              "成功更新 Saleor 交易状态",
+            );
+          }
         }
 
         await updateOrderStatus(params.out_trade_no, "paid");

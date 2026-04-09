@@ -51,11 +51,30 @@ export class TursoAPL implements APL {
     try {
       logger.info(`🔍 TursoAPL: Looking for auth data with URL: ${saleorApiUrl}`);
 
-      const result = await db
+      // 尝试精确匹配，然后尝试去掉/添加末尾斜杠
+      const urlVariants = [
+        saleorApiUrl,
+        saleorApiUrl.endsWith("/") ? saleorApiUrl.slice(0, -1) : saleorApiUrl + "/",
+      ];
+
+      let result = await db
         .select()
         .from(sites)
-        .where(eq(sites.saleorApiUrl, saleorApiUrl))
+        .where(eq(sites.saleorApiUrl, urlVariants[0]))
         .limit(1);
+
+      if (result.length === 0) {
+        result = await db
+          .select()
+          .from(sites)
+          .where(eq(sites.saleorApiUrl, urlVariants[1]))
+          .limit(1);
+        if (result.length > 0) {
+          logger.info(
+            `🔍 TursoAPL: Matched URL with trailing-slash variant: ${urlVariants[1]}`,
+          );
+        }
+      }
 
       logger.info(`🔍 TursoAPL: Found ${result.length} rows for URL: ${saleorApiUrl}`);
 
