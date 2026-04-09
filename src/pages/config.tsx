@@ -94,6 +94,8 @@ const ConfigPage: NextPage = () => {
   const [saleorAdminEmail, setSaleorAdminEmail] = useState<string>("");
   const [saleorAdminPassword, setSaleorAdminPassword] = useState<string>("");
   const [generatingPermanentToken, setGeneratingPermanentToken] = useState(false);
+  const [pastedPermanentToken, setPastedPermanentToken] = useState<string>("");
+  const [savingPastedPermanentToken, setSavingPastedPermanentToken] = useState(false);
 
   const applyGlobalConfig = (config: GlobalConfigResponse) => {
     const fetchedReturnUrl = config.returnUrl || "";
@@ -316,10 +318,9 @@ const ConfigPage: NextPage = () => {
     setGeneratingPermanentToken(true);
     try {
       setAuthError(null);
-      const currentSaleorApiUrl = siteAuth?.authData.saleorApiUrl || saleorApiUrlState || saleorApiUrl;
-      const appId = siteAuth?.authData.appId;
+      const currentSaleorContext = getCurrentSaleorContext();
 
-      if (!currentSaleorApiUrl || !appId) {
+      if (!currentSaleorContext) {
         setAuthError("无法获取当前 Saleor API URL 或 App ID");
         return;
       }
@@ -330,40 +331,181 @@ const ConfigPage: NextPage = () => {
       }
 
       const permanentTokenResult = await createPermanentAppTokenWithAdminCredentials({
-        saleorApiUrl: currentSaleorApiUrl,
-        appId,
+        saleorApiUrl: currentSaleorContext.currentSaleorApiUrl,
+        appId: currentSaleorContext.appId,
         adminEmail: saleorAdminEmail.trim(),
         adminPassword: saleorAdminPassword,
       });
 
-      const response = await fetch("/api/create-permanent-token", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "saleor-api-url": saleorApiUrl || "",
-          authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          permanentToken: permanentTokenResult.authToken,
-          appId,
-        }),
-      });
+      const saved = await savePermanentToken(
+        permanentTokenResult.authToken,
+        currentSaleorContext.appId,
+      );
 
-      const responseBody = (await response.json()) as ErrorResponse & { message?: string };
-
-      if (response.ok) {
+      if (saved) {
         setSaleorAdminPassword("");
-        setSyncMessage(responseBody.message || "永久 Token 已生成并保存");
-      } else {
-        setAuthError(`生成永久 Token 失败: ${responseBody.error || "未知错误"}`);
       }
     } catch (error) {
       console.error("Failed to create permanent token:", error);
-      setAuthError("生成永久 Token 失败，请重试");
+      setAuthError("前端直连生成永久 Token 失败，请改用下方控制台脚本方案");
     } finally {
       setGeneratingPermanentToken(false);
     }
   };
+
+  const handleSavePastedPermanentToken = async () => {
+    const currentSaleorContext = getCurrentSaleorContext();
+
+    if (!currentSaleorContext) {
+      setAuthError("无法获取当前 Saleor API URL 或 App ID");
+      return;
+    }
+
+    if (!pastedPermanentToken.trim()) {
+      setAuthError("请先粘贴永久 Token");
+      return;
+    }
+
+    setSavingPastedPermanentToken(true);
+    try {
+      setAuthError(null);
+      const saved = await savePermanentToken(
+        pastedPermanentToken.trim(),
+        currentSaleorContext.appId,
+      );
+
+      if (saved) {
+        setPastedPermanentToken("");
+      }
+    } finally {
+      setSavingPastedPermanentToken(false);
+    }
+  };
+
+  const handleCopyConsoleScript = async () => {
+    if (!consoleTokenScript) {
+      setAuthError("无法生成控制台脚本，请先确认当前站点已完成安装");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(consoleTokenScript);
+      setSyncMessage("控制台脚本已复制，去 Saleor 后台页面控制台执行即可");
+    } catch (error) {
+      console.error("Failed to copy console script:", error);
+      setAuthError("复制脚本失败，请手动复制下方脚本");
+    }
+  };
+
+  const getCurrentSaleorContext = () => {
+    const currentSaleorApiUrl = siteAuth?.authData.saleorApiUrl || saleorApiUrlState || saleorApiUrl;
+    const appId = siteAuth?.authData.appId;
+
+    if (!currentSaleorApiUrl || !appId) {
+      return null;
+    }
+
+    return { currentSaleorApiUrl, appId };
+  };
+
+  const buildConsoleTokenScript = (context: { currentSaleorApiUrl: string; appId: string } | null) => {
+    if (!context) {
+      return "";
+    }
+
+    return [
+      "(async () => {",
+      `  const saleorApiUrl = ${JSON.stringify(context.currentSaleorApiUrl)};`,
+      `  const appId = ${JSON.stringify(context.appId)};`,
+      `  const defaultEmail = ${JSON.stringify(saleorAdminEmail.trim())};`,
+      '  const email = prompt("Saleor admin email", defaultEmail);',
+      '  const password = prompt("Saleor admin password");',
+      '  if (!email || !password) { throw new Error("Missing email or password"); }',
+      "",
+      "  const request = async (query, variables, token) => {",
+      '    const response = await fetch(saleorApiUrl, {',
+      '      method: "POST",',
+      '      headers: {',
+      '        "Content-Type": "application/json",',
+      '        ...(token ? { Authorization: `Bearer ${token}` } : {}),',
+      "      },",
+      "      body: JSON.stringify({ query, variables }),",
+      "    });",
+      "    const data = await response.json();",
+      '    if (!response.ok) { throw new Error(`HTTP ${response.status}`); }',
+      "    return data;",
+      "  };",
+      "",
+      "  const login = await request(",
+      '    `mutation AdminLogin($email: String!, $password: String!) {',
+      '      tokenCreate(email: $email, password: $password) {',
+      "        token",
+      "        errors { message code }",
+      "      }",
+      "    }`,",
+      "    { email, password },",
+      "  );",
+      "  const staffToken = login?.data?.tokenCreate?.token;",
+      "  if (!staffToken) {",
+      '    throw new Error(JSON.stringify(login?.data?.tokenCreate?.errors || "Login failed"));',
+      "  }",
+      "",
+      "  const created = await request(",
+      '    `mutation CreateAppToken($appId: ID!, $name: String!) {',
+      '      appTokenCreate(input: { app: $appId, name: $name }) {',
+      "        authToken",
+      "        errors { message code }",
+      "      }",
+      "    }`,",
+      '    { appId, name: `epay-permanent-${Date.now()}` },',
+      "    staffToken,",
+      "  );",
+      "  const permanentToken = created?.data?.appTokenCreate?.authToken;",
+      "  if (!permanentToken) {",
+      '    throw new Error(JSON.stringify(created?.data?.appTokenCreate?.errors || "Create token failed"));',
+      "  }",
+      '  console.log("Permanent token:", permanentToken);',
+      "  try {",
+      "    await navigator.clipboard.writeText(permanentToken);",
+      '    console.log("Permanent token copied to clipboard");',
+      "  } catch (error) {",
+      '    console.warn("Copy failed, please copy from console output manually", error);',
+      "  }",
+      "})();",
+    ].join("\n");
+  };
+
+  const savePermanentToken = async (permanentToken: string, appId: string) => {
+    if (!token) {
+      return false;
+    }
+
+    const response = await fetch("/api/create-permanent-token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "saleor-api-url": saleorApiUrl || "",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        permanentToken,
+        appId,
+      }),
+    });
+
+    const responseBody = (await response.json()) as ErrorResponse & { message?: string };
+
+    if (!response.ok) {
+      setAuthError(`保存永久 Token 失败: ${responseBody.error || "未知错误"}`);
+      return false;
+    }
+
+    setSyncMessage(responseBody.message || "永久 Token 已保存");
+    return true;
+  };
+
+  const currentSaleorContext = getCurrentSaleorContext();
+  const consoleTokenScript = buildConsoleTokenScript(currentSaleorContext);
 
   return (
     <AppLayout title="">
@@ -631,6 +773,9 @@ const ConfigPage: NextPage = () => {
 
         <Box display="flex" flexDirection="column" gap={2}>
           <h3>Saleor 管理员凭据（永久 Token）</h3>
+          <Box padding={2} backgroundColor="info1" borderRadius={4}>
+            <p>方案一：当前页面直接请求 Saleor 生成永久 Token；如果浏览器遇到跨域，再用下方控制台脚本方案。</p>
+          </Box>
           <Input
             label="管理员邮箱"
             value={saleorAdminEmail}
@@ -652,6 +797,7 @@ const ConfigPage: NextPage = () => {
               variant="primary"
               disabled={
                 generatingPermanentToken ||
+                !currentSaleorContext ||
                 !saleorAdminEmail.trim() ||
                 !saleorAdminPassword.trim()
               }
@@ -664,6 +810,60 @@ const ConfigPage: NextPage = () => {
           </Box>
           <Box padding={2} backgroundColor="info1" borderRadius={4}>
             <p>ℹ️ 管理员账号密码不会经过应用后端，也不会写入应用配置；前端只会把生成好的永久 Token 提交给应用保存。</p>
+          </Box>
+          <Box padding={2} backgroundColor="default2" borderRadius={4}>
+            <h4 style={{ marginTop: 0 }}>方案二：控制台脚本（跨域备用）</h4>
+            <p>复制下面脚本，到 Saleor 后台当前页面的浏览器控制台执行。脚本会输出永久 Token，并尝试自动复制到剪贴板。</p>
+            <Box display="flex" gap={2} marginBottom={2}>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={!consoleTokenScript}
+                onClick={() => {
+                  void handleCopyConsoleScript();
+                }}
+              >
+                复制控制台脚本
+              </Button>
+            </Box>
+            <textarea
+              readOnly
+              value={consoleTokenScript}
+              style={{
+                width: "100%",
+                minHeight: "240px",
+                padding: "12px",
+                fontFamily: "monospace",
+                fontSize: "12px",
+                borderRadius: "8px",
+                border: "1px solid #d9d9d9",
+                resize: "vertical",
+              }}
+            />
+            <Box display="flex" gap={2} alignItems="end" marginTop={2}>
+              <Box style={{ flex: 1 }}>
+                <Input
+                  label="粘贴永久 Token"
+                  value={pastedPermanentToken}
+                  onChange={(e) => setPastedPermanentToken(e.target.value)}
+                  placeholder="把控制台输出的永久 Token 粘贴到这里"
+                />
+              </Box>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={
+                  savingPastedPermanentToken ||
+                  !currentSaleorContext ||
+                  !pastedPermanentToken.trim()
+                }
+                onClick={() => {
+                  void handleSavePastedPermanentToken();
+                }}
+              >
+                {savingPastedPermanentToken ? "保存中..." : "保存粘贴的 Token"}
+              </Button>
+            </Box>
           </Box>
         </Box>
 
