@@ -1,5 +1,5 @@
 import { useAppBridge, withAuthorization } from "@saleor/app-sdk/app-bridge";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Box, Input, Button } from "@saleor/macaw-ui";
 import { type NextPage } from "next";
 import { createPermanentAppTokenWithAdminCredentials } from "@/lib/saleor-app-token";
@@ -96,6 +96,7 @@ const ConfigPage: NextPage = () => {
   const [generatingPermanentToken, setGeneratingPermanentToken] = useState(false);
   const [pastedPermanentToken, setPastedPermanentToken] = useState<string>("");
   const [savingPastedPermanentToken, setSavingPastedPermanentToken] = useState(false);
+  const consoleScriptRef = useRef<HTMLTextAreaElement | null>(null);
 
   const applyGlobalConfig = (config: GlobalConfigResponse) => {
     const fetchedReturnUrl = config.returnUrl || "";
@@ -382,19 +383,15 @@ const ConfigPage: NextPage = () => {
     }
   };
 
-  const handleCopyConsoleScript = async () => {
+  const handleSelectConsoleScript = () => {
     if (!consoleTokenScript) {
       setAuthError("无法生成控制台脚本，请先确认当前站点已完成安装");
       return;
     }
 
-    try {
-      await navigator.clipboard.writeText(consoleTokenScript);
-      setSyncMessage("控制台脚本已复制，去 Saleor 后台页面控制台执行即可");
-    } catch (error) {
-      console.error("Failed to copy console script:", error);
-      setAuthError("复制脚本失败，请手动复制下方脚本");
-    }
+    consoleScriptRef.current?.focus();
+    consoleScriptRef.current?.select();
+    setSyncMessage("控制台脚本已选中，请按 Cmd/Ctrl+C 复制");
   };
 
   const getCurrentSaleorContext = () => {
@@ -417,10 +414,11 @@ const ConfigPage: NextPage = () => {
       "(async () => {",
       `  const saleorApiUrl = ${JSON.stringify(context.currentSaleorApiUrl)};`,
       `  const appId = ${JSON.stringify(context.appId)};`,
-      `  const defaultEmail = ${JSON.stringify(saleorAdminEmail.trim())};`,
-      '  const email = prompt("Saleor admin email", defaultEmail);',
-      '  const password = prompt("Saleor admin password");',
-      '  if (!email || !password) { throw new Error("Missing email or password"); }',
+      `  const email = ${JSON.stringify(saleorAdminEmail.trim() || "__PASTE_ADMIN_EMAIL__")};`,
+      '  const password = "__PASTE_ADMIN_PASSWORD__";',
+      '  if (email === "__PASTE_ADMIN_EMAIL__" || password === "__PASTE_ADMIN_PASSWORD__") {',
+      '    throw new Error("Please replace the email/password placeholders before running the script");',
+      "  }",
       "",
       "  const request = async (query, variables, token) => {",
       '    const response = await fetch(saleorApiUrl, {',
@@ -464,13 +462,9 @@ const ConfigPage: NextPage = () => {
       "  if (!permanentToken) {",
       '    throw new Error(JSON.stringify(created?.data?.appTokenCreate?.errors || "Create token failed"));',
       "  }",
+      "  window.__SALEOR_PERMANENT_TOKEN__ = permanentToken;",
+      '  console.log("window.__SALEOR_PERMANENT_TOKEN__ =", permanentToken);',
       '  console.log("Permanent token:", permanentToken);',
-      "  try {",
-      "    await navigator.clipboard.writeText(permanentToken);",
-      '    console.log("Permanent token copied to clipboard");',
-      "  } catch (error) {",
-      '    console.warn("Copy failed, please copy from console output manually", error);',
-      "  }",
       "})();",
     ].join("\n");
   };
@@ -813,20 +807,21 @@ const ConfigPage: NextPage = () => {
           </Box>
           <Box padding={2} backgroundColor="default2" borderRadius={4}>
             <h4 style={{ marginTop: 0 }}>方案二：控制台脚本（跨域备用）</h4>
-            <p>复制下面脚本，到 Saleor 后台当前页面的浏览器控制台执行。脚本会输出永久 Token，并尝试自动复制到剪贴板。</p>
+            <p>复制下面脚本，到 Saleor 后台主页面的浏览器控制台执行。脚本不会使用 prompt 或剪贴板；请先把脚本里的密码占位符替换成真实密码，再执行。</p>
             <Box display="flex" gap={2} marginBottom={2}>
               <Button
                 type="button"
                 variant="secondary"
                 disabled={!consoleTokenScript}
                 onClick={() => {
-                  void handleCopyConsoleScript();
+                  handleSelectConsoleScript();
                 }}
               >
-                复制控制台脚本
+                选中控制台脚本
               </Button>
             </Box>
             <textarea
+              ref={consoleScriptRef}
               readOnly
               value={consoleTokenScript}
               style={{
@@ -863,6 +858,9 @@ const ConfigPage: NextPage = () => {
               >
                 {savingPastedPermanentToken ? "保存中..." : "保存粘贴的 Token"}
               </Button>
+            </Box>
+            <Box padding={2} backgroundColor="info1" borderRadius={4} marginTop={2}>
+              <p>脚本执行成功后，会把永久 Token 输出到控制台，并写到 `window.__SALEOR_PERMANENT_TOKEN__`，再手动复制回来保存即可。</p>
             </Box>
           </Box>
         </Box>
