@@ -414,39 +414,19 @@ const ConfigPage: NextPage = () => {
       "(async () => {",
       `  const saleorApiUrl = ${JSON.stringify(context.currentSaleorApiUrl)};`,
       `  const appId = ${JSON.stringify(context.appId)};`,
-      `  const email = ${JSON.stringify(saleorAdminEmail.trim() || "__PASTE_ADMIN_EMAIL__")};`,
-      '  const password = "__PASTE_ADMIN_PASSWORD__";',
-      '  if (email === "__PASTE_ADMIN_EMAIL__" || password === "__PASTE_ADMIN_PASSWORD__") {',
-      '    throw new Error("Please replace the email/password placeholders before running the script");',
-      "  }",
-      "",
-      "  const request = async (query, variables, token) => {",
+      "  const request = async (query, variables) => {",
       '    const response = await fetch(saleorApiUrl, {',
       '      method: "POST",',
+      '      credentials: "include",',
       '      headers: {',
       '        "Content-Type": "application/json",',
-      '        ...(token ? { Authorization: `Bearer ${token}` } : {}),',
       "      },",
       "      body: JSON.stringify({ query, variables }),",
-      "    });",
+    "    });",
       "    const data = await response.json();",
       '    if (!response.ok) { throw new Error(`HTTP ${response.status}`); }',
       "    return data;",
       "  };",
-      "",
-      "  const login = await request(",
-      '    `mutation AdminLogin($email: String!, $password: String!) {',
-      '      tokenCreate(email: $email, password: $password) {',
-      "        token",
-      "        errors { message code }",
-      "      }",
-      "    }`,",
-      "    { email, password },",
-      "  );",
-      "  const staffToken = login?.data?.tokenCreate?.token;",
-      "  if (!staffToken) {",
-      '    throw new Error(JSON.stringify(login?.data?.tokenCreate?.errors || "Login failed"));',
-      "  }",
       "",
       "  const created = await request(",
       '    `mutation CreateAppToken($appId: ID!, $name: String!) {',
@@ -456,11 +436,10 @@ const ConfigPage: NextPage = () => {
       "      }",
       "    }`,",
       '    { appId, name: `epay-permanent-${Date.now()}` },',
-      "    staffToken,",
       "  );",
       "  const permanentToken = created?.data?.appTokenCreate?.authToken;",
       "  if (!permanentToken) {",
-      '    throw new Error(JSON.stringify(created?.data?.appTokenCreate?.errors || "Create token failed"));',
+      '    throw new Error(JSON.stringify(created?.data?.appTokenCreate?.errors || "Create token failed. Make sure you run this in the top-level Saleor dashboard while logged in as staff/owner."));',
       "  }",
       "  window.__SALEOR_PERMANENT_TOKEN__ = permanentToken;",
       '  console.log("window.__SALEOR_PERMANENT_TOKEN__ =", permanentToken);',
@@ -807,7 +786,7 @@ const ConfigPage: NextPage = () => {
           </Box>
           <Box padding={2} backgroundColor="default2" borderRadius={4}>
             <h4 style={{ marginTop: 0 }}>方案二：控制台脚本（跨域备用）</h4>
-            <p>复制下面脚本，到 Saleor 后台主页面的浏览器控制台执行。脚本不会使用 prompt 或剪贴板；请先把脚本里的密码占位符替换成真实密码，再执行。</p>
+            <p>复制下面脚本，到 Saleor 后台主页面的浏览器控制台执行。脚本会直接复用你当前已登录的 Saleor 管理员会话，不需要再填邮箱或密码。</p>
             <Box display="flex" gap={2} marginBottom={2}>
               <Button
                 type="button"
@@ -860,7 +839,7 @@ const ConfigPage: NextPage = () => {
               </Button>
             </Box>
             <Box padding={2} backgroundColor="info1" borderRadius={4} marginTop={2}>
-              <p>脚本执行成功后，会把永久 Token 输出到控制台，并写到 `window.__SALEOR_PERMANENT_TOKEN__`，再手动复制回来保存即可。</p>
+              <p>脚本执行成功后，会把永久 Token 输出到控制台，并写到 `window.__SALEOR_PERMANENT_TOKEN__`。如果执行失败，请确认是在顶层 Saleor 后台页面、并且当前账号具备 OWNER 或 MANAGE_APPS 权限。</p>
             </Box>
           </Box>
         </Box>

@@ -371,27 +371,9 @@ export class TursoAPL implements APL {
           "🔍 App ID search result: " + result.length + " rows found for app ID: " + appId,
         );
 
-        // 如果通过appId找到了记录，更新token
+        // 通过appId找到记录时，只返回已保存的安装 token，不要用前端 JWT 覆盖它
         if (result.length > 0) {
-          const site = result[0];
-          logger.info(
-            "🔄 Updating token from " +
-              (site.token ? "***" : "empty") +
-              " to " +
-              (token ? "***" : "empty") +
-              "...",
-          );
-
-          await db
-            .update(sites)
-            .set({
-              token: token,
-              updatedAt: new Date().toISOString(),
-            })
-            .where(eq(sites.id, site.id));
-
-          // 更新返回的数据
-          result[0] = { ...site, token: token };
+          logger.info("✅ Found auth data by app ID, keeping stored install token unchanged");
         } else {
           // 如果app ID也找不到，检查是否存在placeholder记录
           logger.info("🔄 App ID not found, checking for placeholder records");
@@ -403,19 +385,18 @@ export class TursoAPL implements APL {
 
           if (placeholderResult.length > 0) {
             const site = placeholderResult[0];
-            logger.info("🔄 Found placeholder record, updating with new token and app ID");
+            logger.info("🔄 Found placeholder record, updating app ID while keeping stored token");
 
             await db
               .update(sites)
               .set({
-                token: token,
                 appId: appId,
                 updatedAt: new Date().toISOString(),
               })
               .where(eq(sites.id, site.id));
 
             // 更新返回的数据
-            result = [{ ...site, token: token, appId: appId }];
+            result = [{ ...site, appId: appId }];
             logger.info("✅ Updated placeholder record with new auth data");
           }
         }

@@ -87,22 +87,10 @@ export function withSaleorAuth(handler: AuthenticatedHandler) {
           if (payload.token && authData.token === payload.token) {
             logger.info("Token matched via JWT payload");
           } else {
-            // Token不匹配，对于update-saleor-url端点，尝试更新认证数据
+            // Token不匹配时，对于前端带来的短期 JWT，只允许按 appId 继续识别站点，不回写 APL token
             const isUpdateUrl = req.url?.includes('/update-saleor-url');
             if (isUpdateUrl && payload.token) {
-              logger.info("Updating APL token for update-saleor-url endpoint");
-              
-              // 更新APL中的token
-              const updatedAuthData = {
-                ...authData,
-                token: payload.token, // 使用JWT中的token
-              };
-              
-              await saleorApp.apl.set(updatedAuthData);
-              logger.info("APL token updated successfully");
-              
-              // 更新当前使用的authData
-              authData = updatedAuthData;
+              logger.info("Using JWT payload token for request auth only, without overwriting APL token");
             } else {
               return res.status(401).json({ 
                 error: "Invalid token",

@@ -40,6 +40,20 @@ interface JWTPayload {
   [key: string]: unknown;
 }
 
+function extractInnerAppToken(jwtToken: string): string | null {
+  try {
+    const parts = jwtToken.split(".");
+    if (parts.length !== 3) {
+      return null;
+    }
+
+    const payload = JSON.parse(Buffer.from(parts[1], "base64").toString()) as JWTPayload;
+    return typeof payload.token === "string" ? payload.token : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 检查当前站点的授权状态
  */
@@ -66,16 +80,16 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const saleorDomain = req.headers["saleor-domain"] as string;
 
     // 提取token
-    const tokenFromJWT = extractTokenFromAuthorizationHeader(authHeader);
-    logger.info(`Extracted token: ${tokenFromJWT ? "[REDACTED]" : "null"}`);
-    if (!tokenFromJWT) {
+    const rawToken = extractTokenFromAuthorizationHeader(authHeader);
+    logger.info(`Extracted token: ${rawToken ? "[REDACTED]" : "null"}`);
+    if (!rawToken) {
       return res.status(401).json({ error: "Invalid authorization header format" });
     }
 
     // 从JWT获取app ID (如果有的话)
     let appIdFromJWT: string | undefined;
     try {
-      const parts = tokenFromJWT.split(".");
+      const parts = rawToken.split(".");
       if (parts.length === 3) {
         const payload = JSON.parse(Buffer.from(parts[1], "base64").toString()) as JWTPayload;
         appIdFromJWT = payload?.app;
@@ -87,10 +101,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       );
     }
 
+    const tokenForLookup = extractInnerAppToken(rawToken) || rawToken;
+
     // 获取认证数据
     const tursoAPL = saleorApp.apl as TursoAPL;
     logger.info(`Searching for auth data with token: [REDACTED] and app ID: ${appIdFromJWT}`);
-    const authData = await tursoAPL.getByToken(tokenFromJWT, appIdFromJWT);
+    const authData = await tursoAPL.getByToken(tokenForLookup, appIdFromJWT);
 
     if (!authData) {
       logger.warn(`No auth data found for token: [REDACTED] or app ID: ${appIdFromJWT}`);

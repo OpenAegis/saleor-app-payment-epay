@@ -41,6 +41,20 @@ interface JWTPayload {
   [key: string]: unknown;
 }
 
+function extractInnerAppToken(jwtToken: string): string | null {
+  try {
+    const parts = jwtToken.split(".");
+    if (parts.length !== 3) {
+      return null;
+    }
+
+    const payload = JSON.parse(Buffer.from(parts[1], "base64").toString()) as JWTPayload;
+    return typeof payload.token === "string" ? payload.token : null;
+  } catch {
+    return null;
+  }
+}
+
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   logger.info("UpdateSaleorUrlAPI called");
   logger.info("Request headers: " + JSON.stringify(req.headers));
@@ -61,15 +75,15 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   // 提取token
-  const tokenFromJWT = extractTokenFromAuthorizationHeader(authHeader);
-  if (!tokenFromJWT) {
+  const rawToken = extractTokenFromAuthorizationHeader(authHeader);
+  if (!rawToken) {
     return res.status(401).json({ error: "Invalid authorization header format" });
   }
 
   // 从JWT获取app ID (如果有的话)
   let appIdFromJWT: string | undefined;
   try {
-    const parts = tokenFromJWT.split(".");
+    const parts = rawToken.split(".");
     if (parts.length === 3) {
       const payload = JSON.parse(Buffer.from(parts[1], "base64").toString()) as JWTPayload;
       appIdFromJWT = payload?.app;
@@ -80,14 +94,16 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     );
   }
 
-  logger.info(`Extracted from JWT - token: ${tokenFromJWT}, app: ${appIdFromJWT}`);
+  const tokenForLookup = extractInnerAppToken(rawToken) || rawToken;
+
+  logger.info(`Extracted from JWT - token: [REDACTED], app: ${appIdFromJWT}`);
 
   // 通过token查找认证数据，如果找不到则尝试通过app ID查找
   const tursoAPL = saleorApp.apl as TursoAPL;
-  const existingAuthData = await tursoAPL.getByToken(tokenFromJWT, appIdFromJWT);
+  const existingAuthData = await tursoAPL.getByToken(tokenForLookup, appIdFromJWT);
 
   if (!existingAuthData) {
-    logger.warn(`No auth data found for token: ${tokenFromJWT}`);
+    logger.warn("No auth data found for provided token/app ID");
     return res.status(404).json({
       error: "No authentication data found",
       requestedUrl: requestedSaleorApiUrl,
