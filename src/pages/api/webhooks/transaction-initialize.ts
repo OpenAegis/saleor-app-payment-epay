@@ -43,7 +43,7 @@ interface TransactionEvent {
 async function getEpayConfig(
   channelIdFromRequest?: string,
   saleorApiUrl?: string, // 添加saleorApiUrl参数
-): Promise<{ config: EpayConfig | null; returnUrl: string | null }> {
+): Promise<{ config: EpayConfig | null; returnUrl: string | null; channelType: string | null }> {
   try {
     logger.info(
       {
@@ -77,6 +77,7 @@ async function getEpayConfig(
             found: !!channel,
             enabled: channel?.enabled,
             gatewayId: channel?.gatewayId,
+            channelType: channel?.type,
           },
           "查找通道信息",
         );
@@ -100,6 +101,7 @@ async function getEpayConfig(
               {
                 channelId: channel.id,
                 channelName: channel.name,
+                channelType: channel.type,
                 gatewayId: gateway.id,
                 gatewayName: gateway.name,
                 hasPid: !!gateway.epayPid,
@@ -126,6 +128,7 @@ async function getEpayConfig(
                 useSubmitPhp: gateway.useSubmitPhp || false, // 添加 useSubmitPhp 字段
               },
               returnUrl: globalReturnUrl, // 使用全局returnUrl配置
+              channelType: channel.type, // 从通道配置读取支付类型
             };
           } else {
             logger.warn(
@@ -191,6 +194,7 @@ async function getEpayConfig(
           useSubmitPhp: firstGateway.useSubmitPhp || false, // 添加 useSubmitPhp 字段
         },
         returnUrl: globalReturnUrl,
+        channelType: null, // 回退方案无法确定支付类型
       };
     } else {
       logger.warn("没有找到任何启用的网关配置");
@@ -206,7 +210,7 @@ async function getEpayConfig(
   }
 
   logger.warn("支付配置未找到，请在后台配置支付参数");
-  return { config: null, returnUrl: null };
+  return { config: null, returnUrl: null, channelType: null };
 }
 
 // 添加获取全局returnUrl配置的函数
@@ -440,7 +444,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 获取支付配置 - 使用请求中的 gatewayId
     const requestGatewayId = data?.gatewayId || data?.paymentMethodId;
-    const { config: epayConfig, returnUrl } = await getEpayConfig(requestGatewayId, saleorApiUrl);
+    const { config: epayConfig, returnUrl, channelType } = await getEpayConfig(requestGatewayId, saleorApiUrl);
 
     if (!epayConfig) {
       return res.status(200).json({
@@ -483,10 +487,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       "签名生成测试",
     );
 
-    // 根据前端传入的支付类型或默认值
-    // 支持更多标准支付方式
+    // 优先使用通道配置中的支付类型，其次是前端传入的，最后才是默认值
+    // 这样自定义通道的支付类型可以从数据库正确传递，无需前端感知
     const supportedPayTypes = ["alipay", "wxpay", "qqpay", "bank", "jdpay"];
-    const payType = data?.payType || action?.paymentMethodType || "alipay";
+    const payType = channelType || data?.payType || action?.paymentMethodType || "alipay";
+
+    logger.info(
+      {
+        channelType,
+        dataPayType: data?.payType,
+        actionPaymentMethodType: action?.paymentMethodType,
+        resolvedPayType: payType,
+      },
+      "确定支付类型",
+    );
 
     // 如果传入的支付方式不在标准列表中，但仍需要支持（插件扩展的支付方式）
     // 保持原样，因为项目要求支持自定义支付方式
